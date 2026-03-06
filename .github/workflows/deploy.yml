@@ -1,20 +1,38 @@
 
-name: Desktop Server Deploy
+name: Deploy to Firebase Hosting
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  deploy:
-    # This tells GitHub to run the command on YOUR desktop
-    runs-on: self-hosted
-    
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+  build-and-deploy:
+    runs-on: ubuntu-latest
 
-      - name: Rebuild and Restart Services
-        run: |
-          docker-compose up -d --build
-          docker system prune -f
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: audit-pro-3f686
+          channelId: live
