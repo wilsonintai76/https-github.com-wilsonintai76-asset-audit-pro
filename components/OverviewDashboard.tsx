@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, User, AuditInsight } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditInsight } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
@@ -15,6 +15,7 @@ interface OverviewDashboardProps {
   phases?: AuditPhase[];
   kpiTiers?: KPITier[];
   departments?: Department[];
+  locations?: Location[];
   currentUser: User;
 }
 
@@ -25,6 +26,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   phases = [],
   kpiTiers = [],
   departments = [],
+  locations = [],
   currentUser
 }) => {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
@@ -48,12 +50,13 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   }, [currentUser]);
 
   const upcomingAudits = [...schedules]
-    .filter(s => s.status !== 'Completed')
-    .sort((a: AuditSchedule, b: AuditSchedule) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .filter(s => s.status !== 'Completed' && s.date != null)
+    .sort((a: AuditSchedule, b: AuditSchedule) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
     .slice(0, 3);
 
   const deptCounts = schedules.reduce((acc, curr) => {
-    acc[curr.department] = (acc[curr.department] || 0) + 1;
+    const deptName = departments.find(d => d.id === curr.departmentId)?.name || 'Unknown';
+    acc[deptName] = (acc[deptName] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
@@ -174,14 +177,16 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                 {upcomingAudits.map((audit) => (
                   <div key={audit.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-4 hover:border-blue-200 transition-colors group">
                     <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-[9px] font-black text-blue-600 uppercase">Nov</span>
-                      <span className="text-xs font-bold text-slate-900">{audit.date.split('-')[2]}</span>
+                      <span className="text-[9px] font-black text-blue-600 uppercase">
+                        {audit.date ? new Date(audit.date).toLocaleString('default', { month: 'short' }) : '--'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-900">{audit.date ? audit.date.split('-')[2] : '--'}</span>
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
-                        {audit.location}
+                        {locations.find(l => l.id === audit.locationId)?.name || '—'}
                       </p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{audit.department}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{departments.find(d => d.id === audit.departmentId)?.name || '—'}</p>
                     </div>
                   </div>
                 ))}

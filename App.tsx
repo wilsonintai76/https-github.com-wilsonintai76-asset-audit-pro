@@ -1170,6 +1170,7 @@ const App: React.FC = () => {
               phases={auditPhases}
               kpiTiers={kpiTiers}
               departments={departments}
+              locations={locations}
               currentUser={currentUser}
             />
           )}
@@ -1179,6 +1180,8 @@ const App: React.FC = () => {
               currentUser={currentUser}
               phases={auditPhases}
               kpiTiers={kpiTiers}
+              departments={departments}
+              locations={locations}
             />
           )}
           {activeView === 'schedule' && (

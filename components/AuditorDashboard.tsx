@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { AuditSchedule, User, AuditPhase, KPITier } from '../types';
+import { AuditSchedule, User, AuditPhase, KPITier, Department, Location } from '../types';
 import { 
   Calendar, 
   CheckCircle2, 
@@ -18,20 +18,24 @@ interface AuditorDashboardProps {
   currentUser: User;
   phases: AuditPhase[];
   kpiTiers: KPITier[];
+  departments?: Department[];
+  locations?: Location[];
 }
 
 export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({ 
   schedules, 
   currentUser,
   phases,
-  kpiTiers
+  kpiTiers,
+  departments = [],
+  locations = []
 }) => {
   // Filter audits assigned to the current user
   const myAudits = useMemo(() => {
     return schedules.filter(s => 
-      s.auditor1 === currentUser.name || s.auditor2 === currentUser.name
+      s.auditor1Id === currentUser.id || s.auditor2Id === currentUser.id
     );
-  }, [schedules, currentUser.name]);
+  }, [schedules, currentUser.id]);
 
   const stats = useMemo(() => {
     const total = myAudits.length;
@@ -45,8 +49,8 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
 
   const upcomingAudits = useMemo(() => {
     return [...myAudits]
-      .filter(s => s.status !== 'Completed')
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .filter(s => s.status !== 'Completed' && s.date != null)
+      .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
       .slice(0, 5);
   }, [myAudits]);
 
@@ -162,16 +166,16 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center shrink-0">
                       <span className="text-[10px] font-black text-blue-600 uppercase">
-                        {new Date(audit.date).toLocaleString('default', { month: 'short' })}
+                        {audit.date ? new Date(audit.date).toLocaleString('default', { month: 'short' }) : 'TBD'}
                       </span>
-                      <span className="text-lg font-black text-slate-900">{audit.date.split('-')[2]}</span>
+                      <span className="text-lg font-black text-slate-900">{audit.date ? audit.date.split('-')[2] : '--'}</span>
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-900 text-lg">{audit.location}</h4>
+                      <h4 className="font-bold text-slate-900 text-lg">{locations.find(l => l.id === audit.locationId)?.name || '—'}</h4>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="flex items-center gap-1 text-xs text-slate-500 font-medium">
                           <Building2 className="w-3 h-3" />
-                          {audit.department}
+                          {departments.find(d => d.id === audit.departmentId)?.name || '—'}
                         </span>
                         {audit.building && (
                           <span className="flex items-center gap-1 text-xs text-slate-500 font-medium">
