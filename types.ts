@@ -1,31 +1,35 @@
 
 export interface AuditSchedule {
   id: string;
-  department: string;
-  location: string;
-  supervisor: string;
-  auditor1: string | null;
-  auditor2: string | null;
-  date: string;
+  departmentId: string;
+  locationId: string;
+  supervisorId: string;
+  auditor1Id: string | null;
+  auditor2Id: string | null;
+  date: string | null;   // null = supervisor hasn't set a date yet
   status: 'Pending' | 'In Progress' | 'Completed';
+  phaseId: string;
   building?: string;
-  assetCount?: number;
 }
 
-export type UserRole = 'Admin' | 'Auditor' | 'Supervisor';
-export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations';
+export type UserRole = 'Admin' | 'Coordinator' | 'HeadOfDept' | 'Supervisor' | 'Auditor' | 'Staff' | 'Guest';
+export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard';
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  pin?: string;
   roles: UserRole[]; 
   picture?: string;
-  department?: string;
-  contactNumber?: string; // Added field
+  departmentId?: string;
+  contactNumber?: string;
   permissions?: string[];
   lastActive?: string;
-  status: 'Active' | 'Inactive';
+  certificationIssued?: string; // ISO-8601 date string
+  certificationExpiry?: string; // ISO-8601 date string
+  status: 'Active' | 'Inactive' | 'Suspended';
+  isVerified?: boolean;
   dashboardConfig?: DashboardConfig;
 }
 
@@ -33,20 +37,28 @@ export interface Department {
   id: string;
   name: string;
   abbr: string;
-  headOfDept: string;
+  headOfDeptId: string;
   description: string;
-  totalAssets: number;
+  auditGroup?: string;
+}
+
+export interface AuditGroup {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export interface Location {
   id: string;
   name: string;
   abbr: string;
-  department: string;
+  departmentId: string;
   building: string;
+  level?: string;
   description: string;
-  pic: string;
+  supervisorId: string;
   contact: string;
+  totalAssets?: number;
 }
 
 export interface DashboardConfig {
@@ -73,8 +85,24 @@ export interface AuditInsight {
 
 export interface CrossAuditPermission {
   id: string;
-  auditorDept: string;
-  targetDept: string;
+  auditorDeptId: string;
+  targetDeptId: string;
   isActive: boolean;
   isMutual: boolean;
+}
+
+export interface AuditPhase {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface KPITier {
+  id: string;
+  name: string;
+  minAssets: number;
+  maxAssets: number;
+  // Key is phase.id, Value is percentage target (0-100)
+  targets: Record<string, number>;
 }

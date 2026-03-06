@@ -1,0 +1,20 @@
+
+name: Desktop Server Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    # This tells GitHub to run the command on YOUR desktop
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Rebuild and Restart Services
+        run: |
+          docker-compose up -d --build
+          docker system prune -f

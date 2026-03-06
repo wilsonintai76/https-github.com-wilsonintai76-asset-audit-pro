@@ -1,12 +1,22 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useData } from '../contexts/DataContext';
+import { AppNotification } from '../types';
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, Bell, BellOff } from 'lucide-react';
 
-export const NotificationCenter: React.FC = () => {
-  const { notifications, markNotificationAsRead, clearNotifications } = useData();
+interface NotificationCenterProps {
+  notifications: AppNotification[];
+  onMarkAsRead: (id: string) => void;
+  onClearAll: () => void;
+}
+
+export const NotificationCenter: React.FC<NotificationCenterProps> = ({ 
+  notifications, 
+  onMarkAsRead, 
+  onClearAll 
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
+  
   const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
@@ -21,20 +31,20 @@ export const NotificationCenter: React.FC = () => {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'warning': return <i className="fa-solid fa-circle-exclamation text-amber-500"></i>;
-      case 'urgent': return <i className="fa-solid fa-triangle-exclamation text-red-500"></i>;
-      case 'success': return <i className="fa-solid fa-circle-check text-emerald-500"></i>;
-      default: return <i className="fa-solid fa-circle-info text-blue-500"></i>;
+      case 'warning': return <AlertCircle className="w-4 h-4 text-amber-500" />;
+      case 'urgent': return <AlertTriangle className="w-4 h-4 text-red-500" />;
+      case 'success': return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+      default: return <Info className="w-4 h-4 text-blue-500" />;
     }
   };
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
+      <button 
         onClick={() => setIsOpen(!isOpen)}
         className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
       >
-        <i className="fa-solid fa-bell"></i>
+        <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center animate-bounce">
             {unreadCount}
@@ -49,8 +59,8 @@ export const NotificationCenter: React.FC = () => {
               Notifications
               <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md">{notifications.length}</span>
             </h4>
-            <button
-              onClick={clearNotifications}
+            <button 
+              onClick={onClearAll}
               className="text-xs font-bold text-blue-600 hover:text-blue-700"
             >
               Clear All
@@ -61,17 +71,17 @@ export const NotificationCenter: React.FC = () => {
             {notifications.length === 0 ? (
               <div className="p-10 text-center">
                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
-                  <i className="fa-solid fa-bell-slash text-xl"></i>
+                  <BellOff className="w-6 h-6" />
                 </div>
                 <p className="text-sm text-slate-500 font-medium">No notifications yet</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-50">
                 {notifications.map((n) => (
-                  <div
-                    key={n.id}
+                  <div 
+                    key={n.id} 
                     className={`p-4 hover:bg-slate-50 transition-colors cursor-pointer group relative ${!n.read ? 'bg-blue-50/30' : ''}`}
-                    onClick={() => markNotificationAsRead(n.id)}
+                    onClick={() => onMarkAsRead(n.id)}
                   >
                     {!n.read && (
                       <div className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-500 rounded-full"></div>

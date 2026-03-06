@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { AuditSchedule } from '../types';
+import { ClipboardList, Clock, UserPlus, CheckCircle } from 'lucide-react';
 
 interface StatsCardsProps {
   schedules: AuditSchedule[];
@@ -21,7 +22,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ schedules }) => {
           <div className="text-3xl font-black text-slate-900">{total}</div>
         </div>
         <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 group-hover:scale-110 transition-transform">
-          <i className="fa-solid fa-clipboard-list text-xl"></i>
+          <ClipboardList className="w-6 h-6" />
         </div>
       </div>
 
@@ -32,7 +33,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ schedules }) => {
           <div className="text-3xl font-black text-slate-900">{pending}</div>
         </div>
         <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
-          <i className="fa-solid fa-clock text-xl"></i>
+          <Clock className="w-6 h-6" />
         </div>
       </div>
 
@@ -43,7 +44,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ schedules }) => {
           <div className="text-3xl font-black text-slate-900">{needsAuditors}</div>
         </div>
         <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition-transform">
-          <i className="fa-solid fa-user-plus text-xl"></i>
+          <UserPlus className="w-6 h-6" />
         </div>
       </div>
 
@@ -54,7 +55,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ schedules }) => {
           <div className="text-3xl font-black text-slate-900">{completed}</div>
         </div>
         <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-500 group-hover:scale-110 transition-transform">
-          <i className="fa-solid fa-check-circle text-xl"></i>
+          <CheckCircle className="w-6 h-6" />
         </div>
       </div>
     </div>

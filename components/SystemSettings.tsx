@@ -1,156 +1,348 @@
 
-import React, { useState } from 'react';
-import { useData } from '../contexts/DataContext';
+import React, { useMemo, useRef } from 'react';
+import Papa from 'papaparse';
+import { CrossAuditPermission, Department, User, AuditPhase, KPITier, UserRole, Location, AuditGroup } from '../types';
+import { CrossAuditManagement } from './CrossAuditManagement';
+import { AuditPhasesSettings } from './AuditPhasesSettings';
+import { KPISettings } from './KPISettings';
+import { Zap, Sliders, ArrowRight, FileSpreadsheet } from 'lucide-react';
 
-export const SystemSettings: React.FC = () => {
-  const { departments, crossAuditPermissions: permissions, addCrossAuditPermission, removeCrossAuditPermission, toggleCrossAuditPermission } = useData();
+interface SystemSettingsProps {
+  departments: Department[];
+  users: User[];
+  permissions: CrossAuditPermission[];
+  phases: AuditPhase[];
+  kpiTiers: KPITier[];
+  userRoles: UserRole[];
+  onAddPermission: (auditorDept: string, targetDept: string, isMutual: boolean) => Promise<void>;
+  onRemovePermission: (id: string) => Promise<void>;
+  onTogglePermission: (id: string, isActive: boolean) => void;
+  onUpdateDepartment: (id: string, updates: Partial<Department>) => void;
+  onBulkUpdateDepartments: (updates: { id: string, data: Partial<Department> }[]) => void;
+  onAddPhase: (phase: Omit<AuditPhase, 'id'>) => void;
+  onUpdatePhase: (id: string, updates: Partial<AuditPhase>) => void;
+  onDeletePhase: (id: string) => void;
+  onAddKPITier: (tier: Omit<KPITier, 'id'>) => void;
+  onUpdateKPITier: (id: string, updates: Partial<KPITier>) => void;
+  onDeleteKPITier: (id: string) => void;
+  onClearAllLocations: () => void;
+  onClearAllDepartments: () => void;
+  onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
+  auditGroups: AuditGroup[];
+  onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
+  onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
+  onDeleteAuditGroup: (id: string) => Promise<void>;
+}
 
-  const [auditorDept, setAuditorDept] = useState('');
-  const [targetDept, setTargetDept] = useState('');
-  const [isMutual, setIsMutual] = useState(true);
+export const SystemSettings: React.FC<SystemSettingsProps> = ({ 
+  departments, 
+  users,
+  permissions,
+  phases,
+  kpiTiers,
+  userRoles,
+  onAddPermission, 
+  onRemovePermission,
+  onTogglePermission,
+  onUpdateDepartment,
+  onBulkUpdateDepartments,
+  onAddPhase,
+  onUpdatePhase,
+  onDeletePhase,
+  onAddKPITier,
+  onUpdateKPITier,
+  onDeleteKPITier,
+  onClearAllLocations,
+  onClearAllDepartments,
+  onBulkAddLocs,
+  auditGroups,
+  onAddAuditGroup,
+  onUpdateAuditGroup,
+  onDeleteAuditGroup
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const isAdmin = userRoles.includes('Admin');
 
-  // Departments are objects now {id, name, ...}, assuming DataContext returns { departments: Department[] }
-  // Wait, let's double check DataContext structure.
-  // The DataContext had: `departments: Department[]` where Department has `name`.
-  // The original props had `departments: string[]`.
-  // I need to map `departments` to names or use the object.
-  // Let's use `dept.name`.
+  const activePhase = useMemo(() => {
+    const today = new Date();
+    return phases.find(p => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return today >= start && today <= end;
+    });
+  }, [phases]);
 
-  const availableDepts = departments.map(d => d.name).filter(d => d !== 'All');
+  const handlePermissionChange = (auditorDept: string, targetDept: string, desiredStatus: boolean) => {
+    const existingPerm = permissions.find(p => p.auditorDept === auditorDept && p.targetDept === targetDept);
+    if (existingPerm) {
+      if (existingPerm.isActive !== desiredStatus) {
+        onTogglePermission(existingPerm.id, desiredStatus);
+      }
+    } else {
+      if (desiredStatus) {
+        onAddPermission(auditorDept, targetDept, false); 
+      }
+    }
+  };
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (auditorDept && targetDept && auditorDept !== targetDept) {
-      addCrossAuditPermission(auditorDept, targetDept, isMutual);
-      setAuditorDept('');
-      setTargetDept('');
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const newLocs: Omit<Location, 'id'>[] = [];
+        let skippedCount = 0;
+
+        // Check if this is a raw asset list (contains 'Lokasi Terkini' and 'Label')
+        const firstRow = results.data[0] as any;
+        const isRawAssetList = firstRow && (
+          'Lokasi Terkini' in firstRow || 'lokasi terkini' in firstRow ||
+          'LOKASI TERKINI' in firstRow || 'Location' in firstRow || 'location' in firstRow
+        );
+
+        if (isRawAssetList) {
+          // Aggregation Mode
+          const locMap: Record<string, { department: string, pic: string, totalAssets: number }> = {};
+
+          results.data.forEach((row: any) => {
+            const locName = row['Lokasi Terkini'] || row['lokasi terkini'] || row['LOKASI TERKINI'] || row['Location'] || row['location'];
+            const deptName = row['Bahagian'] || row['bahagian'] || row['BAHAGIAN'] || row['Department'] || row['department'];
+            const supervisor = row['Pegawai Penempatan'] || row['pegawai penempatan'] || row['PEGAWAI PENEMPATAN'] || row['Supervisor'] || row['supervisor'];
+            const label = row['Label'] || row['label'] || row['LABEL'] || row['Asset'] || row['asset'];
+
+            if (locName && deptName) {
+              const key = `${locName}|${deptName}`;
+              if (!locMap[key]) {
+                locMap[key] = { department: deptName, pic: supervisor || '', totalAssets: 0 };
+              }
+              if (supervisor) {
+                locMap[key].pic = supervisor;
+              }
+              if (label) {
+                locMap[key].totalAssets += 1;
+              }
+            }
+          });
+
+          Object.entries(locMap).forEach(([key, data]) => {
+            const [name] = key.split('|');
+            // Only add if admin
+            if (isAdmin) {
+               newLocs.push({
+                name: name,
+                abbr: name.substring(0, 3).toUpperCase(),
+                departmentId: data.department, // temp: dept name string, resolved to UUID in App.tsx
+                building: '', // Not in raw data
+                level: '',    // Not in raw data
+                supervisorId: data.pic || '',
+                contact: '',  // Not in raw data
+                description: 'Imported from Asset List',
+                totalAssets: data.totalAssets
+              });
+            }
+          });
+
+        } else {
+          // Standard Import Mode
+          results.data.forEach((row: any) => {
+            // Map CSV columns to Location fields
+            // Expected columns: Name, Abbr, Department, Building, Level, Supervisor, Contact, Description
+            const name = row['Name'] || row['name'] || row['Location'];
+            const abbr = row['Abbr'] || row['abbr'] || row['Code'] || name?.substring(0, 3).toUpperCase();
+            const department = row['Department'] || row['department'] || row['Dept'] || '';
+            const building = row['Building'] || row['building'] || row['Block'] || '';
+            const level = row['Level'] || row['level'] || row['Floor'] || '';
+            const pic = row['Supervisor'] || row['supervisor'] || row['PIC'] || row['InCharge'] || '';
+            const contact = row['Contact'] || row['contact'] || row['Phone'] || '';
+            const description = row['Description'] || row['description'] || '';
+            const totalAssets = parseInt(row['Total Assets'] || row['total assets'] || row['TotalAssets'] || '0', 10) || 0;
+
+            if (name && department && isAdmin) {
+              newLocs.push({ 
+                name, 
+                abbr, 
+                departmentId: department, // temp: dept name string, resolved to UUID in App.tsx
+                building, 
+                level, 
+                supervisorId: pic,
+                contact, 
+                description,
+                totalAssets
+              });
+            } else {
+              skippedCount++;
+            }
+          });
+        }
+
+        if (newLocs.length > 0) {
+          onBulkAddLocs(newLocs);
+          alert(`Successfully imported ${newLocs.length} locations${isRawAssetList ? ' (aggregated from raw asset list)' : ''}.`);
+        } else {
+          alert("No valid locations found in CSV. Ensure 'Name' and 'Department' columns exist.");
+        }
+      },
+      error: (error: any) => { console.error(error); alert('Failed to parse CSV.'); }
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = ['Name', 'Abbr', 'Department', 'Building', 'Level', 'Supervisor', 'Contact', 'Description', 'Total Assets'];
+    const sample = ['Main Chemistry Lab', 'MCL-01', 'Biological Sciences', 'Science Block A', 'FIRST FLOOR', 'Dr. Supervisor', 'x1234', 'Main lab for chemistry', '150'];
+    const csvContent = [headers.join(','), sample.join(',')].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'location_import_template.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="text-xl font-bold text-slate-900">Institutional Audit Rules</h3>
-          <p className="text-sm text-slate-500 mt-1">Configure cross-departmental auditing authorizations. Mutual rules allow departments to audit each other.</p>
-        </div>
-
-        <div className="p-6">
-          <form onSubmit={handleAdd} className="flex flex-col gap-6 mb-8 p-6 bg-blue-50/30 rounded-2xl border border-blue-100">
-            <div className="flex flex-col md:flex-row items-end gap-4">
-              <div className="flex-grow space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Auditor Department</label>
-                <select
-                  required
-                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
-                  value={auditorDept}
-                  onChange={e => setAuditorDept(e.target.value)}
-                >
-                  <option value="">Select Dept A</option>
-                  {availableDepts.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-
-              <div className="flex items-center justify-center py-2 text-blue-500 text-lg">
-                {isMutual ? <i className="fa-solid fa-arrows-left-right"></i> : <i className="fa-solid fa-arrow-right"></i>}
-              </div>
-
-              <div className="flex-grow space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Department</label>
-                <select
-                  required
-                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm"
-                  value={targetDept}
-                  onChange={e => setTargetDept(e.target.value)}
-                >
-                  <option value="">Select Dept B</option>
-                  {availableDepts.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
+      {/* GLOBAL ACTIVE PHASE HEADER */}
+      <div className={`p-8 rounded-[40px] border-2 shadow-2xl transition-all duration-500 overflow-hidden relative ${
+        activePhase 
+          ? 'bg-slate-900 border-emerald-500/50 text-white' 
+          : 'bg-white border-slate-200 text-slate-900'
+      }`}>
+        {activePhase && (
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] -mr-32 -mt-32"></div>
+        )}
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <div className={`w-16 h-16 rounded-[24px] flex items-center justify-center text-2xl shadow-inner ${
+              activePhase 
+                ? 'bg-emerald-500 text-white' 
+                : 'bg-slate-100 text-slate-400 border border-slate-200'
+            }`}>
+              {activePhase ? <Zap className="w-8 h-8" /> : <Sliders className="w-8 h-8" />}
+            </div>
+            <div>
+              <h2 className={`text-2xl font-black tracking-tight leading-none ${activePhase ? 'text-white' : 'text-slate-900'}`}>
+                System Configuration
+              </h2>
+              <div className="flex items-center gap-2 mt-2">
+                {activePhase ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <p className="text-emerald-400 text-sm font-bold uppercase tracking-widest">
+                      Active Phase: {activePhase.name}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-500 text-sm font-medium">
+                    Customize institutional audit rules and scheduling windows.
+                  </p>
+                )}
               </div>
             </div>
-
-            <div className="flex items-center justify-between border-t border-blue-100 pt-4">
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <div className="relative inline-flex items-center">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={isMutual}
-                    onChange={() => setIsMutual(!isMutual)}
-                  />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </div>
-                <div className="min-w-0">
-                  <span className="text-sm font-bold text-slate-900 block">Reciprocal Authorization</span>
-                  <span className="text-[10px] text-slate-500 font-medium">Allow both departments to audit each other (Vice-Versa)</span>
-                </div>
-              </label>
-
-              <button
-                type="submit"
-                disabled={!auditorDept || !targetDept || auditorDept === targetDept}
-                className="px-8 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50 disabled:grayscale"
-              >
-                Create Rule
-              </button>
-            </div>
-          </form>
-
-          <div className="space-y-3">
-            <div className="px-2 text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Active Authorization Map</div>
-            {permissions.length === 0 ? (
-              <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                <i className="fa-solid fa-shield-halved text-slate-200 text-4xl mb-3"></i>
-                <p className="text-sm text-slate-400 font-medium">No departmental rules defined yet.</p>
-              </div>
-            ) : (
-              permissions.map(p => (
-                <div key={p.id} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl hover:border-blue-200 transition-colors group">
-                  <div className="flex items-center gap-6">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-slate-900">{p.auditorDept}</span>
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Department A</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase mb-1 ${p.isMutual ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
-                        {p.isMutual ? 'Mutual' : 'One-Way'}
-                      </div>
-                      <i className={`fa-solid ${p.isMutual ? 'fa-arrows-left-right text-indigo-400' : 'fa-arrow-right text-slate-300'}`}></i>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-slate-900">{p.targetDept}</span>
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Department B</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                      <span className={`text-[9px] font-black uppercase ${p.isActive ? 'text-emerald-600' : 'text-slate-400'}`}>
-                        {p.isActive ? 'Authorized' : 'Suspended'}
-                      </span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={p.isActive}
-                        onChange={() => toggleCrossAuditPermission(p.id)}
-                      />
-                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
-                    </label>
-                    <button
-                      onClick={() => removeCrossAuditPermission(p.id)}
-                      className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <i className="fa-solid fa-trash-can text-sm"></i>
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
           </div>
+          
+          {activePhase && (
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter mb-1">Window Progress</span>
+              <div className="flex items-center gap-3">
+                 <div className="text-right">
+                    <p className="text-xs font-bold font-mono text-emerald-400">{activePhase.startDate} <ArrowRight className="inline-block w-3 h-3 mx-1 opacity-40" /> {activePhase.endDate}</p>
+                 </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      <AuditPhasesSettings 
+        phases={phases}
+        isAdmin={isAdmin}
+        onAdd={onAddPhase}
+        onUpdate={onUpdatePhase}
+        onDelete={onDeletePhase}
+      />
+      
+      <KPISettings 
+        tiers={kpiTiers}
+        phases={phases}
+        onAddTier={onAddKPITier}
+        onUpdateTier={onUpdateKPITier}
+        onDeleteTier={onDeleteKPITier}
+      />
+
+      <CrossAuditManagement 
+        departments={departments}
+        users={users}
+        permissions={permissions}
+        onTogglePermission={handlePermissionChange}
+        onAddPermission={onAddPermission}
+        onRemovePermission={onRemovePermission}
+        onUpdateDepartment={onUpdateDepartment}
+        onBulkUpdateDepartments={onBulkUpdateDepartments}
+        auditGroups={auditGroups}
+        onAddAuditGroup={onAddAuditGroup}
+        onUpdateAuditGroup={onUpdateAuditGroup}
+        onDeleteAuditGroup={onDeleteAuditGroup}
+      />
+
+      {isAdmin && (
+        <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Data Management</h3>
+          <p className="text-sm text-slate-500 mb-6">Import locations and departments from CSV files.</p>
+          
+          <div className="flex flex-wrap gap-4">
+            <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
+            <button 
+              onClick={handleDownloadTemplate} 
+              className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
+              title="Download CSV Template"
+            >
+              Download Template
+            </button>
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Import CSV
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-red-50 border border-red-100 rounded-[32px] p-8">
+          <h3 className="text-xl font-bold text-red-900 mb-2">Danger Zone</h3>
+          <p className="text-sm text-red-700 mb-6">Irreversible actions for system administration.</p>
+          
+          <div className="flex flex-wrap gap-4">
+            <button 
+              onClick={onClearAllLocations}
+              className="px-6 py-3 bg-white border border-red-200 text-red-600 rounded-xl text-sm font-bold shadow-sm hover:bg-red-600 hover:text-white transition-all"
+            >
+              Clear All Locations
+            </button>
+            <button 
+              onClick={onClearAllDepartments}
+              className="px-6 py-3 bg-red-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-500/20 hover:bg-red-700 transition-all"
+            >
+              Clear All Departments & Data
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

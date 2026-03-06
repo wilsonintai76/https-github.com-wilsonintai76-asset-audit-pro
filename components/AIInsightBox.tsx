@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { AuditInsight } from '../types';
+import { Brain, Sparkles, Loader2, Wand2 } from 'lucide-react';
 
 interface AIInsightBoxProps {
   insight: AuditInsight | null;
@@ -12,12 +13,12 @@ export const AIInsightBox: React.FC<AIInsightBoxProps> = ({ insight, loading, on
   return (
     <div className="bg-slate-900 rounded-2xl p-6 text-white mb-8 shadow-xl relative overflow-hidden">
       <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-        <i className="fa-solid fa-brain text-8xl"></i>
+        <Brain className="w-24 h-24" />
       </div>
       
       <div className="flex items-center justify-between mb-4 relative z-10">
         <h3 className="text-xl font-bold flex items-center gap-2">
-          <i className="fa-solid fa-sparkles text-amber-400"></i>
+          <Sparkles className="w-5 h-5 text-amber-400" />
           Auditor AI Assistant
         </h3>
         <button 
@@ -26,9 +27,9 @@ export const AIInsightBox: React.FC<AIInsightBoxProps> = ({ insight, loading, on
           className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 disabled:opacity-50"
         >
           {loading ? (
-            <i className="fa-solid fa-spinner animate-spin"></i>
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <i className="fa-solid fa-wand-magic-sparkles"></i>
+            <Wand2 className="w-4 h-4" />
           )}
           {insight ? 'Refresh Analysis' : 'Analyze Schedule'}
         </button>

@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { DashboardConfig } from '../types';
+import { BarChart3, LineChart, CalendarDays, Network, Award, X } from 'lucide-react';
 
 interface CustomizeDashboardModalProps {
   config: DashboardConfig;
@@ -20,11 +21,11 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
   };
 
   const widgetDefinitions = [
-    { key: 'showStats', label: 'Quick Stats Summary', icon: 'fa-chart-simple', desc: 'Display total audits, pending tasks, and open slots.' },
-    { key: 'showTrends', label: 'Compliance Trends', icon: 'fa-chart-line', desc: 'Visualize audit progress and weekly goal adherence.' },
-    { key: 'showUpcoming', label: 'Upcoming Audits', icon: 'fa-calendar-list', desc: 'List of next 3 scheduled audit locations.' },
-    { key: 'showDeptDistribution', label: 'Departmental Distribution', icon: 'fa-sitemap', desc: 'Breakdown of audit workload across institutional departments.' },
-    { key: 'showCertification', label: 'Certification Status', icon: 'fa-award', desc: 'Monitor your auditor certification and renewal deadlines.' },
+    { key: 'showStats', label: 'Quick Stats Summary', icon: BarChart3, desc: 'Display total audits, pending tasks, and open slots.' },
+    { key: 'showTrends', label: 'Compliance Trends', icon: LineChart, desc: 'Visualize audit progress and weekly goal adherence.' },
+    { key: 'showUpcoming', label: 'Upcoming Audits', icon: CalendarDays, desc: 'List of next 3 scheduled audit locations.' },
+    { key: 'showDeptDistribution', label: 'Departmental Distribution', icon: Network, desc: 'Breakdown of audit workload across institutional departments.' },
+    { key: 'showCertification', label: 'Certification Status', icon: Award, desc: 'Monitor your auditor certification and renewal deadlines.' },
   ] as const;
 
   return (
@@ -37,41 +38,44 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
             <p className="text-slate-400 text-xs mt-1">Configure your workspace view preferences.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-            <i className="fa-solid fa-xmark"></i>
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
           <div className="space-y-3">
-            {widgetDefinitions.map((widget) => (
-              <label 
-                key={widget.key}
-                className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${
-                  tempConfig[widget.key] 
-                    ? 'border-blue-100 bg-blue-50/30' 
-                    : 'border-slate-100 bg-white hover:border-slate-200'
-                }`}
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-colors ${
-                  tempConfig[widget.key] ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
-                }`}>
-                  <i className={`fa-solid ${widget.icon}`}></i>
-                </div>
-                <div className="flex-grow">
-                  <p className="text-sm font-bold text-slate-900">{widget.label}</p>
-                  <p className="text-[10px] text-slate-500 font-medium">{widget.desc}</p>
-                </div>
-                <div className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer" 
-                    checked={tempConfig[widget.key]}
-                    onChange={() => toggle(widget.key)}
-                  />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </div>
-              </label>
-            ))}
+            {widgetDefinitions.map((widget) => {
+              const Icon = widget.icon;
+              return (
+                <label 
+                  key={widget.key}
+                  className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${
+                    tempConfig[widget.key] 
+                      ? 'border-blue-100 bg-blue-50/30' 
+                      : 'border-slate-100 bg-white hover:border-slate-200'
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg transition-colors ${
+                    tempConfig[widget.key] ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-slate-200'
+                  }`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div className="flex-grow">
+                    <p className="text-sm font-bold text-slate-900">{widget.label}</p>
+                    <p className="text-[10px] text-slate-500 font-medium">{widget.desc}</p>
+                  </div>
+                  <div className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={tempConfig[widget.key]}
+                      onChange={() => toggle(widget.key)}
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </div>
+                </label>
+              );
+            })}
           </div>
 
           <div className="flex gap-3 pt-4">

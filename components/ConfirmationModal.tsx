@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { AlertTriangle, AlertCircle, Info } from 'lucide-react';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -36,11 +37,11 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     info: 'text-blue-500 bg-blue-50'
   };
 
-  const icon = {
-    danger: 'fa-triangle-exclamation',
-    warning: 'fa-circle-exclamation',
-    info: 'fa-circle-info'
-  };
+  const IconComponent = {
+    danger: AlertTriangle,
+    warning: AlertCircle,
+    info: Info
+  }[variant];
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -51,7 +52,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
         <div className="p-8 text-center">
           <div className={`w-16 h-16 ${iconClasses[variant]} rounded-2xl flex items-center justify-center mx-auto mb-6 text-2xl`}>
-            <i className={`fa-solid ${icon[variant]}`}></i>
+            <IconComponent className="w-8 h-8" />
           </div>
           
           <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
