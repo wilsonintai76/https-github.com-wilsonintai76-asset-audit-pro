@@ -77,13 +77,57 @@ const App: React.FC = () => {
         gateway.getAuditPhases(),
         gateway.getKPITiers()
       ]);
+
+      // Ensure 3 phases exist
+      let finalPhases = phasesData;
+      if (phasesData.length < 3) {
+        const existingNames = phasesData.map(p => p.name);
+        const requiredNames = ['Phase 1', 'Phase 2', 'Phase 3'];
+        for (const name of requiredNames) {
+          if (!existingNames.includes(name)) {
+            const today = new Date().toISOString().split('T')[0];
+            await gateway.addAuditPhase({
+              name,
+              startDate: today,
+              endDate: today
+            });
+          }
+        }
+        finalPhases = await gateway.getAuditPhases();
+      }
+
+      // Ensure 3 KPI tiers exist
+      let finalKpiTiers = kpiData;
+      if (kpiData.length < 3) {
+        const existingNames = kpiData.map(t => t.name);
+        const requiredNames = ['Tier 1', 'Tier 2', 'Tier 3'];
+        const defaultRanges = [
+          { min: 0, max: 100 },
+          { min: 101, max: 500 },
+          { min: 501, max: 1000000 }
+        ];
+
+        for (let i = 0; i < requiredNames.length; i++) {
+          const name = requiredNames[i];
+          if (!existingNames.includes(name)) {
+            await gateway.addKPITier({
+              name,
+              minAssets: defaultRanges[i].min,
+              maxAssets: defaultRanges[i].max,
+              targets: {}
+            });
+          }
+        }
+        finalKpiTiers = await gateway.getKPITiers();
+      }
+
       setSchedules(auditsData);
       setUsers(usersData);
       setDepartments(deptsData);
       setLocations(locsData);
       setCrossAuditPermissions(permsData);
-      setAuditPhases(phasesData);
-      setKpiTiers(kpiData);
+      setAuditPhases(finalPhases);
+      setKpiTiers(finalKpiTiers);
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
       setConnectionErrorMessage("Failed to load application data. Please refresh.");

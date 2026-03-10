@@ -86,15 +86,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
           <h3 className="text-xl font-bold text-slate-900">Audit Phases</h3>
           <p className="text-sm text-slate-500">Define active date ranges for audits (e.g., Phase 1: March). Date selection will be restricted to these periods.</p>
         </div>
-        {isAdmin && !isAdding && (
-          <button
-            onClick={() => setIsAdding(true)}
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Phase
-          </button>
-        )}
+        {/* Add Phase removed - fixed to 3 phases */}
       </div>
 
       {isAdding && (
@@ -104,11 +96,10 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Phase Name</label>
               <input
-                required
-                placeholder="e.g. Phase 1: Quarter 1"
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+                readOnly
+                disabled
+                className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed outline-none"
                 value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
             <div className="space-y-1">
@@ -159,8 +150,8 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
               <div
                 key={phase.id}
                 className={`p-5 rounded-3xl border-2 transition-all duration-300 relative overflow-hidden group ${isActive
-                    ? 'bg-emerald-50/40 border-emerald-500 shadow-lg shadow-emerald-500/10'
-                    : 'bg-white border-slate-100 hover:border-slate-200'
+                  ? 'bg-emerald-50/40 border-emerald-500 shadow-lg shadow-emerald-500/10'
+                  : 'bg-white border-slate-100 hover:border-slate-200'
                   }`}
               >
                 {isActive && (
@@ -178,26 +169,15 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                   </h4>
                   <div className="flex gap-1">
                     {isAdmin && (
-                      <>
-                        <button
-                          onClick={() => startEdit(phase)}
-                          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${isActive
-                              ? 'text-emerald-600 hover:bg-emerald-500/10'
-                              : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'
-                            }`}
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => onDelete(phase.id)}
-                          className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${isActive
-                              ? 'text-emerald-400 hover:text-rose-600 hover:bg-rose-50'
-                              : 'text-slate-400 hover:text-red-600 hover:bg-red-50'
-                            }`}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </>
+                      <button
+                        onClick={() => startEdit(phase)}
+                        className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${isActive
+                          ? 'text-emerald-600 hover:bg-emerald-500/10'
+                          : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'
+                          }`}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
                     )}
                   </div>
                 </div>
