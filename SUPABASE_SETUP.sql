@@ -68,7 +68,8 @@ CREATE TABLE departments (
   abbr            TEXT NOT NULL,
   head_of_dept_id TEXT,          -- FK to users(id) added via ALTER TABLE below
   description     TEXT,
-  audit_group     TEXT
+  audit_group     TEXT,
+  total_assets    INTEGER DEFAULT 0
 );
 
 -- =============================================================

@@ -31,7 +31,7 @@ const App: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>('landing');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<AppView>('overview');
-  
+
   // Data State
   const [schedules, setSchedules] = useState<AuditSchedule[]>([]);
   const [maxAssetsPerDay, setMaxAssetsPerDay] = useState<number>(500);
@@ -42,7 +42,7 @@ const App: React.FC = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [auditPhases, setAuditPhases] = useState<AuditPhase[]>([]);
   const [kpiTiers, setKpiTiers] = useState<KPITier[]>([]);
-  
+
   // UI State
   const [selectedDept, setSelectedDept] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
@@ -60,7 +60,7 @@ const App: React.FC = () => {
   };
 
   const customAlert = (message: string) => {
-    setConfirmState({ title: 'Notice', message, onConfirm: () => {}, isDestructive: false });
+    setConfirmState({ title: 'Notice', message, onConfirm: () => { }, isDestructive: false });
   };
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [connectionErrorMessage, setConnectionErrorMessage] = useState<string | null>(null);
@@ -138,12 +138,12 @@ const App: React.FC = () => {
     // Check verification status - If not verified, force role to Guest
     const finalUser = { ...userProfile };
     if (userProfile.isVerified === false) {
-       finalUser.roles = ['Guest'];
-       // We don't save the role change to backend here, just runtime state
+      finalUser.roles = ['Guest'];
+      // We don't save the role change to backend here, just runtime state
     }
 
     setCurrentUser(finalUser);
-    
+
     // Default view logic
     // If user is NOT Admin, but is certified, default to auditor dashboard
     const isCertified = finalUser.certificationExpiry && new Date(finalUser.certificationExpiry) > new Date();
@@ -175,7 +175,7 @@ const App: React.FC = () => {
     setIsLoggingIn(true);
     setConnectionErrorMessage(null);
     await gateway.enableDemoMode();
-    
+
     const inheritedRoles = determineMockRoles(role);
     const fortyFiveDaysLater = new Date();
     fortyFiveDaysLater.setDate(fortyFiveDaysLater.getDate() + 45);
@@ -200,10 +200,10 @@ const App: React.FC = () => {
     try {
       const existingUsers = await gateway.getUsers();
       const foundUser = existingUsers.find(u => {
-        const isHighest = u.roles.includes(role) && 
-           (role === 'Admin' || !u.roles.includes('Admin')) &&
-           (role === 'Coordinator' || !u.roles.includes('Coordinator')) &&
-           (role === 'Supervisor' || !u.roles.includes('Supervisor'));
+        const isHighest = u.roles.includes(role) &&
+          (role === 'Admin' || !u.roles.includes('Admin')) &&
+          (role === 'Coordinator' || !u.roles.includes('Coordinator')) &&
+          (role === 'Supervisor' || !u.roles.includes('Supervisor'));
         return isHighest;
       });
       if (foundUser) {
@@ -215,9 +215,9 @@ const App: React.FC = () => {
     } catch (e) {
       console.warn("Login data fetch failed, proceeding with fresh local session", e);
       // Even if fetch failed, we should try to add the user to localDB to avoid "not found" errors on update
-      try { await gateway.addUser(user); } catch(err) {}
+      try { await gateway.addUser(user); } catch (err) { }
     }
-    
+
     await handleLoginSuccess(user);
     if (targetView) setActiveView(targetView);
     setIsLoggingIn(false);
@@ -235,10 +235,10 @@ const App: React.FC = () => {
       const user = JSON.parse(savedSession);
       // Re-apply verification check on session load
       if (user.isVerified === false) {
-          user.roles = ['Guest'];
+        user.roles = ['Guest'];
       }
       setCurrentUser(user);
-      
+
       const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
       const isAdmin = user.roles.includes('Admin');
 
@@ -254,11 +254,11 @@ const App: React.FC = () => {
   const showError = useCallback((error: any, title: string = 'Operation Failed') => {
     console.error(error);
     let message = error?.message || 'An unexpected error occurred. Please try again.';
-    
+
     if (error instanceof ItemNotFoundError || message.includes('not found')) {
       message = `The requested item could not be found. It may have been deleted or not synchronized correctly. Please refresh the page.`;
     }
-    
+
     setNotifications(prev => [{
       id: `err-${Date.now()}`,
       title,
@@ -272,9 +272,9 @@ const App: React.FC = () => {
   const getPhaseForDepartment = useCallback((deptId: string) => {
     const dept = departmentsWithAssets.find(d => d.id === deptId);
     if (!dept) return auditPhases[0]?.id || '';
-    
+
     const assets = dept.totalAssets || 0;
-    
+
     // Use KPI Tiers if available
     if (kpiTiers.length > 0) {
       const tier = kpiTiers.find(t => assets >= t.minAssets && assets <= t.maxAssets);
@@ -285,7 +285,7 @@ const App: React.FC = () => {
         if (firstPhaseId) return firstPhaseId;
       }
     }
-    
+
     return auditPhases[0]?.id || '';
   }, [departmentsWithAssets, auditPhases, kpiTiers]);
 
@@ -297,7 +297,7 @@ const App: React.FC = () => {
     try {
       // Auto-assign phase based on department assets
       const phaseId = getPhaseForDepartment(audit.departmentId);
-      
+
       const newAudit = await gateway.addAudit({
         ...audit,
         phaseId: phaseId || audit.phaseId,
@@ -311,13 +311,13 @@ const App: React.FC = () => {
       showError(e, 'Failed to Add Audit');
     }
   };
-  
+
   const handleBulkAddAudits = async (newAudits: Omit<AuditSchedule, 'id'>[]) => {
     try {
       // 1. Extract unique departments and locations from the new audits
       const uniqueDepts = Array.from(new Set(newAudits.map(a => a.departmentId)));
       const uniqueLocs = newAudits.map(a => ({ locationId: a.locationId, departmentId: a.departmentId }));
-      
+
       // Calculate asset counts per location
       const locationAssetCounts: Record<string, number> = {};
       newAudits.forEach(a => {
@@ -340,15 +340,15 @@ const App: React.FC = () => {
       // 2.5 Process Supervisors (Create temporary users if they don't exist)
       const uniqueSupervisors = Array.from(new Set(newAudits.map(a => a.supervisorId).filter(id => id && id !== 'To be filled')));
       const newUsersCreated: User[] = [];
-      
+
       for (const supName of uniqueSupervisors) {
         // Check if user already exists by name
         const existingUser = users.find(u => u.name.toLowerCase() === supName.toLowerCase());
-        
+
         if (!existingUser) {
           // Generate a temporary ID (T-xxxx)
           const tempId = `T-${Math.floor(1000 + Math.random() * 9000)}`;
-          
+
           const newUser: User = {
             id: tempId,
             name: supName,
@@ -357,7 +357,7 @@ const App: React.FC = () => {
             status: 'Inactive', // Mark as inactive so they need to be verified/updated
             isVerified: false
           };
-          
+
           const addedUser = await gateway.addUser(newUser);
           newUsersCreated.push(addedUser);
         }
@@ -435,7 +435,7 @@ const App: React.FC = () => {
       // 5. Finally add the audits
       const added = await gateway.bulkAddAudits(processedAudits);
       setSchedules(prev => [...prev, ...added]);
-      
+
       setNotifications(prev => [{
         id: `bulk-${Date.now()}`,
         title: 'Batch Schedule Created',
@@ -538,49 +538,117 @@ const App: React.FC = () => {
 
   const handleBulkAddLocs = async (newLocs: Omit<Location, 'id'>[]) => {
     try {
-      // 1. Separate new locations from existing ones
-      const existingLocsMap = new Map<string, Location>(locations.map(l => [`${l.name}|${l.departmentId}`, l]));
-      
+      // --- STEP 1: Resolve department NAMES to UUIDs ---
+      // The CSV provides dept names (e.g. "JABATAN KEJURUTERAAN AWAM"), not UUIDs.
+      let deptNameToId = new Map<string, string>(
+        departments.map(d => [d.name.toUpperCase().trim(), d.id])
+      );
+
+      const uniqueDeptNamesInImport = Array.from(new Set(newLocs.map(l => l.departmentId.toUpperCase().trim())));
+      const missingDeptNames = uniqueDeptNamesInImport.filter(name => !deptNameToId.has(name));
+
+      if (missingDeptNames.length > 0) {
+        for (const deptName of missingDeptNames) {
+          const originalName = newLocs.find(l => l.departmentId.toUpperCase().trim() === deptName)?.departmentId || deptName;
+          await gateway.addDepartment({
+            name: originalName,
+            abbr: originalName.substring(0, 5).toUpperCase(),
+            headOfDeptId: 'To be assigned',
+            description: `Imported: ${originalName}`,
+            auditGroup: 'Group A'
+          });
+        }
+        const refreshedDepts = await gateway.getDepartments();
+        setDepartments(refreshedDepts);
+        deptNameToId = new Map<string, string>(
+          refreshedDepts.map(d => [d.name.toUpperCase().trim(), d.id])
+        );
+      }
+
+      // Remap locations: replace dept name with its actual UUID,
+      // and resolve supervisor NAME → user ID.
+      // If a supervisor doesn't exist yet, create a temporary user record for them.
+      let userNameToId = new Map<string, string>(
+        users.map(u => [u.name.toUpperCase().trim(), u.id])
+      );
+
+      // Find all unique supervisor names from the import that aren't already users
+      const uniqueSupervisorNames = Array.from(
+        new Set(newLocs.map(l => (l.supervisorId || '').trim()).filter(n => n && n !== 'To be filled'))
+      );
+      const missingSupervisors = uniqueSupervisorNames.filter(
+        name => !userNameToId.has(name.toUpperCase().trim())
+      );
+
+      // Create temporary user records for missing supervisors
+      const newUsersCreated: User[] = [];
+      for (const name of missingSupervisors) {
+        const tempId = `T-${Math.floor(1000 + Math.random() * 9000)}`;
+        const deptName = newLocs.find(l => (l.supervisorId || '').trim() === name)?.departmentId || '';
+        const deptId = deptNameToId.get(deptName.toUpperCase().trim());
+        const newUser: User = {
+          id: tempId,
+          name: name,
+          email: `temp_${tempId}@pending.local`,
+          roles: ['Supervisor'],
+          status: 'Inactive',
+          isVerified: false,
+          departmentId: deptId,
+        };
+        try {
+          const addedUser = await gateway.addUser(newUser);
+          newUsersCreated.push(addedUser);
+          userNameToId.set(name.toUpperCase().trim(), addedUser.id);
+        } catch (e) {
+          console.warn(`Could not create temp user for supervisor: ${name}`, e);
+        }
+      }
+      if (newUsersCreated.length > 0) {
+        setUsers(prev => [...prev, ...newUsersCreated]);
+      }
+
+      const resolvedLocs: Omit<Location, 'id'>[] = newLocs.map(loc => {
+        const supervisorName = (loc.supervisorId || '').toUpperCase().trim();
+        const resolvedSupervisorId = userNameToId.get(supervisorName) || null;
+        return {
+          ...loc,
+          departmentId: deptNameToId.get(loc.departmentId.toUpperCase().trim()) || loc.departmentId,
+          supervisorId: resolvedSupervisorId as any,
+        };
+      });
+
+      // --- STEP 2: Separate new locations from existing ones ---
+      const existingLocsMap = new Map<string, Location>(locations.map(l => [`${l.name.toUpperCase()}|${l.departmentId}`, l]));
+
       const locsToAdd: Omit<Location, 'id'>[] = [];
       const locsToUpdate: { id: string, updates: Partial<Location> }[] = [];
-      
+
       // Keep track of the latest totalAssets for each location from the import
       const latestLocsFromImport = new Map<string, Omit<Location, 'id'>>();
-      newLocs.forEach(loc => {
-        latestLocsFromImport.set(`${loc.name}|${loc.departmentId}`, loc);
+      resolvedLocs.forEach(loc => {
+        latestLocsFromImport.set(`${loc.name.toUpperCase()}|${loc.departmentId}`, loc);
       });
 
       latestLocsFromImport.forEach((loc, key) => {
         const existingLoc = existingLocsMap.get(key);
         if (existingLoc) {
-          // Update existing location's total assets if different
+          // Build an updates object for any fields that differ from what's in the DB
+          const updates: Partial<Location> = {};
           if (loc.totalAssets !== undefined && loc.totalAssets !== existingLoc.totalAssets) {
-            locsToUpdate.push({ id: existingLoc.id, updates: { totalAssets: loc.totalAssets } });
+            updates.totalAssets = loc.totalAssets;
+          }
+          if (loc.supervisorId && loc.supervisorId !== existingLoc.supervisorId) {
+            updates.supervisorId = loc.supervisorId;
+          }
+          if (Object.keys(updates).length > 0) {
+            locsToUpdate.push({ id: existingLoc.id, updates });
           }
         } else {
           locsToAdd.push(loc);
         }
       });
 
-      // 2. Extract unique departments from the NEW locations
-      const uniqueDeptIds = Array.from(new Set(locsToAdd.map(l => l.departmentId)));
-      const existingDeptIds = new Set(departments.map(d => d.id));
-      const newDeptIds = uniqueDeptIds.filter(id => !existingDeptIds.has(id));
-
-      // 3. Add new departments
-      if (newDeptIds?.length > 0) {
-        for (const id of newDeptIds) {
-          await gateway.addDepartment({
-            name: `Imported Dept ${id}`,
-            abbr: id.substring(0, 3).toUpperCase(),
-            headOfDeptId: 'To be assigned',
-            description: `Imported department: ${id}`,
-            auditGroup: 'Group A'
-          });
-        }
-      }
-
-      // 4. Add new locations
+      // --- STEP 3: Add new locations ---
       if (locsToAdd?.length > 0) {
         await gateway.bulkAddLocations(locsToAdd);
       }
@@ -593,14 +661,14 @@ const App: React.FC = () => {
       // 6. Refresh states
       const allUpdatedLocs = await gateway.getLocations();
       setLocations(allUpdatedLocs);
-      
+
       const allUpdatedDepts = await gateway.getDepartments();
       setDepartments(allUpdatedDepts);
 
       setNotifications(prev => [{
         id: `bulk-loc-${Date.now()}`,
         title: 'Locations Imported',
-        message: `Imported ${locsToAdd?.length || 0} new locations and updated ${locsToUpdate?.length || 0} existing locations. ${newDeptIds?.length > 0 ? `Created ${newDeptIds.length} new departments.` : ''}`,
+        message: `Imported ${locsToAdd?.length || 0} new locations and updated ${locsToUpdate?.length || 0} existing locations. ${missingDeptNames?.length > 0 ? `Created ${missingDeptNames.length} new departments.` : ''}`,
         timestamp: 'Just now',
         type: 'success',
         read: false
@@ -610,12 +678,55 @@ const App: React.FC = () => {
     }
   };
 
+  const handleBulkActivateStaff = async (entries: { name: string; staffId: string; email: string; pin?: string }[]) => {
+    try {
+      const userNameToObj = new Map<string, typeof users[0]>(
+        users.map(u => [u.name.toUpperCase().trim(), u])
+      );
+      let updatedCount = 0;
+      let notFoundNames: string[] = [];
+      for (const entry of entries) {
+        const existing = userNameToObj.get(entry.name.toUpperCase().trim());
+        if (existing) {
+          await gateway.updateUser(existing.id, {
+            email: entry.email || existing.email,
+            pin: entry.pin || existing.pin,
+            status: 'Active',
+            isVerified: true,
+          });
+          // If a new staff ID is provided, update it separately
+          if (entry.staffId && entry.staffId !== existing.id) {
+            // Update the id by re-creating (upsert with new id)
+            const updatedUser = { ...existing, id: entry.staffId, email: entry.email || existing.email, pin: entry.pin || existing.pin, status: 'Active' as const, isVerified: true };
+            await gateway.addUser(updatedUser);
+            await gateway.deleteUser(existing.id);
+          }
+          updatedCount++;
+        } else {
+          notFoundNames.push(entry.name);
+        }
+      }
+      const updatedUsers = await gateway.getUsers();
+      setUsers(updatedUsers);
+      setNotifications(prev => [{
+        id: `staff-activate-${Date.now()}`,
+        title: 'Staff Activation Complete',
+        message: `Activated ${updatedCount} staff.${notFoundNames.length > 0 ? ` Not found: ${notFoundNames.slice(0, 3).join(', ')}${notFoundNames.length > 3 ? '...' : ''}.` : ''}`,
+        timestamp: 'Just now',
+        type: 'success',
+        read: false
+      }, ...prev]);
+    } catch (e) {
+      showError(e, 'Staff Activation Failed');
+    }
+  };
+
   const handleUpdateLoc = async (id: string, updates: Partial<Location>) => {
     try {
       const oldLoc = locations.find(l => l.id === id);
       await gateway.updateLocation(id, updates);
       setLocations(await gateway.getLocations());
-      
+
       // Cascade supervisorId or departmentId changes to all audits for this location
       if (oldLoc) {
         const changedSupervisor = updates.supervisorId !== undefined && updates.supervisorId !== oldLoc.supervisorId;
@@ -642,7 +753,7 @@ const App: React.FC = () => {
 
   const handleDeleteLoc = async (id: string) => {
     const loc = locations.find(l => String(l.id) === String(id));
-    
+
     if (loc) {
       const locAudits = schedules.filter(s => s.locationId === loc.id && s.departmentId === loc.departmentId);
       const hasActiveAssignments = locAudits.some(s => s.auditor1Id || s.auditor2Id);
@@ -661,18 +772,18 @@ const App: React.FC = () => {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
           customConfirm("Force Delete", "This location has pending audit schedules (unassigned). Do you want to delete the location and these pending schedules?", async () => {
-             try {
-                if (loc) {
-                  await gateway.forceDeleteLocation(id);
-                } else {
-                  await gateway.deleteLocation(id);
-                }
-                setLocations(await gateway.getLocations());
-                setSchedules(await gateway.getAudits());
-                customAlert("Location and pending schedules deleted successfully.");
-             } catch (forceErr: any) {
-                showError(forceErr, 'Force Deletion Failed');
-             }
+            try {
+              if (loc) {
+                await gateway.forceDeleteLocation(id);
+              } else {
+                await gateway.deleteLocation(id);
+              }
+              setLocations(await gateway.getLocations());
+              setSchedules(await gateway.getAudits());
+              customAlert("Location and pending schedules deleted successfully.");
+            } catch (forceErr: any) {
+              showError(forceErr, 'Force Deletion Failed');
+            }
           });
         } else {
           showError(e, 'Deletion Failed');
@@ -689,7 +800,7 @@ const App: React.FC = () => {
       showError(e, 'Failed to Add Department');
     }
   };
-  
+
   const handleBulkAddDepts = async (newDepts: Omit<Department, 'id'>[]) => {
     try {
       for (const d of newDepts) await gateway.addDepartment(d);
@@ -720,7 +831,7 @@ const App: React.FC = () => {
 
   const handleDeleteDept = async (id: string) => {
     const dept = departments.find(d => String(d.id) === String(id));
-    
+
     if (dept) {
       const deptUsers = users.filter(u => u.departmentId === dept.id);
       const deptAudits = schedules.filter(s => s.departmentId === dept.id);
@@ -744,19 +855,19 @@ const App: React.FC = () => {
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
-           customConfirm("Force Delete", "This department has associated Locations or pending Audits. Do you want to delete the department and all these related records?", async () => {
-             try {
-                if (dept) {
-                  await gateway.forceDeleteDepartment(id);
-                } else {
-                  await gateway.deleteDepartment(id);
-                }
-                await loadAllData();
-                customAlert("Department and related data deleted successfully.");
-             } catch (forceErr: any) {
-                showError(forceErr, 'Force Deletion Failed');
-             }
-           });
+          customConfirm("Force Delete", "This department has associated Locations or pending Audits. Do you want to delete the department and all these related records?", async () => {
+            try {
+              if (dept) {
+                await gateway.forceDeleteDepartment(id);
+              } else {
+                await gateway.deleteDepartment(id);
+              }
+              await loadAllData();
+              customAlert("Department and related data deleted successfully.");
+            } catch (forceErr: any) {
+              showError(forceErr, 'Force Deletion Failed');
+            }
+          });
         } else {
           showError(e, 'Deletion Failed');
         }
@@ -816,26 +927,26 @@ const App: React.FC = () => {
       const allPhases = [...auditPhases].sort((a, b) => a.startDate.localeCompare(b.startDate));
       const allTiers = [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets);
       const allLocs = await gateway.getLocations();
-      
+
       let updatedCount = 0;
       let createdCount = 0;
-      
+
       for (const dept of allDepts) {
         // 1. Find Tier
         const tier = allTiers.find(t => (dept.totalAssets || 0) >= t.minAssets && (dept.totalAssets || 0) <= t.maxAssets);
         if (!tier) continue;
-        
+
         // 2. Identify Required Phases (those with target > 0)
         const requiredPhaseIds = allPhases
           .filter(p => (tier.targets[p.id] || 0) > 0)
           .map(p => p.id);
-        
+
         if (requiredPhaseIds.length === 0) continue;
-        
+
         // 3. Get existing audits for this department
         const deptAudits = allAudits.filter(a => a.departmentId === dept.id);
         const deptLocs = allLocs.filter(l => l.departmentId === dept.id);
-        
+
         if (deptLocs.length === 0) continue;
 
         // 4. Ensure at least one audit exists for each required phase
@@ -857,7 +968,7 @@ const App: React.FC = () => {
             createdCount++;
           }
         }
-        
+
         // 5. Re-distribute UNLOCKED audits across required phases
         const unlockedAudits = deptAudits.filter(a => !isAuditLocked(a));
         if (unlockedAudits.length > 0) {
@@ -870,7 +981,7 @@ const App: React.FC = () => {
           });
         }
       }
-      
+
       if (updatedCount > 0 || createdCount > 0) {
         setSchedules(await gateway.getAudits());
         customAlert(`Schedule rebalanced: ${createdCount} new audits created and ${updatedCount} audits moved to match Tier requirements.`);
@@ -959,11 +1070,11 @@ const App: React.FC = () => {
         setDepartments([]);
         setLocations([]);
         setSchedules([]);
-        
+
         // Refresh users to only keep the current user
         const updatedUsers = await gateway.getUsers();
         setUsers(updatedUsers);
-        
+
         // Update current user's department to null in state
         setCurrentUser(prev => ({ ...prev, departmentId: undefined }));
 
@@ -1005,17 +1116,17 @@ const App: React.FC = () => {
         // ID is changing (Temp ID -> Real ID)
         const existingUser = users.find(u => u.id === id);
         if (!existingUser) throw new Error("User not found");
-        
+
         // 1. Create new user with new ID
         const newUser = { ...existingUser, ...updates };
         await gateway.addUser(newUser);
-        
+
         // 2. Update references in locations
         const locsToUpdate = locations.filter(l => l.supervisorId === id);
         for (const loc of locsToUpdate) {
           await gateway.updateLocation(loc.id, { supervisorId: newUser.id });
         }
-        
+
         // 3. Update references in audits
         const auditsToUpdate = schedules.filter(s => s.supervisorId === id || s.auditor1Id === id || s.auditor2Id === id);
         for (const audit of auditsToUpdate) {
@@ -1025,15 +1136,15 @@ const App: React.FC = () => {
           if (audit.auditor2Id === id) auditUpdates.auditor2Id = newUser.id;
           await gateway.updateAudit(audit.id, auditUpdates);
         }
-        
+
         // 4. Delete old user
         await gateway.deleteUser(id);
-        
+
         // 5. Refresh data
         setUsers(await gateway.getUsers());
         setLocations(await gateway.getLocations());
         setSchedules(await gateway.getAudits());
-        
+
         if (currentUser?.id === id) {
           setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
         }
@@ -1090,8 +1201,8 @@ const App: React.FC = () => {
 
   if (viewState === 'landing') {
     return (
-      <LandingPage 
-        onEnter={() => setViewState(currentUser ? 'app' : 'login')} 
+      <LandingPage
+        onEnter={() => setViewState(currentUser ? 'app' : 'login')}
         onShowKnowledgeBase={() => setViewState('docs')}
       />
     );
@@ -1101,25 +1212,25 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-50">
         <nav className="bg-white border-b border-slate-200 sticky top-0 z-[100]">
-           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-              <button 
-                onClick={() => setViewState('landing')}
-                className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-xs font-bold"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back to Home
-              </button>
-              <div className="flex items-center gap-3">
-                 <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">
-                   <ShieldCheck className="w-4 h-4" />
-                 </div>
-                 <span className="text-sm font-black text-slate-900 tracking-tight">System Documentation</span>
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <button
+              onClick={() => setViewState('landing')}
+              className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-xs font-bold"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Home
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">
+                <ShieldCheck className="w-4 h-4" />
               </div>
-              <div className="w-[100px] hidden md:block"></div> {/* Spacer to keep title centered */}
-           </div>
+              <span className="text-sm font-black text-slate-900 tracking-tight">System Documentation</span>
+            </div>
+            <div className="w-[100px] hidden md:block"></div> {/* Spacer to keep title centered */}
+          </div>
         </nav>
         <div className="p-8 md:p-12">
-           <KnowledgeBase />
+          <KnowledgeBase />
         </div>
       </div>
     );
@@ -1127,12 +1238,12 @@ const App: React.FC = () => {
 
   if (viewState === 'login') {
     return (
-      <LoginPage 
-        onGoogleLogin={() => {}} 
+      <LoginPage
+        onGoogleLogin={() => { }}
         onDemoLogin={handleMockLogin}
         isLoggingIn={isLoggingIn}
         error={connectionErrorMessage}
-        onBack={() => setViewState('landing')} 
+        onBack={() => setViewState('landing')}
         onLoginSuccess={handleLoginSuccess}
       />
     );
@@ -1156,13 +1267,13 @@ const App: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-slate-50">
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        onClose={() => setIsSidebarOpen(false)} 
-        activeView={activeView} 
-        onViewChange={handleViewChange} 
-        onLogout={handleLogout} 
-        userRoles={currentUser.roles} 
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        activeView={activeView}
+        onViewChange={handleViewChange}
+        onLogout={handleLogout}
+        userRoles={currentUser.roles}
         isCertified={currentUser.certificationExpiry && new Date(currentUser.certificationExpiry) > new Date()}
       />
 
@@ -1175,27 +1286,27 @@ const App: React.FC = () => {
             <div className="flex items-center gap-2">
               <h1 className="text-base font-bold text-slate-900 capitalize leading-none">{activeView.replace('-', ' ')}</h1>
               {currentUser.roles.includes('Guest') && currentUser.isVerified === false ? (
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-amber-50 text-amber-600 border-amber-100">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                    Verification Pending
-                  </span>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-amber-50 text-amber-600 border-amber-100">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  Verification Pending
+                </span>
               ) : (
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-indigo-50 text-indigo-600 border-indigo-100">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-                    Secure Session
-                  </span>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-indigo-50 text-indigo-600 border-indigo-100">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                  Secure Session
+                </span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button 
+            <button
               onClick={() => setActiveView('knowledge-base')}
               className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${activeView === 'knowledge-base' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
               title="Knowledge Base"
             >
               <BookOpen className="w-5 h-5" />
             </button>
-            <NotificationCenter notifications={notifications} onMarkAsRead={() => {}} onClearAll={() => {}} />
+            <NotificationCenter notifications={notifications} onMarkAsRead={() => { }} onClearAll={() => { }} />
             <div className="h-8 w-px bg-slate-200"></div>
             <button onClick={() => setActiveView('profile')} className="flex items-center gap-2 p-1 pr-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
               <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">{currentUser.name[0]}</div>
@@ -1212,10 +1323,10 @@ const App: React.FC = () => {
             </div>
           )}
           {activeView === 'overview' && (
-            <OverviewDashboard 
-              schedules={filteredSchedules} 
-              config={currentUser.dashboardConfig || DEFAULT_DASHBOARD_CONFIG} 
-              onUpdateConfig={() => {}} 
+            <OverviewDashboard
+              schedules={filteredSchedules}
+              config={currentUser.dashboardConfig || DEFAULT_DASHBOARD_CONFIG}
+              onUpdateConfig={() => { }}
               phases={auditPhases}
               kpiTiers={kpiTiers}
               departments={departmentsWithAssets}
@@ -1224,7 +1335,7 @@ const App: React.FC = () => {
             />
           )}
           {activeView === 'auditor-dashboard' && (
-            <AuditorDashboard 
+            <AuditorDashboard
               schedules={schedules}
               currentUser={currentUser}
               phases={auditPhases}
@@ -1235,19 +1346,19 @@ const App: React.FC = () => {
           )}
           {activeView === 'schedule' && (
             <div className="flex-1 flex flex-col min-h-0">
-              <AuditTable 
-                schedules={filteredSchedules} 
-                users={users} 
-                currentUserName={currentUser.name} 
-                userRoles={currentUser.roles} 
-                departments={departmentNames} 
-                selectedDept={selectedDept} 
-                onDeptChange={setSelectedDept} 
+              <AuditTable
+                schedules={filteredSchedules}
+                users={users}
+                currentUserName={currentUser.name}
+                userRoles={currentUser.roles}
+                departments={departmentNames}
+                selectedDept={selectedDept}
+                onDeptChange={setSelectedDept}
                 selectedStatus={selectedStatus}
                 onStatusChange={setSelectedStatus}
                 selectedPhaseId={selectedPhaseId}
                 onPhaseChange={setSelectedPhaseId}
-                onAssign={handleAssign} 
+                onAssign={handleAssign}
                 onUnassign={handleUnassign}
                 onUpdateDate={handleUpdateAuditDate}
                 onUpdateAudit={handleUpdateAudit}
@@ -1263,54 +1374,54 @@ const App: React.FC = () => {
             </div>
           )}
           {activeView === 'team' && (
-            <TeamManagement 
-              users={visibleUsers} 
-              onAddMember={handleAddMember} 
-              onBulkAddMembers={handleBulkAddMembers} 
-              onUpdateMember={handleUpdateMember} 
-              onDeleteMember={handleDeleteMember} 
-              onUpdateRoles={handleUpdateUserRoles} 
-              onUpdateStatus={handleUpdateUserStatus} 
-              currentUserRoles={currentUser.roles} 
-              departments={visibleDepartments} 
+            <TeamManagement
+              users={visibleUsers}
+              onAddMember={handleAddMember}
+              onBulkAddMembers={handleBulkAddMembers}
+              onUpdateMember={handleUpdateMember}
+              onDeleteMember={handleDeleteMember}
+              onUpdateRoles={handleUpdateUserRoles}
+              onUpdateStatus={handleUpdateUserStatus}
+              currentUserRoles={currentUser.roles}
+              departments={visibleDepartments}
               customConfirm={customConfirm}
               customAlert={customAlert}
             />
           )}
           {activeView === 'departments' && (
-            <DepartmentManagement 
-              departments={visibleDepartments} 
+            <DepartmentManagement
+              departments={visibleDepartments}
               locations={visibleLocations}
-              onAdd={handleAddDept} 
+              onAdd={handleAddDept}
               onBulkAdd={handleBulkAddDepts}
-              onUpdate={handleUpdateDept} 
-              onDelete={handleDeleteDept} 
+              onUpdate={handleUpdateDept}
+              onDelete={handleDeleteDept}
               isAdmin={isAdmin}
             />
           )}
           {activeView === 'locations' && (
-            <LocationManagement 
-              locations={visibleLocations} 
-              departments={visibleDepartments} 
+            <LocationManagement
+              locations={visibleLocations}
+              departments={visibleDepartments}
               userRoles={currentUser.roles}
               userDeptId={currentUser.departmentId}
-              onAdd={handleAddLoc} 
+              onAdd={handleAddLoc}
               onBulkAdd={handleBulkAddLocs}
-              onUpdate={handleUpdateLoc} 
-              onDelete={handleDeleteLoc} 
+              onUpdate={handleUpdateLoc}
+              onDelete={handleDeleteLoc}
             />
           )}
           {activeView === 'settings' && (
-            <SystemSettings 
-              departments={departmentsWithAssets} 
+            <SystemSettings
+              departments={departmentsWithAssets}
               users={users}
               permissions={crossAuditPermissions}
-              phases={auditPhases} 
+              phases={auditPhases}
               kpiTiers={kpiTiers}
               userRoles={currentUser.roles}
-              onAddPermission={handleAddPermission} 
-              onRemovePermission={handleRemovePermission} 
-              onTogglePermission={handleTogglePermission} 
+              onAddPermission={handleAddPermission}
+              onRemovePermission={handleRemovePermission}
+              onTogglePermission={handleTogglePermission}
               onUpdateDepartment={handleUpdateDept}
               onBulkUpdateDepartments={handleBulkUpdateDepts}
               onAddPhase={handleAddPhase}
@@ -1322,6 +1433,7 @@ const App: React.FC = () => {
               onClearAllLocations={handleClearAllLocations}
               onClearAllDepartments={handleClearAllDepartments}
               onBulkAddLocs={handleBulkAddLocs}
+              onBulkActivateStaff={handleBulkActivateStaff}
               maxAssetsPerDay={maxAssetsPerDay}
               onUpdateMaxAssetsPerDay={setMaxAssetsPerDay}
               onRebalanceSchedule={handleRebalanceSchedule}
@@ -1341,21 +1453,20 @@ const App: React.FC = () => {
             <p className="text-sm text-slate-600 mb-6">{confirmState.message}</p>
             <div className="flex gap-3 justify-end">
               {confirmState.isDestructive !== false && (
-                <button 
+                <button
                   onClick={() => setConfirmState(null)}
                   className="px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
                 >
                   Cancel
                 </button>
               )}
-              <button 
+              <button
                 onClick={() => {
                   confirmState.onConfirm();
                   setConfirmState(null);
                 }}
-                className={`px-4 py-2 text-sm font-bold text-white rounded-xl transition-colors ${
-                  confirmState.isDestructive === false ? 'bg-blue-600 hover:bg-blue-700 w-full' : 'bg-red-600 hover:bg-red-700'
-                }`}
+                className={`px-4 py-2 text-sm font-bold text-white rounded-xl transition-colors ${confirmState.isDestructive === false ? 'bg-blue-600 hover:bg-blue-700 w-full' : 'bg-red-600 hover:bg-red-700'
+                  }`}
               >
                 {confirmState.isDestructive === false ? 'OK' : 'Confirm'}
               </button>

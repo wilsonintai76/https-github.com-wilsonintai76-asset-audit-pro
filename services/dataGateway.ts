@@ -1,13 +1,13 @@
 
 import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier } from '../types';
 import { supabase } from './supabase';
-import { localDB } from './localDB'; 
+import { localDB } from './localDB';
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
 
 class DataGateway {
   private isDemoMode: boolean = false;
-  
-  constructor() {}
+
+  constructor() { }
 
   private generateId(): string {
     return crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`;
@@ -54,19 +54,19 @@ class DataGateway {
       if (payload.date === "") payload.date = null;
       const { data, error } = await supabase.from('audits').insert([payload]).select().single();
       if (error) throw error;
-      return { 
-        ...data, 
+      return {
+        ...data,
         departmentId: data.department_id,
         locationId: data.location_id,
         supervisorId: data.supervisor_id,
         auditor1Id: data.auditor1_id,
         auditor2Id: data.auditor2_id,
-        phaseId: data.phase_id 
+        phaseId: data.phase_id
       } as AuditSchedule;
     }
     throw new Error("Supabase client not initialized");
   }
-  
+
   async bulkAddAudits(audits: Omit<AuditSchedule, 'id'>[]): Promise<AuditSchedule[]> {
     if (supabase) {
       const payloads = audits.map(a => {
@@ -164,10 +164,10 @@ class DataGateway {
       if (user.certificationIssued !== undefined) { payload.certification_issued = user.certificationIssued; delete payload.certificationIssued; }
       if (user.certificationExpiry !== undefined) { payload.certification_expiry = user.certificationExpiry; delete payload.certificationExpiry; }
       if (user.dashboardConfig !== undefined) { payload.dashboard_config = user.dashboardConfig; delete payload.dashboardConfig; }
-      
+
       const { data, error } = await supabase.from('users').upsert([payload]).select().single();
       if (error) throw error;
-      
+
       const result = data as any;
       return {
         ...result,
@@ -187,7 +187,7 @@ class DataGateway {
     if (supabase) {
       const { data, error } = await supabase.from('users').update({ is_verified: true }).eq('id', id).select().single();
       if (error) throw error;
-      
+
       const result = data as any;
       return {
         ...result,
@@ -231,8 +231,8 @@ class DataGateway {
   }
 
   async enableDemoMode() {
-      // Demo mode disabled - strictly using Supabase
-      console.warn("Demo mode is disabled. Using Supabase backend.");
+    // Demo mode disabled - strictly using Supabase
+    console.warn("Demo mode is disabled. Using Supabase backend.");
   }
 
   // --- DEPARTMENTS ---
@@ -253,9 +253,12 @@ class DataGateway {
     if (supabase) {
       const payload: any = { ...dept };
       if (dept.headOfDeptId !== undefined) { payload.head_of_dept_id = dept.headOfDeptId; }
-      delete payload.headOfDeptId;
       if (dept.auditGroup !== undefined) { payload.audit_group = dept.auditGroup; }
+      if (dept.totalAssets !== undefined) { payload.total_assets = dept.totalAssets; }
+
+      delete payload.headOfDeptId;
       delete payload.auditGroup;
+      delete payload.totalAssets;
 
       const { error } = await supabase.from('departments').insert([payload]);
       if (error) throw error;
@@ -268,9 +271,12 @@ class DataGateway {
     if (supabase) {
       const payload: any = { ...updates };
       if (updates.headOfDeptId !== undefined) { payload.head_of_dept_id = updates.headOfDeptId; }
-      delete payload.headOfDeptId;
       if (updates.auditGroup !== undefined) { payload.audit_group = updates.auditGroup; }
+      if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; }
+
+      delete payload.headOfDeptId;
       delete payload.auditGroup;
+      delete payload.totalAssets;
 
       const { error } = await supabase.from('departments').update(payload).eq('id', id);
       if (error) throw error;
@@ -312,7 +318,7 @@ class DataGateway {
 
       const { data, error } = await supabase.from('locations').insert([payload]).select().single();
       if (error) throw error;
-      
+
       const result = data as any;
       return {
         ...result,

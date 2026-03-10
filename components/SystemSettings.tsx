@@ -7,7 +7,7 @@ import { AuditConstraints } from './AuditConstraints';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
 import { KPISettings } from './KPISettings';
 import { TierDistributionTable } from './TierDistributionTable';
-import { Zap, Sliders, ArrowRight, FileSpreadsheet } from 'lucide-react';
+import { Zap, Sliders, ArrowRight, FileSpreadsheet, UserCheck } from 'lucide-react';
 
 interface SystemSettingsProps {
   departments: Department[];
@@ -30,20 +30,21 @@ interface SystemSettingsProps {
   onClearAllLocations: () => void;
   onClearAllDepartments: () => void;
   onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
+  onBulkActivateStaff: (entries: { name: string; staffId: string; email: string; pin?: string }[]) => void;
   maxAssetsPerDay: number;
   onUpdateMaxAssetsPerDay: (val: number) => void;
   onRebalanceSchedule: () => Promise<void>;
   schedules: AuditSchedule[];
 }
 
-export const SystemSettings: React.FC<SystemSettingsProps> = ({ 
-  departments, 
+export const SystemSettings: React.FC<SystemSettingsProps> = ({
+  departments,
   users,
   permissions,
   phases,
   kpiTiers,
   userRoles,
-  onAddPermission, 
+  onAddPermission,
   onRemovePermission,
   onTogglePermission,
   onUpdateDepartment,
@@ -57,13 +58,15 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onClearAllLocations,
   onClearAllDepartments,
   onBulkAddLocs,
+  onBulkActivateStaff,
   maxAssetsPerDay,
   onUpdateMaxAssetsPerDay,
   onRebalanceSchedule,
   schedules
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+  const staffFileInputRef = useRef<HTMLInputElement>(null);
+
   const isAdmin = userRoles.includes('Admin');
 
   const activePhase = useMemo(() => {
@@ -85,7 +88,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       }
     } else {
       if (desiredStatus) {
-        onAddPermission(auditorDept, targetDept, false); 
+        onAddPermission(auditorDept, targetDept, false);
       }
     }
   };
@@ -136,7 +139,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             const [name, dept] = key.split('|');
             // Only add if department matches (or admin)
             if (isAdmin) {
-               newLocs.push({
+              newLocs.push({
                 name: name,
                 abbr: name.substring(0, 3).toUpperCase(),
                 departmentId: data.departmentId,
@@ -166,14 +169,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             const totalAssets = parseInt(row['Total Assets'] || row['total assets'] || row['TotalAssets'] || '0', 10) || 0;
 
             if (name && department && isAdmin) {
-              newLocs.push({ 
-                name, 
-                abbr, 
-                departmentId: department, 
-                building, 
-                level, 
-                supervisorId: pic, 
-                contact, 
+              newLocs.push({
+                name,
+                abbr,
+                departmentId: department,
+                building,
+                level,
+                supervisorId: pic,
+                contact,
                 description,
                 totalAssets
               });
@@ -199,7 +202,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     const headers = ['Name', 'Abbr', 'Department', 'Building', 'Level', 'Supervisor', 'Contact', 'Description', 'Total Assets'];
     const sample = ['Main Chemistry Lab', 'MCL-01', 'Biological Sciences', 'Science Block A', 'FIRST FLOOR', 'Dr. Supervisor', 'x1234', 'Main lab for chemistry', '150'];
     const csvContent = [headers.join(','), sample.join(',')].join('\n');
-    
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
@@ -213,25 +215,66 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     }
   };
 
+  const handleStaffFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const entries: { name: string; staffId: string; email: string; pin?: string }[] = [];
+        results.data.forEach((row: any) => {
+          const name = (row['Name'] || row['name'] || '').trim();
+          const staffId = (row['StaffID'] || row['Staff ID'] || row['staff_id'] || '').trim();
+          const email = (row['Email'] || row['email'] || '').trim();
+          const pin = (row['PIN'] || row['pin'] || '').trim();
+          if (name && staffId) entries.push({ name, staffId, email, pin: pin || undefined });
+        });
+        if (entries.length > 0) {
+          onBulkActivateStaff(entries);
+        } else {
+          alert("No valid entries found. Ensure 'Name' and 'StaffID' columns exist.");
+        }
+      },
+      error: () => alert('Failed to parse CSV.')
+    });
+    if (staffFileInputRef.current) staffFileInputRef.current.value = '';
+  };
+
+  const handleDownloadStaffTemplate = () => {
+    const headers = ['Name', 'StaffID', 'Email', 'PIN'];
+    const sample = ['SHAHRIZAL BIN SHABUDDIN', '1001', 'shahrizal@example.com', '1234'];
+    const csvContent = [headers.join(','), sample.join(',')].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'staff_activation_template.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
       {/* GLOBAL ACTIVE PHASE HEADER */}
-      <div className={`p-8 rounded-[40px] border-2 shadow-2xl transition-all duration-500 overflow-hidden relative ${
-        activePhase 
-          ? 'bg-slate-900 border-emerald-500/50 text-white' 
+      <div className={`p-8 rounded-[40px] border-2 shadow-2xl transition-all duration-500 overflow-hidden relative ${activePhase
+          ? 'bg-slate-900 border-emerald-500/50 text-white'
           : 'bg-white border-slate-200 text-slate-900'
-      }`}>
+        }`}>
         {activePhase && (
           <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] -mr-32 -mt-32"></div>
         )}
-        
+
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-6">
-            <div className={`w-16 h-16 rounded-[24px] flex items-center justify-center text-2xl shadow-inner ${
-              activePhase 
-                ? 'bg-emerald-500 text-white' 
+            <div className={`w-16 h-16 rounded-[24px] flex items-center justify-center text-2xl shadow-inner ${activePhase
+                ? 'bg-emerald-500 text-white'
                 : 'bg-slate-100 text-slate-400 border border-slate-200'
-            }`}>
+              }`}>
               {activePhase ? <Zap className="w-8 h-8" /> : <Sliders className="w-8 h-8" />}
             </div>
             <div>
@@ -254,29 +297,29 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
               </div>
             </div>
           </div>
-          
+
           {activePhase && (
             <div className="flex flex-col items-end">
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter mb-1">Window Progress</span>
               <div className="flex items-center gap-3">
-                 <div className="text-right">
-                    <p className="text-xs font-bold font-mono text-emerald-400">{activePhase.startDate} <ArrowRight className="inline-block w-3 h-3 mx-1 opacity-40" /> {activePhase.endDate}</p>
-                 </div>
+                <div className="text-right">
+                  <p className="text-xs font-bold font-mono text-emerald-400">{activePhase.startDate} <ArrowRight className="inline-block w-3 h-3 mx-1 opacity-40" /> {activePhase.endDate}</p>
+                </div>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      <AuditPhasesSettings 
+      <AuditPhasesSettings
         phases={phases}
         isAdmin={isAdmin}
         onAdd={onAddPhase}
         onUpdate={onUpdatePhase}
         onDelete={onDeletePhase}
       />
-      
-      <KPISettings 
+
+      <KPISettings
         tiers={kpiTiers}
         phases={phases}
         onAddTier={onAddKPITier}
@@ -285,7 +328,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       />
 
       {phases?.length > 0 && kpiTiers?.length > 0 && (
-        <TierDistributionTable 
+        <TierDistributionTable
           departments={departments}
           kpiTiers={kpiTiers}
           phases={phases}
@@ -295,7 +338,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
       {isAdmin && (
         <div className="flex justify-center">
-          <button 
+          <button
             onClick={onRebalanceSchedule}
             className="group relative px-8 py-4 bg-slate-900 text-white rounded-[24px] text-sm font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all overflow-hidden"
           >
@@ -308,7 +351,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         </div>
       )}
 
-      <CrossAuditManagement 
+      <CrossAuditManagement
         departments={departments}
         users={users}
         permissions={permissions}
@@ -319,7 +362,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onBulkUpdateDepartments={onBulkUpdateDepartments}
       />
 
-      <AuditConstraints 
+      <AuditConstraints
         maxAssetsPerDay={maxAssetsPerDay}
         onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
       />
@@ -328,22 +371,35 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
           <h3 className="text-xl font-bold text-slate-900 mb-2">Data Management</h3>
           <p className="text-sm text-slate-500 mb-6">Import locations and departments from CSV files.</p>
-          
+
           <div className="flex flex-wrap gap-4">
             <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
-            <button 
-              onClick={handleDownloadTemplate} 
+            <input type="file" ref={staffFileInputRef} className="hidden" accept=".csv" onChange={handleStaffFileUpload} />
+            <button
+              onClick={handleDownloadTemplate}
               className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
-              title="Download CSV Template"
             >
-              Download Template
+              Location Template
             </button>
-            <button 
-              onClick={() => fileInputRef.current?.click()} 
+            <button
+              onClick={() => fileInputRef.current?.click()}
               className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              Import CSV
+              Import Locations CSV
+            </button>
+            <button
+              onClick={handleDownloadStaffTemplate}
+              className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
+            >
+              Staff Activation Template
+            </button>
+            <button
+              onClick={() => staffFileInputRef.current?.click()}
+              className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+            >
+              <UserCheck className="w-4 h-4" />
+              Activate Staff CSV
             </button>
           </div>
         </div>
@@ -353,15 +409,15 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         <div className="bg-red-50 border border-red-100 rounded-[32px] p-8">
           <h3 className="text-xl font-bold text-red-900 mb-2">Danger Zone</h3>
           <p className="text-sm text-red-700 mb-6">Irreversible actions for system administration.</p>
-          
+
           <div className="flex flex-wrap gap-4">
-            <button 
+            <button
               onClick={onClearAllLocations}
               className="px-6 py-3 bg-white border border-red-200 text-red-600 rounded-xl text-sm font-bold shadow-sm hover:bg-red-600 hover:text-white transition-all"
             >
               Clear All Locations
             </button>
-            <button 
+            <button
               onClick={onClearAllDepartments}
               className="px-6 py-3 bg-red-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-red-500/20 hover:bg-red-700 transition-all"
             >
