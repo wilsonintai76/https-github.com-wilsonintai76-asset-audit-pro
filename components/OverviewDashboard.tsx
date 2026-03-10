@@ -1,12 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditInsight } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
-import { AIInsightBox } from './AIInsightBox';
-import { analyzeSchedule } from '../services/geminiService';
-import { Sliders, GraduationCap } from 'lucide-react';
+import { TierDistributionTable } from './TierDistributionTable';
+import { Sliders, GraduationCap, Filter, ChevronDown } from 'lucide-react';
 
 interface OverviewDashboardProps {
   schedules: AuditSchedule[];
@@ -30,49 +29,83 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   currentUser
 }) => {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
-  const [aiInsight, setAiInsight] = useState<AuditInsight | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [selectedDept, setSelectedDept] = useState('All');
+  const [selectedBlock, setSelectedBlock] = useState('All');
+  const [selectedLevel, setSelectedLevel] = useState('All');
 
-  // Dynamic Certification Status
-  const certInfo = useMemo(() => {
-    if (!currentUser.certificationExpiry) return null;
-    
-    const expiry = new Date(currentUser.certificationExpiry);
-    const today = new Date();
-    const diffTime = expiry.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    let status: 'safe' | 'warning' | 'expired' = 'safe';
-    if (diffDays <= 0) status = 'expired';
-    else if (diffDays <= 30) status = 'warning';
-    
-    return { days: diffDays, status };
-  }, [currentUser]);
+  // Reset child filters
+  useEffect(() => {
+    setSelectedBlock('All');
+    setSelectedLevel('All');
+  }, [selectedDept]);
 
-  const upcomingAudits = [...schedules]
-    .filter(s => s.status !== 'Completed' && s.date != null)
-    .sort((a: AuditSchedule, b: AuditSchedule) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
+  useEffect(() => {
+    setSelectedLevel('All');
+  }, [selectedBlock]);
+
+  // Filter Logic
+  const filteredLocations = useMemo(() => {
+    return locations.filter(l => {
+      const dept = departments.find(d => d.id === l.departmentId);
+      if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
+      if (selectedBlock !== 'All' && l.building !== selectedBlock) return false;
+      if (selectedLevel !== 'All' && l.level !== selectedLevel) return false;
+      return true;
+    });
+  }, [locations, selectedDept, selectedBlock, selectedLevel, departments]);
+
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter(s => {
+      const loc = locations.find(l => l.id === s.locationId);
+      const dept = departments.find(d => d.id === s.departmentId);
+      
+      if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
+      if (selectedBlock !== 'All' && loc?.building !== selectedBlock) return false;
+      if (selectedLevel !== 'All' && loc?.level !== selectedLevel) return false;
+      return true;
+    });
+  }, [schedules, locations, selectedDept, selectedBlock, selectedLevel, departments]);
+
+  // Dropdown Options
+  const availableLocationsForFilters = useMemo(() => {
+    if (selectedDept === 'All') return locations;
+    const dept = departments.find(d => d.name === selectedDept);
+    if (!dept) return [];
+    return locations.filter(l => l.departmentId === dept.id);
+  }, [selectedDept, locations, departments]);
+
+  const uniqueBlocks = useMemo(() => {
+    const blocks = new Set(availableLocationsForFilters.map(l => l.building).filter(Boolean));
+    return ['All', ...Array.from(blocks)].sort();
+  }, [availableLocationsForFilters]);
+
+  const uniqueLevels = useMemo(() => {
+    let filtered = availableLocationsForFilters;
+    if (selectedBlock !== 'All') {
+      filtered = filtered.filter(l => l.building === selectedBlock);
+    }
+    const levels = new Set(filtered.map(l => l.level).filter(Boolean));
+    return ['All', ...Array.from(levels)].sort();
+  }, [availableLocationsForFilters, selectedBlock]);
+
+  const upcomingAudits = [...filteredSchedules]
+    .filter(s => s.status !== 'Completed')
+    .sort((a: AuditSchedule, b: AuditSchedule) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 3);
 
-  const deptCounts = schedules.reduce((acc, curr) => {
-    const deptName = departments.find(d => d.id === curr.departmentId)?.name || 'Unknown';
-    acc[deptName] = (acc[deptName] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const deptCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredLocations.forEach(l => {
+      const dept = departments.find(d => d.id === l.departmentId);
+      const name = dept?.name || l.departmentId;
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return counts;
+  }, [filteredLocations, departments]);
 
-  const sortedDepts = (Object.entries(deptCounts) as [string, number][]).sort((a, b) => b[1] - a[1]);
-
-  const handleGenerateInsight = async () => {
-    setIsAiLoading(true);
-    try {
-        const insight = await analyzeSchedule(schedules);
-        setAiInsight(insight);
-    } catch (e) {
-        console.error("Failed to generate insight", e);
-    } finally {
-        setIsAiLoading(false);
-    }
-  };
+  const sortedDepts = useMemo(() => 
+    (Object.entries(deptCounts) as [string, number][]).sort((a, b) => b[1] - a[1])
+  , [deptCounts]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -99,25 +132,91 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
       </div>
 
-      {/* AI Morning Briefing Widget */}
-      <AIInsightBox 
-        insight={aiInsight} 
-        loading={isAiLoading} 
-        onGenerate={handleGenerateInsight} 
-      />
+      {/* Filters Bar */}
+      <div className="bg-white rounded-[32px] p-4 border border-slate-200 shadow-sm">
+          <div className="flex flex-col lg:flex-row gap-4">
+              <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest mb-2 lg:mb-0 lg:mr-4">
+                  <Filter className="w-4 h-4" />
+                  Filters
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-grow">
+                  {/* Department Filter */}
+                  <div className="relative">
+                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Department</label>
+                    <div className="relative">
+                        <select
+                        className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
+                        value={selectedDept}
+                        onChange={(e) => setSelectedDept(e.target.value)}
+                        >
+                        <option value="All">All Departments</option>
+                        {departments.map(d => (
+                            <option key={d.id} value={d.name}>{d.name}</option>
+                        ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+                    </div>
+                  </div>
 
-      {config.showStats && <StatsCards schedules={schedules} />}
+                  {/* Block Filter */}
+                  <div className="relative">
+                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Block / Building</label>
+                    <div className="relative">
+                        <select
+                        className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
+                        value={selectedBlock}
+                        onChange={(e) => setSelectedBlock(e.target.value)}
+                        >
+                        {uniqueBlocks.map(b => (
+                            <option key={b} value={b}>{b === 'All' ? 'All Blocks' : b}</option>
+                        ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Level Filter */}
+                  <div className="relative">
+                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Level</label>
+                    <div className="relative">
+                        <select
+                        className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
+                        value={selectedLevel}
+                        onChange={(e) => setSelectedLevel(e.target.value)}
+                        >
+                        {uniqueLevels.map(l => (
+                            <option key={l} value={l}>{l === 'All' ? 'All Levels' : l}</option>
+                        ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+                    </div>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      {config.showStats && <StatsCards schedules={filteredSchedules} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
             
           {/* KPI Widget */}
-          {phases.length > 0 && kpiTiers.length > 0 && (
+          {phases?.length > 0 && kpiTiers?.length > 0 && (
             <KPIStatsWidget 
                 phases={phases}
                 kpiTiers={kpiTiers}
                 departments={departments}
-                schedules={schedules}
+                schedules={filteredSchedules}
+            />
+          )}
+
+          {phases?.length > 0 && kpiTiers?.length > 0 && (
+            <TierDistributionTable 
+              departments={departments}
+              kpiTiers={kpiTiers}
+              phases={phases}
+              schedules={schedules}
             />
           )}
 
@@ -152,14 +251,14 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                   <div key={dept} className="space-y-2">
                     <div className="flex justify-between items-center text-xs font-bold">
                       <span className="text-slate-700">{dept}</span>
-                      <span className="text-slate-400">{count} Audits</span>
+                      <span className="text-slate-400">{count} Locations</span>
                     </div>
                     <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                       <div 
                         className={`h-full rounded-full transition-all duration-1000 delay-${idx * 100} ${
                           idx % 3 === 0 ? 'bg-blue-500' : idx % 3 === 1 ? 'bg-indigo-500' : 'bg-slate-400'
                         }`}
-                        style={{ width: `${(count / (schedules.length || 1)) * 100}%` }}
+                        style={{ width: `${(count / (filteredLocations?.length || 1)) * 100}%` }}
                       ></div>
                     </div>
                   </div>
@@ -174,64 +273,34 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Upcoming Audits</h3>
               <div className="space-y-4">
-                {upcomingAudits.map((audit) => (
-                  <div key={audit.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-4 hover:border-blue-200 transition-colors group">
-                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-[9px] font-black text-blue-600 uppercase">
-                        {audit.date ? new Date(audit.date).toLocaleString('default', { month: 'short' }) : '--'}
-                      </span>
-                      <span className="text-xs font-bold text-slate-900">{audit.date ? audit.date.split('-')[2] : '--'}</span>
+                {upcomingAudits.map((audit) => {
+                  const loc = locations.find(l => l.id === audit.locationId);
+                  const dept = departments.find(d => d.id === audit.departmentId);
+                  
+                  return (
+                    <div key={audit.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-4 hover:border-blue-200 transition-colors group">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center shrink-0">
+                        <span className="text-[9px] font-black text-blue-600 uppercase">
+                          {audit.date ? new Date(audit.date).toLocaleString('default', { month: 'short' }) : 'N/A'}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900">{audit.date ? audit.date.split('-')[2] : '-'}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
+                          {loc?.name || audit.locationId}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{dept?.name || audit.departmentId}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
-                        {locations.find(l => l.id === audit.locationId)?.name || '—'}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{departments.find(d => d.id === audit.departmentId)?.name || '—'}</p>
-                    </div>
-                  </div>
-                ))}
-                {upcomingAudits.length === 0 && (
+                  );
+                })}
+                {(!upcomingAudits || upcomingAudits.length === 0) && (
                   <div className="text-center py-6">
                     <p className="text-xs text-slate-400 font-medium italic">No upcoming audits scheduled.</p>
                   </div>
                 )}
                 <button className="w-full py-3 text-xs font-bold text-blue-600 border border-blue-100 rounded-xl hover:bg-blue-50 transition-colors">
                   View Full Calendar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {config.showCertification && certInfo && (
-            <div className={`rounded-3xl p-6 text-white shadow-xl relative overflow-hidden transition-colors duration-500 ${
-                certInfo.status === 'safe' ? 'bg-gradient-to-br from-indigo-600 to-blue-700 shadow-blue-500/20' :
-                certInfo.status === 'warning' ? 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20' :
-                'bg-gradient-to-br from-rose-600 to-red-700 shadow-rose-500/20'
-            }`}>
-              <GraduationCap className="absolute -right-4 -bottom-4 text-white/10 w-24 h-24" />
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-bold">Certification Status</h4>
-                  <div className="w-10 h-10 rounded-full border-4 border-white/20 flex items-center justify-center text-[10px] font-black">
-                     {certInfo.status === 'expired' ? 'EXP' : certInfo.days}d
-                  </div>
-                </div>
-                
-                <p className="text-white/90 text-sm mb-4 leading-relaxed">
-                  {certInfo.status === 'safe' && `Your institutional auditor certificate expires in ${certInfo.days} days.`}
-                  {certInfo.status === 'warning' && `Urgent: Certification expiring in ${certInfo.days} days. Renew immediately.`}
-                  {certInfo.status === 'expired' && `Critical: Your certificate has expired. Audit operations suspended.`}
-                </p>
-
-                <button 
-                    onClick={() => window.location.hash = '#profile'}
-                    className={`w-full py-3 bg-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${
-                        certInfo.status === 'safe' ? 'text-blue-700 hover:bg-blue-50' :
-                        certInfo.status === 'warning' ? 'text-amber-700 hover:bg-amber-50' :
-                        'text-rose-700 hover:bg-rose-50'
-                    }`}
-                >
-                  Renew Certificate
                 </button>
               </div>
             </div>

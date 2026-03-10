@@ -31,7 +31,7 @@ export const AuditFlow: React.FC = () => {
       roleIcon: UserRoundPen,
       color: "emerald",
       icon: MousePointer2,
-      desc: "Certified staff log in to view open slots. They can only see and book slots for departments authorized by the Matrix in Step 2.",
+      desc: "Certified staff log in to view open slots. They use the 'Department', 'Block', and 'Level' filters to quickly locate specific audit targets authorized by the Matrix.",
       logic: "Validates User Role + Certification Expiry + Matrix Permission before allowing a write to the 'AuditSchedule' table."
     },
     {
@@ -53,7 +53,7 @@ export const AuditFlow: React.FC = () => {
 
       <div className="space-y-16">
         {steps.map((step, idx) => {
-          const isLast = idx === steps.length - 1;
+          const isLast = idx === (steps?.length || 0) - 1;
           
           // Color mappings
           const colorStyles = {

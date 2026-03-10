@@ -6,13 +6,12 @@ export interface AuditSchedule {
   supervisorId: string;
   auditor1Id: string | null;
   auditor2Id: string | null;
-  date: string | null;   // null = supervisor hasn't set a date yet
+  date: string;
   status: 'Pending' | 'In Progress' | 'Completed';
   phaseId: string;
-  building?: string;
 }
 
-export type UserRole = 'Admin' | 'Coordinator' | 'HeadOfDept' | 'Supervisor' | 'Auditor' | 'Staff' | 'Guest';
+export type UserRole = 'Admin' | 'Coordinator' | 'Supervisor' | 'Staff' | 'Guest';
 export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard';
 
 export interface User {
@@ -40,12 +39,7 @@ export interface Department {
   headOfDeptId: string;
   description: string;
   auditGroup?: string;
-}
-
-export interface AuditGroup {
-  id: string;
-  name: string;
-  description?: string;
+  totalAssets?: number;
 }
 
 export interface Location {
@@ -65,7 +59,6 @@ export interface DashboardConfig {
   showStats: boolean;
   showTrends: boolean;
   showUpcoming: boolean;
-  showCertification: boolean;
   showDeptDistribution: boolean;
 }
 

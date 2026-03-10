@@ -56,7 +56,11 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
 
   const startEdit = (phase: AuditPhase) => {
     setEditingId(phase.id);
-    setFormData({ name: phase.name, startDate: phase.startDate, endDate: phase.endDate });
+    setFormData({ 
+      name: phase.name, 
+      startDate: phase.startDate, 
+      endDate: phase.endDate
+    });
     setIsAdding(true);
   };
 
@@ -139,7 +143,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
         </form>
       )}
 
-      {phases.length === 0 && !isAdding ? (
+      {(!phases || phases.length === 0) && !isAdding ? (
           <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
                   <CalendarX className="w-6 h-6" />
@@ -201,7 +205,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs font-bold mb-4">
+                        <div className="flex items-center gap-3 text-xs font-bold mb-2">
                             <div className={`px-2 py-1 rounded-lg border flex items-center gap-2 ${isActive ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
                               <CalendarCheck className="w-3 h-3" />
                               {phase.startDate}

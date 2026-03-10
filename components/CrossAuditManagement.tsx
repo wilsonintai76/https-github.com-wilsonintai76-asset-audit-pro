@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X } from 'lucide-react';
+import { Department, CrossAuditPermission, User } from '../types';
+import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
@@ -26,10 +26,6 @@ interface CrossAuditManagementProps {
   onRemovePermission?: (id: string) => Promise<void>;
   onUpdateDepartment: (id: string, updates: Partial<Department>) => void;
   onBulkUpdateDepartments: (updates: { id: string, data: Partial<Department> }[]) => void;
-  auditGroups: AuditGroup[];
-  onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
-  onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
-  onDeleteAuditGroup: (id: string) => Promise<void>;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -40,11 +36,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onAddPermission,
   onRemovePermission,
   onUpdateDepartment,
-  onBulkUpdateDepartments,
-  auditGroups,
-  onAddAuditGroup,
-  onUpdateAuditGroup,
-  onDeleteAuditGroup
+  onBulkUpdateDepartments
 }) => {
   // --- STATE ---
   const [mgmtMode, setMgmtMode] = useState<ManagementMode>('auto');
@@ -62,30 +54,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [manualAuditor, setManualAuditor] = useState('');
   const [manualTarget, setManualTarget] = useState('');
   const [isMutual, setIsMutual] = useState(false);
-  const [manualTab, setManualTab] = useState<'groups' | 'grouping' | 'pairing'>('grouping');
-  const [pendingGroups, setPendingGroups] = useState<Record<string, string>>({});
-  const [isSavingGroups, setIsSavingGroups] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupDesc, setNewGroupDesc] = useState('');
-  const [isSavingNewGroup, setIsSavingNewGroup] = useState(false);
-  const [editingGroup, setEditingGroup] = useState<{ id: string; name: string; description: string } | null>(null);
-
-  const GROUP_COLOR_PALETTE = [
-    'bg-blue-50 text-blue-600 border-blue-100',
-    'bg-emerald-50 text-emerald-600 border-emerald-100',
-    'bg-amber-50 text-amber-600 border-amber-100',
-    'bg-purple-50 text-purple-600 border-purple-100',
-    'bg-rose-50 text-rose-600 border-rose-100',
-    'bg-teal-50 text-teal-600 border-teal-100',
-    'bg-orange-50 text-orange-600 border-orange-100',
-    'bg-indigo-50 text-indigo-600 border-indigo-100',
-    'bg-pink-50 text-pink-600 border-pink-100',
-    'bg-cyan-50 text-cyan-600 border-cyan-100',
-  ];
-  const getGroupColor = (group: string) => {
-    const idx = auditGroups.findIndex(g => g.name === group);
-    return GROUP_COLOR_PALETTE[(idx < 0 ? 0 : idx) % GROUP_COLOR_PALETTE.length];
-  };
 
   // Workflow Control
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('grouping');
@@ -101,7 +69,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         u.department === dept.name && 
         (u.roles.includes('Staff') || u.roles.includes('Supervisor') || u.roles.includes('Coordinator') || u.roles.includes('Admin')) &&
         u.status === 'Active'
-      ).length;
+      ).length || 0;
 
       return {
         ...dept,
@@ -141,7 +109,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   }, [permissions]);
 
   React.useEffect(() => {
-    if (!selectedAuditor && entities.length > 0) {
+    if (!selectedAuditor && entities?.length > 0) {
       setSelectedAuditor(entities[0].name);
     }
   }, [entities, selectedAuditor]);
@@ -165,7 +133,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         .filter(d => d.auditGroup)
         .map(d => ({ id: d.id, data: { auditGroup: "" } }));
 
-      if (updates.length > 0) {
+      if (updates?.length > 0) {
         await onBulkUpdateDepartments(updates);
       }
 
@@ -306,7 +274,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         }
     });
 
-    if (currentGroup.length > 0) {
+    if (currentGroup?.length > 0) {
         const targetName = groupIndex > 1 
             ? `Group ${String.fromCharCode(64 + groupIndex - 1)}`
             : `Group A`;
@@ -350,15 +318,15 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
         const assigned: typeof validAuditorEntities = [];
         for (const cand of candidates) {
-            if (assigned.length >= teamsNeeded) break;
+            if (assigned?.length >= teamsNeeded) break;
             const stats = workloadMap.get(cand.name)!;
-            if (stats.used < stats.max || assigned.length === 0) {
+            if (stats.used < stats.max || !assigned || assigned.length === 0) {
                 assigned.push(cand);
                 stats.used++;
             }
         }
 
-        if (assigned.length > 0) {
+        if (assigned?.length > 0) {
             plan.push({
                 target,
                 auditors: assigned,
@@ -551,7 +519,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
           </div>
 
           {/* RESULTS VIEW */}
-          {workflowStep === 'results' && strategicPlan.length > 0 && (
+          {workflowStep === 'results' && strategicPlan?.length > 0 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div>
@@ -592,313 +560,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         </>
       ) : (
         <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-
-          {/* Manual Mode Tab Switcher */}
-          <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm w-fit">
-            <button
-              onClick={() => setManualTab('groups')}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                manualTab === 'groups' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <Boxes className="w-4 h-4" /> Groups
-            </button>
-            <button
-              onClick={() => setManualTab('grouping')}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                manualTab === 'grouping' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <Layers className="w-4 h-4" /> Grouping
-            </button>
-            <button
-              onClick={() => setManualTab('pairing')}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                manualTab === 'pairing' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'
-              }`}
-            >
-              <Network className="w-4 h-4" /> Pairing
-            </button>
-          </div>
-
-          {/* ── GROUPS TAB ── */}
-          {manualTab === 'groups' && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900">Audit Groups</h3>
-                  <p className="text-sm text-slate-500">Create and manage named audit groups. Assign departments in the Grouping tab.</p>
-                </div>
-              </div>
-
-              {/* Add new group form */}
-              <div className="bg-white rounded-[24px] border border-blue-100 shadow-sm p-6">
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Add New Group</p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    value={newGroupName}
-                    onChange={e => setNewGroupName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') document.getElementById('btn-add-group')?.click(); }}
-                    placeholder="Group name (e.g. Group A)"
-                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
-                  <input
-                    value={newGroupDesc}
-                    onChange={e => setNewGroupDesc(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') document.getElementById('btn-add-group')?.click(); }}
-                    placeholder="Description (optional)"
-                    className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
-                  <button
-                    id="btn-add-group"
-                    disabled={!newGroupName.trim() || isSavingNewGroup}
-                    onClick={async () => {
-                      const name = newGroupName.trim();
-                      if (!name) return;
-                      setIsSavingNewGroup(true);
-                      try {
-                        await onAddAuditGroup({ name, description: newGroupDesc.trim() || undefined });
-                        setNewGroupName('');
-                        setNewGroupDesc('');
-                      } catch (e) {
-                        alert('Failed to add group. Name may already exist.');
-                      } finally {
-                        setIsSavingNewGroup(false);
-                      }
-                    }}
-                    className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-black shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all disabled:opacity-40 flex items-center gap-2 whitespace-nowrap"
-                  >
-                    {isSavingNewGroup ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    Add Group
-                  </button>
-                </div>
-              </div>
-
-              {/* Groups table */}
-              <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm overflow-hidden">
-                {auditGroups.length === 0 ? (
-                  <div className="p-12 text-center text-slate-400 text-sm">
-                    No audit groups yet. Add one above to get started.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead className="bg-slate-50/50 border-b border-slate-100">
-                        <tr>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Group Name</th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Description</th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Depts Assigned</th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {auditGroups.map((g, idx) => {
-                          const deptsInGroup = departments.filter(d => d.auditGroup === g.name).length;
-                          const isEditing = editingGroup?.id === g.id;
-                          return (
-                            <tr key={g.id} className="hover:bg-slate-50/40 transition-colors">
-                              <td className="px-6 py-3">
-                                {isEditing ? (
-                                  <input
-                                    autoFocus
-                                    value={editingGroup.name}
-                                    onChange={e => setEditingGroup(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                                    className="px-3 py-1.5 border border-blue-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 w-40"
-                                  />
-                                ) : (
-                                  <span className={`px-2.5 py-1 rounded-lg text-[11px] font-black border ${GROUP_COLOR_PALETTE[idx % GROUP_COLOR_PALETTE.length]}`}>
-                                    <Layers className="w-3 h-3 mr-1 inline-block" />{g.name}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-6 py-3">
-                                {isEditing ? (
-                                  <input
-                                    value={editingGroup.description}
-                                    onChange={e => setEditingGroup(prev => prev ? { ...prev, description: e.target.value } : prev)}
-                                    className="px-3 py-1.5 border border-blue-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 w-48"
-                                    placeholder="Description (optional)"
-                                  />
-                                ) : (
-                                  <span className="text-xs text-slate-500">{g.description || '—'}</span>
-                                )}
-                              </td>
-                              <td className="px-6 py-3 text-center">
-                                <span className="text-sm font-bold text-slate-700">{deptsInGroup}</span>
-                              </td>
-                              <td className="px-6 py-3">
-                                <div className="flex items-center justify-end gap-2">
-                                  {isEditing ? (
-                                    <>
-                                      <button
-                                        onClick={async () => {
-                                          if (!editingGroup.name.trim()) return;
-                                          try {
-                                            await onUpdateAuditGroup(g.id, { name: editingGroup.name.trim(), description: editingGroup.description.trim() || undefined });
-                                            setEditingGroup(null);
-                                          } catch (e) {
-                                            alert('Failed to update group.');
-                                          }
-                                        }}
-                                        className="px-3 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all"
-                                      >
-                                        Save
-                                      </button>
-                                      <button
-                                        onClick={() => setEditingGroup(null)}
-                                        className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200 transition-all"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <button
-                                        onClick={() => setEditingGroup({ id: g.id, name: g.name, description: g.description || '' })}
-                                        className="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-blue-50 hover:text-blue-600 transition-all"
-                                        title="Rename"
-                                      >
-                                        <Building2 className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          if (deptsInGroup > 0 && !window.confirm(`${deptsInGroup} department(s) are assigned to "${g.name}". Deleting it will unassign them. Continue?`)) return;
-                                          try {
-                                            await onDeleteAuditGroup(g.id);
-                                          } catch (e) {
-                                            alert('Failed to delete group.');
-                                          }
-                                        }}
-                                        className="w-8 h-8 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all"
-                                        title="Delete"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── GROUPING TAB ── */}
-          {manualTab === 'grouping' && (
-            <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900">Manual Department Grouping</h3>
-                  <p className="text-sm text-slate-500">Assign each department to an audit group. Changes are saved when you click Save Groups.</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPendingGroups({})}
-                    className="px-4 py-2 text-xs font-black uppercase bg-slate-100 text-slate-500 hover:bg-slate-200 rounded-xl transition-all"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 mr-1.5 inline-block" />Reset
-                  </button>
-                  <button
-                    disabled={isSavingGroups || Object.keys(pendingGroups).length === 0}
-                    onClick={async () => {
-                      setIsSavingGroups(true);
-                      try {
-                        const updates = Object.entries(pendingGroups).map(([id, auditGroup]) => ({ id, data: { auditGroup } }));
-                        await onBulkUpdateDepartments(updates);
-                        setPendingGroups({});
-                      } finally {
-                        setIsSavingGroups(false);
-                      }
-                    }}
-                    className="px-5 py-2 text-xs font-black uppercase bg-blue-600 text-white hover:bg-blue-700 rounded-xl shadow-lg shadow-blue-500/20 transition-all disabled:opacity-40 flex items-center gap-2"
-                  >
-                    {isSavingGroups ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                    Save Groups
-                    {Object.keys(pendingGroups).length > 0 && (
-                      <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">{Object.keys(pendingGroups).length} pending</span>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Group legend */}
-              <div className="flex flex-wrap gap-2 items-center">
-                {auditGroups.map(g => {
-                  const count = departments.filter(d => (pendingGroups[d.id] ?? d.auditGroup ?? '') === g.name).length;
-                  return (
-                    <div key={g.id} className={`flex items-center gap-1.5 px-3 py-1 rounded-xl border text-[11px] font-black ${getGroupColor(g.name)}`}>
-                      <Layers className="w-3 h-3" />{g.name} <span className="opacity-60">({count})</span>
-                    </div>
-                  );
-                })}
-                <div className="flex items-center gap-2 px-3 py-1 rounded-xl border bg-slate-50 text-slate-400 border-slate-200 text-[11px] font-black">
-                  Ungrouped <span className="opacity-60">({departments.filter(d => !(pendingGroups[d.id] ?? d.auditGroup)).length})</span>
-                </div>
-                {auditGroups.length === 0 && (
-                  <p className="text-xs text-slate-400 italic">No groups yet — create them in the Groups tab first.</p>
-                )}
-              </div>
-
-              <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-50/50 border-b border-slate-100">
-                      <tr>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Group</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assign Group</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {departments.map(dept => {
-                        const currentGroup = pendingGroups[dept.id] ?? dept.auditGroup ?? '';
-                        const isPending = dept.id in pendingGroups;
-                        return (
-                          <tr key={dept.id} className={`transition-colors ${ isPending ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'}`}>
-                            <td className="px-6 py-3">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-600 border border-slate-200 shrink-0">
-                                  {dept.abbr?.substring(0, 3)}
-                                </div>
-                                <span className="text-sm font-semibold text-slate-800">{dept.name}</span>
-                                {isPending && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" title="Unsaved change" />}
-                              </div>
-                            </td>
-                            <td className="px-6 py-3">
-                              {currentGroup
-                                ? <span className={`px-2.5 py-1 rounded-lg text-[11px] font-black border ${getGroupColor(currentGroup)}`}><Layers className="w-3 h-3 mr-1 inline-block" />{currentGroup}</span>
-                                : <span className="text-slate-400 text-xs">— None —</span>
-                              }
-                            </td>
-                            <td className="px-6 py-3">
-                              <select
-                                value={currentGroup}
-                                onChange={e => setPendingGroups(prev => ({ ...prev, [dept.id]: e.target.value }))}
-                                className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
-                              >
-                                <option value="">— None —</option>
-                                {auditGroups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}
-                              </select>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── PAIRING TAB ── */}
-          {manualTab === 'pairing' && (
-          <div className="space-y-8 animate-in fade-in duration-300">
+          
           {/* Manual Mode Header */}
           <div className="bg-white rounded-[40px] border-2 border-slate-200 p-8 md:p-12 shadow-sm">
              <div className="flex flex-col lg:flex-row gap-12 items-center">
@@ -1053,7 +715,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                <div className="flex items-center justify-between mb-6 px-4">
                   <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Detailed Registry</h4>
                   <div className="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-                     Showing {permissions.length} Active Links
+                     Showing {permissions?.length || 0} Active Links
                   </div>
                </div>
                
@@ -1069,7 +731,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                           </tr>
                        </thead>
                        <tbody className="divide-y divide-slate-50">
-                          {Object.keys(groupedPermissions).length === 0 ? (
+                          {!groupedPermissions || Object.keys(groupedPermissions).length === 0 ? (
                             <tr>
                                <td colSpan={4} className="py-16 text-center">
                                   <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-slate-200">
@@ -1127,8 +789,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                  </div>
                </div>
             </div>
-          )}
-          </div>
           )}
         </div>
       )}

@@ -13,7 +13,7 @@ export const analyzeSchedule = async (schedules: AuditSchedule[]): Promise<Audit
   
   // Create a concise text representation
   const scheduleText = activeSchedules.map(s => 
-    `- [${s.date || 'Unscheduled'}] ${s.department} (${s.location}): ${!s.auditor1 && !s.auditor2 ? 'NO AUDITORS' : (s.auditor1 ? '1' : '0') + (s.auditor2 ? '+1' : '') + ' assigned'}`
+    `- [${s.date || 'Unscheduled'}] ${s.departmentId} (${s.locationId}): ${!s.auditor1Id && !s.auditor2Id ? 'NO AUDITORS' : (s.auditor1Id ? '1' : '0') + (s.auditor2Id ? '+1' : '') + ' assigned'}`
   ).join('\n');
 
   try {
@@ -110,11 +110,11 @@ export const generateAuditReport = async (audit: AuditSchedule): Promise<string>
       contents: `Generate a formal "Audit Completion Certificate" text for the following completed audit.
       
       Context:
-      - Location: ${audit.location}
-      - Department: ${audit.department}
+      - Location: ${audit.locationId}
+      - Department: ${audit.departmentId}
       - Date Completed: ${audit.date}
-      - Auditors: ${audit.auditor1 || 'N/A'} and ${audit.auditor2 || 'N/A'}
-      - Supervisor (Site): ${audit.supervisor}
+      - Auditors: ${audit.auditor1Id || 'N/A'} and ${audit.auditor2Id || 'N/A'}
+      - Supervisor (Site): ${audit.supervisorId}
       - ID: ${audit.id}
 
       Format:

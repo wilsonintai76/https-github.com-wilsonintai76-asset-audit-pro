@@ -8,10 +8,10 @@ interface StatsCardsProps {
 }
 
 export const StatsCards: React.FC<StatsCardsProps> = ({ schedules }) => {
-  const total = schedules.length;
-  const pending = schedules.filter(s => s.status === 'Pending').length;
-  const needsAuditors = schedules.filter(s => !s.auditor1 || !s.auditor2).length;
-  const completed = schedules.filter(s => s.status === 'Completed').length;
+  const total = schedules?.length || 0;
+  const pending = schedules?.filter(s => s.status === 'Pending').length || 0;
+  const needsAuditors = schedules?.filter(s => !s.auditor1 || !s.auditor2).length || 0;
+  const completed = schedules?.filter(s => s.status === 'Completed').length || 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

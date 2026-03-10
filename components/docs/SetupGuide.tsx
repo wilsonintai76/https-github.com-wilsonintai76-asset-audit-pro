@@ -11,7 +11,7 @@ export const SetupGuide: React.FC = () => {
     },
     { 
       title: "02. Map Physical Locations", 
-      desc: "Identify labs, workshop blocks, and classrooms that require auditing. Assign a Site Supervisor (PIC) for each location.",
+      desc: "Identify labs, workshop blocks, and classrooms. Crucially, assign a 'Block' and 'Level' to each location to enable the granular filtering system for auditors.",
       tip: "Locations must be linked to a parent department."
     },
     { 

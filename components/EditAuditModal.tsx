@@ -1,26 +1,24 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { AuditSchedule, Department, Location, AuditPhase } from '../types';
+import { AuditSchedule, Department, Location, AuditPhase, User } from '../types';
 import { X, CalendarDays, ChevronDown, CalendarPlus } from 'lucide-react';
 
-interface NewAuditModalProps {
+interface EditAuditModalProps {
+  audit: AuditSchedule;
   onClose: () => void;
-  onAdd: (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1' | 'auditor2'>) => void;
+  onUpdate: (id: string, updates: Partial<AuditSchedule>) => void;
   departments: Department[];
   locations: Location[];
   auditPhases: AuditPhase[];
-  existingSchedules: AuditSchedule[];
+  users: User[];
 }
 
-export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, departments, locations, auditPhases, existingSchedules }) => {
+export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, onUpdate, departments, locations, auditPhases, users }) => {
   const [formData, setFormData] = useState({
-    departmentId: '',
-    locationId: '',
-    supervisorId: '',
-    date: '',
-    building: '',
-    level: '',
-    phaseId: ''
+    departmentId: audit.departmentId,
+    locationId: audit.locationId,
+    supervisorId: audit.supervisorId,
+    date: audit.date || '',
+    phaseId: audit.phaseId
   });
 
   const hasPhases = auditPhases?.length > 0;
@@ -31,44 +29,16 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
     [auditPhases, formData.phaseId]
   );
 
-  // Logic: Filter locations so that a location only appears ONCE for any given phase.
   const availableLocations = useMemo(() => {
     if (!formData.departmentId) return [];
-    
-    // Get all locations for this department
-    const deptLocations = locations.filter(loc => loc.departmentId === formData.departmentId);
-    
-    // If no phase selected, show all (though button is disabled)
-    if (!formData.phaseId) return deptLocations;
-
-    // Get locations ALREADY scheduled in the selected phase
-    const alreadyScheduledLocations = new Set(
-      existingSchedules
-        .filter(s => s.phaseId === formData.phaseId)
-        .map(s => s.locationId)
-    );
-
-    // Only return locations NOT already scheduled in this specific phase
-    return deptLocations.filter(loc => !alreadyScheduledLocations.has(loc.id));
-  }, [locations, formData.departmentId, formData.phaseId, existingSchedules]);
-
-  // Effect to reset location if it becomes unavailable due to phase change
-  useEffect(() => {
-    if (formData.locationId && formData.phaseId) {
-        const isStillAvailable = availableLocations.some(l => l.id === formData.locationId);
-        if (!isStillAvailable) {
-            setFormData(prev => ({ ...prev, locationId: '', building: '', level: '', supervisorId: '' }));
-        }
-    }
-  }, [formData.phaseId, availableLocations, formData.locationId]);
+    return locations.filter(loc => loc.departmentId === formData.departmentId);
+  }, [locations, formData.departmentId]);
 
   const handleDeptChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
       departmentId: e.target.value,
       locationId: '',
-      building: '',
-      level: '',
       supervisorId: ''
     }));
   };
@@ -80,8 +50,6 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
     setFormData(prev => ({
       ...prev,
       locationId: locId,
-      building: selectedLoc?.building || '',
-      level: selectedLoc?.level || '',
       supervisorId: selectedLoc?.supervisorId || ''
     }));
   };
@@ -102,10 +70,6 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasPhases) {
-        alert("Action Denied: You must configure an audit phase in System Settings before scheduling audits.");
-        return;
-    }
     if (!formData.phaseId) {
         alert("Please select a target Audit Phase.");
         return;
@@ -114,7 +78,7 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
         alert(`The selected date falls outside of the authorized window for ${selectedPhase?.name}.`);
         return;
     }
-    onAdd(formData as any);
+    onUpdate(audit.id, formData);
     onClose();
   };
 
@@ -124,8 +88,8 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
       <div className="relative bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="bg-blue-600 p-5 md:p-6 text-white flex items-center justify-between">
           <div>
-            <h3 className="text-lg md:text-xl font-bold">Plan Audit Instance</h3>
-            <p className="text-blue-100 text-[10px] md:text-xs mt-1">Select a phase to allocate this location to a specific timeframe.</p>
+            <h3 className="text-lg md:text-xl font-bold">Edit Audit Schedule</h3>
+            <p className="text-blue-100 text-[10px] md:text-xs mt-1">Update the details for this audit.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
             <X className="w-4 h-4" />
@@ -147,7 +111,7 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
                   <option key={p.id} value={p.id}>{p.name} ({p.startDate} to {p.endDate})</option>
                 ))}
               </select>
-              <CalendarDays className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 w-4 h-4 pointer-events-none" />
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 w-4 h-4 pointer-events-none" />
             </div>
           </div>
 
@@ -183,7 +147,7 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
                   <option value="">
                     {!formData.phaseId ? 'Select Phase First' : 
                      !formData.departmentId ? 'Select Dept First' : 
-                     !availableLocations || availableLocations.length === 0 ? 'All locations scheduled for this phase' : 'Select Location'}
+                     !availableLocations || availableLocations.length === 0 ? 'No locations found' : 'Select Location'}
                   </option>
                   {availableLocations.map(l => (
                     <option key={l.id} value={l.id}>{l.name}</option>
@@ -191,28 +155,34 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
                 </select>
                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
               </div>
-              {formData.phaseId && formData.departmentId && (!availableLocations || availableLocations.length === 0) && (
-                <p className="text-[9px] text-amber-600 font-bold mt-1 uppercase">All department locations are already audited in this phase.</p>
-              )}
             </div>
 
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Site Supervisor</label>
-              <input 
-                required
-                type="text"
-                placeholder="Auto-filled or Enter Name"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
-                value={formData.supervisorId}
-                onChange={e => setFormData({...formData, supervisorId: e.target.value})}
-              />
+              <div className="relative">
+                <select
+                  required
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer"
+                  value={formData.supervisorId}
+                  onChange={e => setFormData({...formData, supervisorId: e.target.value})}
+                >
+                  <option value="">Select Supervisor</option>
+                  {users.filter(u => u.roles.includes('Supervisor') || u.roles.includes('Admin') || u.roles.includes('Coordinator')).map(u => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.id})</option>
+                  ))}
+                  {/* Fallback if the supervisor is not in the list but exists as a string */}
+                  {formData.supervisorId && !users.find(u => u.id === formData.supervisorId) && (
+                    <option value={formData.supervisorId}>{formData.supervisorId}</option>
+                  )}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+              </div>
             </div>
             
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Audit Date</label>
               <div className="relative group">
                 <input 
-                  required
                   type="date"
                   min={selectedPhase?.startDate || today}
                   max={selectedPhase?.endDate}
@@ -233,28 +203,6 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
                 <p className="text-[9px] text-blue-500 font-bold mt-1 uppercase">Window: {selectedPhase?.startDate} to {selectedPhase?.endDate}</p>
               )}
             </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Building</label>
-              <input 
-                type="text"
-                placeholder="Auto-filled"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
-                value={formData.building}
-                onChange={e => setFormData({...formData, building: e.target.value})}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Level</label>
-              <input 
-                type="text"
-                placeholder="Auto-filled"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
-                value={formData.level}
-                onChange={e => setFormData({...formData, level: e.target.value})}
-              />
-            </div>
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
@@ -270,7 +218,7 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
               disabled={!formData.phaseId || !formData.locationId}
               className={`w-full sm:flex-[2] py-3 text-white font-bold rounded-2xl transition-all shadow-lg text-sm active:scale-95 ${!formData.phaseId || !formData.locationId ? 'bg-slate-300 cursor-not-allowed shadow-none' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'}`}
             >
-              Confirm Plan
+              Save Changes
             </button>
           </div>
         </form>

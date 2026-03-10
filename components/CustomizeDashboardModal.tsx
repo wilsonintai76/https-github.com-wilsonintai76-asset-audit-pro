@@ -25,7 +25,6 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
     { key: 'showTrends', label: 'Compliance Trends', icon: LineChart, desc: 'Visualize audit progress and weekly goal adherence.' },
     { key: 'showUpcoming', label: 'Upcoming Audits', icon: CalendarDays, desc: 'List of next 3 scheduled audit locations.' },
     { key: 'showDeptDistribution', label: 'Departmental Distribution', icon: Network, desc: 'Breakdown of audit workload across institutional departments.' },
-    { key: 'showCertification', label: 'Certification Status', icon: Award, desc: 'Monitor your auditor certification and renewal deadlines.' },
   ] as const;
 
   return (

@@ -18,8 +18,8 @@ interface AuditorDashboardProps {
   currentUser: User;
   phases: AuditPhase[];
   kpiTiers: KPITier[];
-  departments?: Department[];
-  locations?: Location[];
+  departments: Department[];
+  locations: Location[];
 }
 
 export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({ 
@@ -27,8 +27,8 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
   currentUser,
   phases,
   kpiTiers,
-  departments = [],
-  locations = []
+  departments,
+  locations
 }) => {
   // Filter audits assigned to the current user
   const myAudits = useMemo(() => {
@@ -38,10 +38,10 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
   }, [schedules, currentUser.id]);
 
   const stats = useMemo(() => {
-    const total = myAudits.length;
-    const completed = myAudits.filter(s => s.status === 'Completed').length;
-    const inProgress = myAudits.filter(s => s.status === 'In Progress').length;
-    const pending = myAudits.filter(s => s.status === 'Pending').length;
+    const total = myAudits?.length || 0;
+    const completed = myAudits?.filter(s => s.status === 'Completed').length || 0;
+    const inProgress = myAudits?.filter(s => s.status === 'In Progress').length || 0;
+    const pending = myAudits?.filter(s => s.status === 'Pending').length || 0;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     return { total, completed, inProgress, pending, completionRate };
@@ -49,8 +49,8 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
 
   const upcomingAudits = useMemo(() => {
     return [...myAudits]
-      .filter(s => s.status !== 'Completed' && s.date != null)
-      .sort((a, b) => new Date(a.date!).getTime() - new Date(b.date!).getTime())
+      .filter(s => s.status !== 'Completed')
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 5);
   }, [myAudits]);
 
@@ -157,7 +157,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-xl font-bold text-slate-900">Your Upcoming Schedule</h3>
               <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[10px] font-bold uppercase">
-                Next {upcomingAudits.length} Audits
+                Next {upcomingAudits?.length || 0} Audits
               </span>
             </div>
             <div className="divide-y divide-slate-100">
@@ -166,23 +166,31 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center shrink-0">
                       <span className="text-[10px] font-black text-blue-600 uppercase">
-                        {audit.date ? new Date(audit.date).toLocaleString('default', { month: 'short' }) : 'TBD'}
+                        {audit.date ? new Date(audit.date).toLocaleString('default', { month: 'short' }) : 'N/A'}
                       </span>
-                      <span className="text-lg font-black text-slate-900">{audit.date ? audit.date.split('-')[2] : '--'}</span>
+                      <span className="text-lg font-black text-slate-900">{audit.date ? audit.date.split('-')[2] : '-'}</span>
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-900 text-lg">{locations.find(l => l.id === audit.locationId)?.name || '—'}</h4>
+                      <h4 className="font-bold text-slate-900 text-lg">
+                        {locations.find(l => l.id === audit.locationId)?.name || audit.locationId}
+                      </h4>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="flex items-center gap-1 text-xs text-slate-500 font-medium">
                           <Building2 className="w-3 h-3" />
-                          {departments.find(d => d.id === audit.departmentId)?.name || '—'}
+                          {departments.find(d => d.id === audit.departmentId)?.name || audit.departmentId}
                         </span>
-                        {audit.building && (
-                          <span className="flex items-center gap-1 text-xs text-slate-500 font-medium">
-                            <MapPin className="w-3 h-3" />
-                            {audit.building}
-                          </span>
-                        )}
+                        {(() => {
+                          const loc = locations.find(l => l.id === audit.locationId);
+                          if (loc?.building) {
+                            return (
+                              <span className="flex items-center gap-1 text-xs text-slate-500 font-medium">
+                                <MapPin className="w-3 h-3" />
+                                {loc.building}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -201,7 +209,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                   </div>
                 </div>
               ))}
-              {upcomingAudits.length === 0 && (
+              {(!upcomingAudits || upcomingAudits.length === 0) && (
                 <div className="p-12 text-center">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Calendar className="w-8 h-8 text-slate-300" />

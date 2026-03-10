@@ -41,9 +41,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onDemoLogin, isLoggingIn, 
     name: '',
     email: '',
     pin: '',
-    department: '',
-    contactNumber: '',
-    role: 'Staff' as UserRole
+    departmentId: '',
+    contactNumber: ''
   });
   const [departments, setDepartments] = useState<Department[]>([]);
   const [regSuccess, setRegSuccess] = useState(false);
@@ -91,29 +90,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onDemoLogin, isLoggingIn, 
         return;
     }
 
-    // Derive inherited roles from selected primary role
-    const roleInheritance: Record<UserRole, UserRole[]> = {
-      Admin:       ['Admin', 'Coordinator', 'HeadOfDept', 'Supervisor', 'Auditor', 'Staff'],
-      Coordinator: ['Coordinator', 'HeadOfDept', 'Supervisor', 'Auditor', 'Staff'],
-      HeadOfDept:  ['HeadOfDept', 'Supervisor', 'Auditor', 'Staff'],
-      Supervisor:  ['Supervisor', 'Auditor', 'Staff'],
-      Auditor:     ['Auditor'],
-      Staff:       ['Staff'],
-      Guest:       ['Guest'],
-    };
-    const roles = roleInheritance[regData.role] ?? ['Staff'];
-
     try {
-        await authService.register({
-          id:            regData.id,
-          name:          regData.name,
-          email:         regData.email,
-          pin:           regData.pin,
-          roles,
-          departmentId:  departments.find(d => d.name === regData.department)?.id,
-          contactNumber: regData.contactNumber,
-          status:        'Active',
-        } as any);
+        await authService.register(regData);
         setRegSuccess(true);
         setLoginError(null);
         setTimeout(() => {
@@ -291,25 +269,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onDemoLogin, isLoggingIn, 
                         <select
                             required 
                             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-                            value={regData.department}
-                            onChange={e => setRegData({...regData, department: e.target.value})}
+                            value={regData.departmentId}
+                            onChange={e => setRegData({...regData, departmentId: e.target.value})}
                         >
                             <option value="">Select Department</option>
-                            {departments.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Role</label>
-                        <select
-                            required
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-                            value={regData.role}
-                            onChange={e => setRegData({...regData, role: e.target.value as UserRole})}
-                        >
-                            <option value="Staff">Staff (View Only)</option>
-                            <option value="Auditor">Auditor (Field Audit)</option>
-                            <option value="Supervisor">Supervisor (Site Supervisor)</option>
-                            <option value="HeadOfDept">Head of Department</option>
+                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
                     </div>
                     <div className="grid grid-cols-2 gap-4">

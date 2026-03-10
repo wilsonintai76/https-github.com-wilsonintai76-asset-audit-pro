@@ -7,7 +7,7 @@ export const AccessMatrix: React.FC = () => {
     { feature: 'Define Audit Phases', admin: true, coord: true, auditor: false },
     { feature: 'Issue Staff Certificates', admin: true, coord: false, auditor: false },
     { feature: 'Generate Audit Matrix', admin: true, coord: false, auditor: false },
-    { feature: 'Self-Assign to Slots', admin: true, coord: true, auditor: true },
+    { feature: 'Self-Assign (Requires Valid Cert)', admin: true, coord: true, auditor: true },
     { feature: 'Complete Audit Status', admin: true, coord: true, auditor: true },
     { feature: 'Manage Site Locations', admin: true, coord: true, auditor: false },
     { feature: 'View KPI Trends', admin: true, coord: true, auditor: true }

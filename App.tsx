@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { gateway } from './services/dataGateway';
 import { ItemNotFoundError } from './services/localDB';
-import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, AuditGroup } from './types';
+import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -22,7 +22,6 @@ const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   showStats: true,
   showTrends: true,
   showUpcoming: true,
-  showCertification: true,
   showDeptDistribution: true
 };
 
@@ -35,6 +34,7 @@ const App: React.FC = () => {
   
   // Data State
   const [schedules, setSchedules] = useState<AuditSchedule[]>([]);
+  const [maxAssetsPerDay, setMaxAssetsPerDay] = useState<number>(500);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [crossAuditPermissions, setCrossAuditPermissions] = useState<CrossAuditPermission[]>([]);
@@ -42,7 +42,6 @@ const App: React.FC = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [auditPhases, setAuditPhases] = useState<AuditPhase[]>([]);
   const [kpiTiers, setKpiTiers] = useState<KPITier[]>([]);
-  const [auditGroups, setAuditGroups] = useState<AuditGroup[]>([]);
   
   // UI State
   const [selectedDept, setSelectedDept] = useState<string>('All');
@@ -69,15 +68,14 @@ const App: React.FC = () => {
   // --- INITIAL DATA LOAD ---
   const loadAllData = useCallback(async () => {
     try {
-      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, auditGroupsData] = await Promise.all([
+      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData] = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
         gateway.getDepartments(),
         gateway.getLocations(),
         gateway.getPermissions(),
         gateway.getAuditPhases(),
-        gateway.getKPITiers(),
-        gateway.getAuditGroups()
+        gateway.getKPITiers()
       ]);
       setSchedules(auditsData);
       setUsers(usersData);
@@ -86,7 +84,6 @@ const App: React.FC = () => {
       setCrossAuditPermissions(permsData);
       setAuditPhases(phasesData);
       setKpiTiers(kpiData);
-      setAuditGroups(auditGroupsData);
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
       setConnectionErrorMessage("Failed to load application data. Please refresh.");
@@ -100,26 +97,41 @@ const App: React.FC = () => {
   }, [viewState, loadAllData]);
 
   // --- COMPUTED VALUES ---
-  
+  const departmentsWithAssets = useMemo(() => {
+    return departments.map(dept => {
+      const deptLocations = locations.filter(l => l.departmentId === dept.id);
+      const computedAssets = deptLocations.reduce((sum, loc) => sum + (loc.totalAssets || 0), 0);
+      // We use the larger of the two: manually entered or sum of locations
+      const finalAssets = Math.max(dept.totalAssets || 0, computedAssets);
+      return {
+        ...dept,
+        totalAssets: finalAssets
+      };
+    });
+  }, [departments, locations]);
+
   const departmentNames = useMemo(() => {
-    const names = new Set(departments.map(d => d.name));
+    const names = new Set(departmentsWithAssets.map(d => d.name));
+    schedules.forEach(s => {
+      const dept = departmentsWithAssets.find(d => d.id === s.departmentId);
+      if (dept) names.add(dept.name);
+    });
     return ['All', ...Array.from(names)].sort();
-  }, [departments]);
+  }, [departmentsWithAssets, schedules]);
 
   const filteredSchedules = useMemo(() => {
     if (!currentUser) return [];
     return schedules.filter(s => {
-      if (selectedDept !== 'All') {
-        const deptName = departments.find(d => d.id === s.departmentId)?.name;
-        if (deptName !== selectedDept) return false;
-      }
+      const dept = departmentsWithAssets.find(d => d.id === s.departmentId);
+      const deptName = dept?.name || s.departmentId;
+      if (selectedDept !== 'All' && deptName !== selectedDept) return false;
       if (selectedStatus !== 'All' && s.status !== selectedStatus) return false;
       if (selectedPhaseId !== 'All') {
         if (s.phaseId !== selectedPhaseId) return false;
       }
       return true;
     });
-  }, [schedules, selectedDept, selectedStatus, selectedPhaseId, currentUser, departments]);
+  }, [schedules, selectedDept, selectedStatus, selectedPhaseId, currentUser, departmentsWithAssets]);
 
   // --- AUTH HANDLERS ---
   const handleLoginSuccess = useCallback(async (userProfile: User) => {
@@ -150,14 +162,12 @@ const App: React.FC = () => {
 
   const determineMockRoles = (role: UserRole): UserRole[] => {
     switch (role) {
-      case 'Admin':       return ['Admin', 'Coordinator', 'HeadOfDept', 'Supervisor', 'Auditor', 'Staff'];
-      case 'Coordinator': return ['Coordinator', 'HeadOfDept', 'Supervisor', 'Auditor', 'Staff'];
-      case 'HeadOfDept':  return ['HeadOfDept', 'Supervisor', 'Auditor', 'Staff'];
-      case 'Supervisor':  return ['Supervisor', 'Auditor', 'Staff'];
-      case 'Auditor':     return ['Auditor'];
-      case 'Staff':       return ['Staff'];
-      case 'Guest':       return ['Guest'];
-      default:            return ['Staff'];
+      case 'Admin': return ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
+      case 'Coordinator': return ['Coordinator', 'Supervisor', 'Staff'];
+      case 'Supervisor': return ['Supervisor', 'Staff'];
+      case 'Staff': return ['Staff'];
+      case 'Guest': return ['Guest'];
+      default: return ['Staff'];
     }
   };
 
@@ -259,10 +269,38 @@ const App: React.FC = () => {
     }, ...prev]);
   }, []);
 
+  const getPhaseForDepartment = useCallback((deptId: string) => {
+    const dept = departmentsWithAssets.find(d => d.id === deptId);
+    if (!dept) return auditPhases[0]?.id || '';
+    
+    const assets = dept.totalAssets || 0;
+    
+    // Use KPI Tiers if available
+    if (kpiTiers.length > 0) {
+      const tier = kpiTiers.find(t => assets >= t.minAssets && assets <= t.maxAssets);
+      if (tier) {
+        // Return the first phase that has a target > 0
+        const sortedPhases = [...auditPhases].sort((a, b) => a.startDate.localeCompare(b.startDate));
+        const firstPhaseId = sortedPhases.find(p => (tier.targets[p.id] || 0) > 0)?.id;
+        if (firstPhaseId) return firstPhaseId;
+      }
+    }
+    
+    return auditPhases[0]?.id || '';
+  }, [departmentsWithAssets, auditPhases, kpiTiers]);
+
+  const isAuditLocked = (audit: AuditSchedule) => {
+    return !!(audit.date && (audit.auditor1Id || audit.auditor2Id));
+  };
+
   const handleAddAudit = async (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1Id' | 'auditor2Id'>) => {
     try {
+      // Auto-assign phase based on department assets
+      const phaseId = getPhaseForDepartment(audit.departmentId);
+      
       const newAudit = await gateway.addAudit({
         ...audit,
+        phaseId: phaseId || audit.phaseId,
         status: 'Pending',
         auditor1Id: null,
         auditor2Id: null
@@ -273,60 +311,7 @@ const App: React.FC = () => {
       showError(e, 'Failed to Add Audit');
     }
   };
-
-  // Admin action: create a Pending audit for every location that doesn't
-  // already have one in the active (or nearest upcoming) phase.
-  const handleGenerateSchedules = async () => {
-    try {
-      const today = new Date().toISOString().substring(0, 10);
-      const targetPhase =
-        auditPhases.find(p => p.startDate <= today && p.endDate >= today) ||
-        auditPhases.find(p => p.startDate > today) ||
-        auditPhases[0];
-
-      if (!targetPhase) {
-        customAlert('No audit phase configured yet. Please create a phase in System Settings first.');
-        return;
-      }
-
-      const coveredLocationIds = new Set(
-        schedules.filter(s => s.phaseId === targetPhase.id).map(s => s.locationId)
-      );
-      const missing = locations.filter(l => !coveredLocationIds.has(l.id));
-
-      if (missing.length === 0) {
-        customAlert(`All locations already have a schedule for "${targetPhase.name}".`);
-        return;
-      }
-
-      const newEntries = missing.map(loc => ({
-        departmentId: loc.departmentId,
-        locationId:   loc.id,
-        supervisorId: loc.supervisorId || '',
-        auditor1Id:   null as null,
-        auditor2Id:   null as null,
-        date:         null,
-        status:       'Pending' as const,
-        phaseId:      targetPhase.id,
-        building:     loc.building || undefined,
-      }));
-
-      const created = await gateway.bulkAddAudits(newEntries);
-      setSchedules(prev => [...prev, ...created]);
-
-      setNotifications(prev => [{
-        id: `gen-sched-${Date.now()}`,
-        title: 'Schedules Generated',
-        message: `${created.length} audit schedule(s) created for "${targetPhase.name}".`,
-        timestamp: 'Just now',
-        type: 'success',
-        read: false
-      }, ...prev]);
-    } catch (e) {
-      showError(e, 'Failed to Generate Schedules');
-    }
-  };
-
+  
   const handleBulkAddAudits = async (newAudits: Omit<AuditSchedule, 'id'>[]) => {
     try {
       // 1. Extract unique departments and locations from the new audits
@@ -352,13 +337,56 @@ const App: React.FC = () => {
       const existingLocKeys = new Set(locations.map(l => `${l.id}|${l.departmentId}`));
       const newLocs = uniqueLocsFiltered.filter(loc => !existingLocKeys.has(`${loc.locationId}|${loc.departmentId}`));
 
+      // 2.5 Process Supervisors (Create temporary users if they don't exist)
+      const uniqueSupervisors = Array.from(new Set(newAudits.map(a => a.supervisorId).filter(id => id && id !== 'To be filled')));
+      const newUsersCreated: User[] = [];
+      
+      for (const supName of uniqueSupervisors) {
+        // Check if user already exists by name
+        const existingUser = users.find(u => u.name.toLowerCase() === supName.toLowerCase());
+        
+        if (!existingUser) {
+          // Generate a temporary ID (T-xxxx)
+          const tempId = `T-${Math.floor(1000 + Math.random() * 9000)}`;
+          
+          const newUser: User = {
+            id: tempId,
+            name: supName,
+            email: `temp_${tempId}@example.com`, // Placeholder email
+            roles: ['Supervisor'],
+            status: 'Inactive', // Mark as inactive so they need to be verified/updated
+            isVerified: false
+          };
+          
+          const addedUser = await gateway.addUser(newUser);
+          newUsersCreated.push(addedUser);
+        }
+      }
+
+      if (newUsersCreated.length > 0) {
+        setUsers(prev => [...prev, ...newUsersCreated]);
+      }
+
+      // Map supervisor names to their IDs for the audits and locations
+      const getSupervisorId = (name: string) => {
+        if (!name || name === 'To be filled') return 'To be filled';
+        const user = [...users, ...newUsersCreated].find(u => u.name.toLowerCase() === name.toLowerCase());
+        return user ? user.id : name; // Fallback to name if something goes wrong
+      };
+
+      // Update audits with actual user IDs
+      const processedAudits = newAudits.map(a => ({
+        ...a,
+        supervisorId: getSupervisorId(a.supervisorId)
+      }));
+
       // 3. Add new departments
       if (newDeptIds.length > 0) {
         for (const id of newDeptIds) {
           const newDept: Omit<Department, 'id'> = {
             name: `Imported Dept ${id}`,
             abbr: `IMP-${id.substring(0, 3)}`,
-            headOfDeptId: undefined,
+            headOfDeptId: 'dummy-user-id',
             description: `Imported department: ${id}`
           };
           await gateway.addDepartment(newDept);
@@ -371,17 +399,23 @@ const App: React.FC = () => {
       }
 
       // 4. Add new locations
-      if (newLocs.length > 0) {
-        const locsToAdd = newLocs.map(loc => ({
-          name: loc.locationId,
-          abbr: loc.locationId.substring(0, 3).toUpperCase(),
-          departmentId: loc.departmentId,
-          building: 'Main',
-          description: `Imported location: ${loc.locationId}`,
-          supervisorId: '',
-          contact: '-',
-          totalAssets: locationAssetCounts[`${loc.locationId}|${loc.departmentId}`] || 0
-        }));
+      if (newLocs?.length > 0) {
+        const locsToAdd: Omit<Location, 'id'>[] = newLocs.map(loc => {
+          // Find a supervisor for this location from the audits
+          const auditForLoc = processedAudits.find(a => a.locationId === loc.locationId && a.departmentId === loc.departmentId);
+          const supId = auditForLoc ? auditForLoc.supervisorId : 'dummy-user-id';
+
+          return {
+            name: loc.locationId, // Using ID as name for imported ones if not provided
+            abbr: loc.locationId.substring(0, 3).toUpperCase(),
+            departmentId: loc.departmentId,
+            building: 'Main',
+            description: `Imported location: ${loc.locationId}`,
+            supervisorId: supId,
+            contact: '-',
+            totalAssets: locationAssetCounts[`${loc.locationId}|${loc.departmentId}`] || 0
+          };
+        });
         await gateway.bulkAddLocations(locsToAdd);
       }
 
@@ -399,13 +433,13 @@ const App: React.FC = () => {
       setLocations(updatedLocs);
 
       // 5. Finally add the audits
-      const added = await gateway.bulkAddAudits(newAudits);
+      const added = await gateway.bulkAddAudits(processedAudits);
       setSchedules(prev => [...prev, ...added]);
       
       setNotifications(prev => [{
         id: `bulk-${Date.now()}`,
         title: 'Batch Schedule Created',
-        message: `Successfully imported ${added.length} audit entries. ${newDeptIds.length} new departments and ${newLocs.length} new locations were added to the database.`,
+        message: `Successfully imported ${added?.length || 0} audit entries. ${newDeptIds?.length || 0} new departments, ${newLocs?.length || 0} new locations, and ${newUsersCreated.length} temporary users were added to the database.`,
         timestamp: 'Just now',
         type: 'success',
         read: false
@@ -451,6 +485,19 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateAudit = async (id: string, updates: Partial<AuditSchedule>) => {
+    try {
+      const schedule = schedules.find(s => s.id === id);
+      if (schedule && isAuditLocked(schedule) && (updates.phaseId || updates.departmentId || updates.locationId)) {
+        throw new Error("Locked audits cannot have their phase, department, or location changed.");
+      }
+      await gateway.updateAudit(id, updates);
+      setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    } catch (e) {
+      showError(e, 'Audit Update Failed');
+    }
+  };
+
   const handleUpdateAuditDate = async (id: string, date: string) => {
     try {
       await gateway.updateAudit(id, { date });
@@ -476,31 +523,10 @@ const App: React.FC = () => {
     try {
       const newLoc = await gateway.addLocation(loc);
       setLocations(await gateway.getLocations());
-
-      // Auto-create a Pending audit schedule for the new location if a phase exists
-      const today = new Date().toISOString().substring(0, 10);
-      const activePhase = auditPhases.find(p => p.startDate <= today && p.endDate >= today)
-        || auditPhases.find(p => p.startDate > today)
-        || auditPhases[0];
-
-      if (activePhase) {
-        const newAudit = await gateway.addAudit({
-          departmentId: newLoc.departmentId,
-          locationId:   newLoc.id,
-          supervisorId: newLoc.supervisorId,
-          auditor1Id:   null,
-          auditor2Id:   null,
-          date:         null,
-          status:       'Pending',
-          phaseId:      activePhase.id,
-        });
-        setSchedules(prev => [...prev, newAudit]);
-      }
-
       setNotifications(prev => [{
         id: `auto-${Date.now()}`,
         title: 'Auto-Schedule Created',
-        message: `New audit schedule generated for ${loc.name}${activePhase ? '' : ' (no audit phase configured yet)'}.`,
+        message: `New audit schedule generated for ${loc.name}.`,
         timestamp: 'Just now',
         type: 'success',
         read: false
@@ -512,139 +538,69 @@ const App: React.FC = () => {
 
   const handleBulkAddLocs = async (newLocs: Omit<Location, 'id'>[]) => {
     try {
-      // newLocs.departmentId  = department NAME string (from CSV Bahagian column)
-      // newLocs.supervisorId  = supervisor NAME string (from CSV Pegawai Penempatan column)
-      // We must:
-      //   1. find/create departments  → get UUIDs
-      //   2. find/create users        → get IDs (using the dept UUID for each supervisor)
-      //   3. remap departmentId + supervisorId on every loc
-      //   4. insert/update locations
-
-      // ── helper: turn a full name into a stable slug used as user ID ──
-      const nameToSlug = (name: string) =>
-        name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 60);
-
-      // ── STEP 1: departments ──────────────────────────────────────────
-      const importedDeptNames = Array.from(new Set(newLocs.map(l => l.departmentId).filter(Boolean)));
-      const existingDeptNames = new Set(departments.map(d => d.name));
-      const newDeptNames = importedDeptNames.filter(n => !existingDeptNames.has(n));
-
-      for (const name of newDeptNames) {
-        await gateway.addDepartment({
-          name,
-          abbr: name.substring(0, 3).toUpperCase(),
-          headOfDeptId: undefined,
-          description: `Imported department: ${name}`,
-        });
-      }
-
-      const freshDepts = await gateway.getDepartments();
-      setDepartments(freshDepts);
-      const deptNameToId = new Map(freshDepts.map(d => [d.name, d.id]));
-
-      // ── STEP 2: supervisors (users) ──────────────────────────────────
-      // Build a map of supervisorName → deptName from the import data
-      const supervisorDeptMap = new Map<string, string>();
-      newLocs.forEach(loc => {
-        if (loc.supervisorId && loc.departmentId) {
-          supervisorDeptMap.set(loc.supervisorId, loc.departmentId);
-        }
-      });
-
-      const importedSupervisorNames = Array.from(supervisorDeptMap.keys());
-      const freshUsers = await gateway.getUsers();
-      const existingUserNames = new Set(freshUsers.map(u => u.name));
-      const newSupervisorNames = importedSupervisorNames.filter(n => n && !existingUserNames.has(n));
-
-      for (const supervisorName of newSupervisorNames) {
-        const slug = nameToSlug(supervisorName);
-        const deptName = supervisorDeptMap.get(supervisorName) ?? '';
-        const deptId = deptNameToId.get(deptName);
-        await gateway.addUser({
-          id:           slug,
-          name:         supervisorName,
-          email:        `${slug}@imported.local`,
-          pin:          '1234',
-          roles:        ['Supervisor'],
-          departmentId: deptId,
-          status:       'Active',
-          isVerified:   true,
-        });
-      }
-
-      const allUsers = await gateway.getUsers();
-      setUsers(allUsers);
-      const userNameToId = new Map(allUsers.map(u => [u.name, u.id]));
-
-      // ── STEP 3: resolve departmentId + supervisorId on every loc ────
-      const resolvedLocs = newLocs.map(loc => ({
-        ...loc,
-        departmentId: deptNameToId.get(loc.departmentId) ?? loc.departmentId,
-        supervisorId: userNameToId.get(loc.supervisorId ?? '') ?? '',
-      }));
-
-      // ── STEP 4: separate new vs existing locations ───────────────────
-      const existingLocsMap = new Map(locations.map(l => [`${l.name}|${l.departmentId}`, l]));
+      // 1. Separate new locations from existing ones
+      const existingLocsMap = new Map<string, Location>(locations.map(l => [`${l.name}|${l.departmentId}`, l]));
+      
       const locsToAdd: Omit<Location, 'id'>[] = [];
       const locsToUpdate: { id: string, updates: Partial<Location> }[] = [];
-
+      
+      // Keep track of the latest totalAssets for each location from the import
       const latestLocsFromImport = new Map<string, Omit<Location, 'id'>>();
-      resolvedLocs.forEach(loc => {
+      newLocs.forEach(loc => {
         latestLocsFromImport.set(`${loc.name}|${loc.departmentId}`, loc);
       });
 
       latestLocsFromImport.forEach((loc, key) => {
         const existingLoc = existingLocsMap.get(key);
         if (existingLoc) {
-          // Always overwrite totalAssets for existing locations
-          locsToUpdate.push({ id: existingLoc.id, updates: { totalAssets: loc.totalAssets ?? 0 } });
+          // Update existing location's total assets if different
+          if (loc.totalAssets !== undefined && loc.totalAssets !== existingLoc.totalAssets) {
+            locsToUpdate.push({ id: existingLoc.id, updates: { totalAssets: loc.totalAssets } });
+          }
         } else {
           locsToAdd.push(loc);
         }
       });
 
-      let added: Location[] = [];
-      if (locsToAdd.length > 0) {
-        added = await gateway.bulkAddLocations(locsToAdd);
+      // 2. Extract unique departments from the NEW locations
+      const uniqueDeptIds = Array.from(new Set(locsToAdd.map(l => l.departmentId)));
+      const existingDeptIds = new Set(departments.map(d => d.id));
+      const newDeptIds = uniqueDeptIds.filter(id => !existingDeptIds.has(id));
+
+      // 3. Add new departments
+      if (newDeptIds?.length > 0) {
+        for (const id of newDeptIds) {
+          await gateway.addDepartment({
+            name: `Imported Dept ${id}`,
+            abbr: id.substring(0, 3).toUpperCase(),
+            headOfDeptId: 'To be assigned',
+            description: `Imported department: ${id}`,
+            auditGroup: 'Group A'
+          });
+        }
       }
+
+      // 4. Add new locations
+      if (locsToAdd?.length > 0) {
+        await gateway.bulkAddLocations(locsToAdd);
+      }
+
+      // 5. Update existing locations
       for (const update of locsToUpdate) {
         await gateway.updateLocation(update.id, update.updates);
       }
 
-      setLocations(await gateway.getLocations());
-
-      // Auto-create Pending audit schedules for each newly added location
-      const today = new Date().toISOString().substring(0, 10);
-      const activePhase = auditPhases.find(p => p.startDate <= today && p.endDate >= today)
-        || auditPhases.find(p => p.startDate > today)
-        || auditPhases[0];
-
-      let autoScheduleCount = 0;
-      if (activePhase && added.length > 0) {
-        const autoSchedules = added.map(loc => ({
-          departmentId: loc.departmentId,
-          locationId:   loc.id,
-          supervisorId: loc.supervisorId,
-          auditor1Id:   null as null,
-          auditor2Id:   null as null,
-          date:         null,
-          status:       'Pending' as const,
-          phaseId:      activePhase.id,
-        }));
-        const createdSchedules = await gateway.bulkAddAudits(autoSchedules);
-        setSchedules(prev => [...prev, ...createdSchedules]);
-        autoScheduleCount = createdSchedules.length;
-      }
+      // 6. Refresh states
+      const allUpdatedLocs = await gateway.getLocations();
+      setLocations(allUpdatedLocs);
+      
+      const allUpdatedDepts = await gateway.getDepartments();
+      setDepartments(allUpdatedDepts);
 
       setNotifications(prev => [{
         id: `bulk-loc-${Date.now()}`,
-        title: 'Import Complete',
-        message: [
-          `${added.length} new location(s) added, ${locsToUpdate.length} updated.`,
-          newDeptNames.length > 0 ? `${newDeptNames.length} department(s) created.` : '',
-          newSupervisorNames.length > 0 ? `${newSupervisorNames.length} supervisor user(s) created.` : '',
-          autoScheduleCount > 0 ? `${autoScheduleCount} audit schedule(s) auto-created.` : '',
-        ].filter(Boolean).join(' '),
+        title: 'Locations Imported',
+        message: `Imported ${locsToAdd?.length || 0} new locations and updated ${locsToUpdate?.length || 0} existing locations. ${newDeptIds?.length > 0 ? `Created ${newDeptIds.length} new departments.` : ''}`,
         timestamp: 'Just now',
         type: 'success',
         read: false
@@ -656,8 +612,29 @@ const App: React.FC = () => {
 
   const handleUpdateLoc = async (id: string, updates: Partial<Location>) => {
     try {
+      const oldLoc = locations.find(l => l.id === id);
       await gateway.updateLocation(id, updates);
       setLocations(await gateway.getLocations());
+      
+      // Cascade supervisorId or departmentId changes to all audits for this location
+      if (oldLoc) {
+        const changedSupervisor = updates.supervisorId !== undefined && updates.supervisorId !== oldLoc.supervisorId;
+        const changedDept = updates.departmentId !== undefined && updates.departmentId !== oldLoc.departmentId;
+
+        if (changedSupervisor || changedDept) {
+          const auditsToUpdate = schedules.filter(s => s.locationId === id);
+          const auditUpdates: Partial<AuditSchedule> = {};
+          if (changedSupervisor) auditUpdates.supervisorId = updates.supervisorId;
+          if (changedDept) auditUpdates.departmentId = updates.departmentId;
+
+          for (const audit of auditsToUpdate) {
+            await gateway.updateAudit(audit.id, auditUpdates);
+          }
+          if (auditsToUpdate.length > 0) {
+            setSchedules(await gateway.getAudits());
+          }
+        }
+      }
     } catch (e) {
       showError(e, 'Location Update Failed');
     }
@@ -668,7 +645,7 @@ const App: React.FC = () => {
     
     if (loc) {
       const locAudits = schedules.filter(s => s.locationId === loc.id && s.departmentId === loc.departmentId);
-      const hasActiveAssignments = locAudits.some(s => s.auditor1 || s.auditor2);
+      const hasActiveAssignments = locAudits.some(s => s.auditor1Id || s.auditor2Id);
 
       if (hasActiveAssignments) {
         customAlert("Cannot delete this location because it has active audit assignments. Please unassign auditors first.");
@@ -686,7 +663,7 @@ const App: React.FC = () => {
           customConfirm("Force Delete", "This location has pending audit schedules (unassigned). Do you want to delete the location and these pending schedules?", async () => {
              try {
                 if (loc) {
-                  await gateway.forceDeleteLocation(id, loc.name);
+                  await gateway.forceDeleteLocation(id);
                 } else {
                   await gateway.deleteLocation(id);
                 }
@@ -747,9 +724,9 @@ const App: React.FC = () => {
     if (dept) {
       const deptUsers = users.filter(u => u.departmentId === dept.id);
       const deptAudits = schedules.filter(s => s.departmentId === dept.id);
-      const hasActiveAssignments = deptAudits.some(s => s.auditor1 || s.auditor2);
+      const hasActiveAssignments = deptAudits.some(s => s.auditor1Id || s.auditor2Id);
 
-      if (deptUsers.length > 0) {
+      if (deptUsers?.length > 0) {
         customAlert(`Cannot delete department. There are ${deptUsers.length} users assigned to this department. Please reassign or remove them first.`);
         return;
       }
@@ -770,7 +747,7 @@ const App: React.FC = () => {
            customConfirm("Force Delete", "This department has associated Locations or pending Audits. Do you want to delete the department and all these related records?", async () => {
              try {
                 if (dept) {
-                  await gateway.forceDeleteDepartment(id, dept.name);
+                  await gateway.forceDeleteDepartment(id);
                 } else {
                   await gateway.deleteDepartment(id);
                 }
@@ -789,7 +766,7 @@ const App: React.FC = () => {
 
   const handleAddPermission = async (auditorDept: string, targetDept: string, isMutual: boolean) => {
     try {
-      await gateway.addPermission({ auditorDept, targetDept, isMutual, isActive: true });
+      await gateway.addPermission({ auditorDeptId: auditorDept, targetDeptId: targetDept, isMutual, isActive: true });
       setCrossAuditPermissions(await gateway.getPermissions());
     } catch (e) {
       showError(e, 'Failed to Add Permission');
@@ -814,6 +791,15 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdatePhase = async (id: string, updates: Partial<AuditPhase>) => {
+    try {
+      await gateway.updateAuditPhase(id, updates);
+      setAuditPhases(await gateway.getAuditPhases());
+    } catch (e) {
+      showError(e, 'Phase Update Failed');
+    }
+  };
+
   const handleAddPhase = async (phase: Omit<AuditPhase, 'id'>) => {
     try {
       await gateway.addAuditPhase(phase);
@@ -823,39 +809,76 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddAuditGroup = async (group: Omit<AuditGroup, 'id'>) => {
+  const handleRebalanceSchedule = async () => {
     try {
-      await gateway.addAuditGroup(group);
-      setAuditGroups(await gateway.getAuditGroups());
-    } catch (e) {
-      showError(e, 'Failed to Add Audit Group');
-    }
-  };
+      const allAudits = await gateway.getAudits();
+      const allDepts = departmentsWithAssets;
+      const allPhases = [...auditPhases].sort((a, b) => a.startDate.localeCompare(b.startDate));
+      const allTiers = [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets);
+      const allLocs = await gateway.getLocations();
+      
+      let updatedCount = 0;
+      let createdCount = 0;
+      
+      for (const dept of allDepts) {
+        // 1. Find Tier
+        const tier = allTiers.find(t => (dept.totalAssets || 0) >= t.minAssets && (dept.totalAssets || 0) <= t.maxAssets);
+        if (!tier) continue;
+        
+        // 2. Identify Required Phases (those with target > 0)
+        const requiredPhaseIds = allPhases
+          .filter(p => (tier.targets[p.id] || 0) > 0)
+          .map(p => p.id);
+        
+        if (requiredPhaseIds.length === 0) continue;
+        
+        // 3. Get existing audits for this department
+        const deptAudits = allAudits.filter(a => a.departmentId === dept.id);
+        const deptLocs = allLocs.filter(l => l.departmentId === dept.id);
+        
+        if (deptLocs.length === 0) continue;
 
-  const handleUpdateAuditGroup = async (id: string, updates: Partial<AuditGroup>) => {
-    try {
-      await gateway.updateAuditGroup(id, updates);
-      setAuditGroups(await gateway.getAuditGroups());
+        // 4. Ensure at least one audit exists for each required phase
+        for (const phaseId of requiredPhaseIds) {
+          const exists = deptAudits.some(a => a.phaseId === phaseId);
+          if (!exists) {
+            // Create a new audit for the first location in this phase
+            const firstLoc = deptLocs[0];
+            await gateway.addAudit({
+              departmentId: dept.id,
+              locationId: firstLoc.id,
+              supervisorId: firstLoc.supervisorId || 'System',
+              phaseId: phaseId,
+              status: 'Pending',
+              auditor1Id: null,
+              auditor2Id: null,
+              date: ''
+            });
+            createdCount++;
+          }
+        }
+        
+        // 5. Re-distribute UNLOCKED audits across required phases
+        const unlockedAudits = deptAudits.filter(a => !isAuditLocked(a));
+        if (unlockedAudits.length > 0) {
+          unlockedAudits.forEach(async (audit, index) => {
+            const targetPhaseId = requiredPhaseIds[index % requiredPhaseIds.length];
+            if (audit.phaseId !== targetPhaseId) {
+              await gateway.updateAudit(audit.id, { phaseId: targetPhaseId });
+              updatedCount++;
+            }
+          });
+        }
+      }
+      
+      if (updatedCount > 0 || createdCount > 0) {
+        setSchedules(await gateway.getAudits());
+        customAlert(`Schedule rebalanced: ${createdCount} new audits created and ${updatedCount} audits moved to match Tier requirements.`);
+      } else {
+        customAlert("Schedule is already balanced according to Tier requirements.");
+      }
     } catch (e) {
-      showError(e, 'Failed to Update Audit Group');
-    }
-  };
-
-  const handleDeleteAuditGroup = async (id: string) => {
-    try {
-      await gateway.deleteAuditGroup(id);
-      setAuditGroups(await gateway.getAuditGroups());
-    } catch (e) {
-      showError(e, 'Failed to Delete Audit Group');
-    }
-  };
-
-  const handleUpdatePhase = async (id: string, updates: Partial<AuditPhase>) => {
-    try {
-      await gateway.updateAuditPhase(id, updates);
-      setAuditPhases(await gateway.getAuditPhases());
-    } catch (e) {
-      showError(e, 'Phase Update Failed');
+      showError(e, 'Rebalance Failed');
     }
   };
 
@@ -958,22 +981,10 @@ const App: React.FC = () => {
     });
   };
 
-  // If user has HeadOfDept role and a departmentId, auto-set that department's headOfDeptId
-  const syncHeadOfDept = async (userId: string, roles: UserRole[], departmentId?: string) => {
-    if (!roles.includes('HeadOfDept') || !departmentId) return;
-    try {
-      await gateway.updateDepartment(departmentId, { headOfDeptId: userId });
-      setDepartments(await gateway.getDepartments());
-    } catch (e) {
-      console.warn('Could not sync Head of Department:', e);
-    }
-  };
-
   const handleAddMember = async (user: User) => {
     try {
       await gateway.addUser(user);
       setUsers(await gateway.getUsers());
-      await syncHeadOfDept(user.id, user.roles, user.departmentId);
     } catch (e) {
       showError(e, 'Failed to Add Member');
     }
@@ -990,15 +1001,48 @@ const App: React.FC = () => {
 
   const handleUpdateMember = async (id: string, updates: Partial<User>) => {
     try {
-      await gateway.updateUser(id, updates);
-      setUsers(await gateway.getUsers());
-      if (currentUser?.id === id) {
-        setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
-      }
-      // If roles or departmentId changed, or user was just verified, re-sync head-of-dept
-      if (updates.roles || updates.departmentId || updates.isVerified === true) {
-        const updatedUser = (await gateway.getUsers()).find(u => u.id === id);
-        if (updatedUser) await syncHeadOfDept(updatedUser.id, updatedUser.roles, updatedUser.departmentId);
+      if (updates.id && updates.id !== id) {
+        // ID is changing (Temp ID -> Real ID)
+        const existingUser = users.find(u => u.id === id);
+        if (!existingUser) throw new Error("User not found");
+        
+        // 1. Create new user with new ID
+        const newUser = { ...existingUser, ...updates };
+        await gateway.addUser(newUser);
+        
+        // 2. Update references in locations
+        const locsToUpdate = locations.filter(l => l.supervisorId === id);
+        for (const loc of locsToUpdate) {
+          await gateway.updateLocation(loc.id, { supervisorId: newUser.id });
+        }
+        
+        // 3. Update references in audits
+        const auditsToUpdate = schedules.filter(s => s.supervisorId === id || s.auditor1Id === id || s.auditor2Id === id);
+        for (const audit of auditsToUpdate) {
+          const auditUpdates: Partial<AuditSchedule> = {};
+          if (audit.supervisorId === id) auditUpdates.supervisorId = newUser.id;
+          if (audit.auditor1Id === id) auditUpdates.auditor1Id = newUser.id;
+          if (audit.auditor2Id === id) auditUpdates.auditor2Id = newUser.id;
+          await gateway.updateAudit(audit.id, auditUpdates);
+        }
+        
+        // 4. Delete old user
+        await gateway.deleteUser(id);
+        
+        // 5. Refresh data
+        setUsers(await gateway.getUsers());
+        setLocations(await gateway.getLocations());
+        setSchedules(await gateway.getAudits());
+        
+        if (currentUser?.id === id) {
+          setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
+        }
+      } else {
+        await gateway.updateUser(id, updates);
+        setUsers(await gateway.getUsers());
+        if (currentUser?.id === id) {
+          setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
+        }
       }
     } catch (e) {
       showError(e, 'Member Update Failed');
@@ -1035,8 +1079,6 @@ const App: React.FC = () => {
     try {
       await gateway.updateUser(id, { roles });
       setUsers(await gateway.getUsers());
-      const updatedUser = (await gateway.getUsers()).find(u => u.id === id);
-      if (updatedUser) await syncHeadOfDept(updatedUser.id, roles, updatedUser.departmentId);
     } catch (e) {
       showError(e, 'Role Update Failed');
     }
@@ -1105,6 +1147,13 @@ const App: React.FC = () => {
     );
   }
 
+  const isAdmin = currentUser.roles.includes('Admin');
+  const isCoordinator = currentUser.roles.includes('Coordinator');
+
+  const visibleUsers = isAdmin ? users : users.filter(u => u.departmentId === currentUser.departmentId);
+  const visibleDepartments = isAdmin ? departmentsWithAssets : departmentsWithAssets.filter(d => d.id === currentUser?.departmentId);
+  const visibleLocations = isAdmin ? locations : locations.filter(l => l.departmentId === currentUser.departmentId);
+
   return (
     <div className="flex min-h-screen bg-slate-50">
       <Sidebar 
@@ -1117,7 +1166,7 @@ const App: React.FC = () => {
         isCertified={currentUser.certificationExpiry && new Date(currentUser.certificationExpiry) > new Date()}
       />
 
-      <div className="flex-grow lg:pl-72 flex flex-col min-h-screen w-full">
+      <div className="flex-grow lg:pl-72 flex flex-col h-screen w-full">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600">
@@ -1155,7 +1204,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-grow p-4 md:p-8 max-w-7xl mx-auto w-full">
+        <main className={`flex-grow p-4 md:p-8 max-w-7xl mx-auto w-full flex flex-col min-h-0 ${activeView === 'schedule' ? 'overflow-hidden' : 'overflow-auto'}`}>
           {connectionErrorMessage && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="w-5 h-5 shrink-0" />
@@ -1169,7 +1218,7 @@ const App: React.FC = () => {
               onUpdateConfig={() => {}} 
               phases={auditPhases}
               kpiTiers={kpiTiers}
-              departments={departments}
+              departments={departmentsWithAssets}
               locations={locations}
               currentUser={currentUser}
             />
@@ -1180,40 +1229,42 @@ const App: React.FC = () => {
               currentUser={currentUser}
               phases={auditPhases}
               kpiTiers={kpiTiers}
-              departments={departments}
+              departments={departmentsWithAssets}
               locations={locations}
             />
           )}
           {activeView === 'schedule' && (
-            <AuditTable 
-              schedules={filteredSchedules} 
-              users={users} 
-              currentUserName={currentUser.name} 
-              userRoles={currentUser.roles} 
-              departments={departmentNames} 
-              selectedDept={selectedDept} 
-              onDeptChange={setSelectedDept} 
-              selectedStatus={selectedStatus}
-              onStatusChange={setSelectedStatus}
-              selectedPhaseId={selectedPhaseId}
-              onPhaseChange={setSelectedPhaseId}
-              onAssign={handleAssign} 
-              onUnassign={handleUnassign}
-              onUpdateDate={handleUpdateAuditDate}
-              onToggleStatus={handleToggleStatus}
-              allDepartments={departments}
-              allLocations={locations}
-              onAddAudit={handleAddAudit}
-              onBulkAddAudits={handleBulkAddAudits}
-              onDeleteAudit={handleDeleteAudit}
-              crossAuditPermissions={crossAuditPermissions}
-              auditPhases={auditPhases}
-              onGenerateSchedules={handleGenerateSchedules}
-            />
+            <div className="flex-1 flex flex-col min-h-0">
+              <AuditTable 
+                schedules={filteredSchedules} 
+                users={users} 
+                currentUserName={currentUser.name} 
+                userRoles={currentUser.roles} 
+                departments={departmentNames} 
+                selectedDept={selectedDept} 
+                onDeptChange={setSelectedDept} 
+                selectedStatus={selectedStatus}
+                onStatusChange={setSelectedStatus}
+                selectedPhaseId={selectedPhaseId}
+                onPhaseChange={setSelectedPhaseId}
+                onAssign={handleAssign} 
+                onUnassign={handleUnassign}
+                onUpdateDate={handleUpdateAuditDate}
+                onUpdateAudit={handleUpdateAudit}
+                onToggleStatus={handleToggleStatus}
+                allDepartments={departmentsWithAssets}
+                allLocations={locations}
+                onAddAudit={handleAddAudit}
+                onBulkAddAudits={handleBulkAddAudits}
+                onDeleteAudit={handleDeleteAudit}
+                crossAuditPermissions={crossAuditPermissions}
+                auditPhases={auditPhases}
+              />
+            </div>
           )}
           {activeView === 'team' && (
             <TeamManagement 
-              users={users} 
+              users={visibleUsers} 
               onAddMember={handleAddMember} 
               onBulkAddMembers={handleBulkAddMembers} 
               onUpdateMember={handleUpdateMember} 
@@ -1221,37 +1272,37 @@ const App: React.FC = () => {
               onUpdateRoles={handleUpdateUserRoles} 
               onUpdateStatus={handleUpdateUserStatus} 
               currentUserRoles={currentUser.roles} 
-              departments={departments} 
+              departments={visibleDepartments} 
               customConfirm={customConfirm}
               customAlert={customAlert}
             />
           )}
           {activeView === 'departments' && (
             <DepartmentManagement 
-              departments={departments} 
-              locations={locations}
-              auditGroups={auditGroups}
+              departments={visibleDepartments} 
+              locations={visibleLocations}
               onAdd={handleAddDept} 
               onBulkAdd={handleBulkAddDepts}
               onUpdate={handleUpdateDept} 
               onDelete={handleDeleteDept} 
+              isAdmin={isAdmin}
             />
           )}
           {activeView === 'locations' && (
             <LocationManagement 
-              locations={locations} 
-              departments={departments}
-              users={users}
+              locations={visibleLocations} 
+              departments={visibleDepartments} 
               userRoles={currentUser.roles}
               userDeptId={currentUser.departmentId}
               onAdd={handleAddLoc} 
+              onBulkAdd={handleBulkAddLocs}
               onUpdate={handleUpdateLoc} 
               onDelete={handleDeleteLoc} 
             />
           )}
           {activeView === 'settings' && (
             <SystemSettings 
-              departments={departments} 
+              departments={departmentsWithAssets} 
               users={users}
               permissions={crossAuditPermissions}
               phases={auditPhases} 
@@ -1271,13 +1322,13 @@ const App: React.FC = () => {
               onClearAllLocations={handleClearAllLocations}
               onClearAllDepartments={handleClearAllDepartments}
               onBulkAddLocs={handleBulkAddLocs}
-              auditGroups={auditGroups}
-              onAddAuditGroup={handleAddAuditGroup}
-              onUpdateAuditGroup={handleUpdateAuditGroup}
-              onDeleteAuditGroup={handleDeleteAuditGroup}
+              maxAssetsPerDay={maxAssetsPerDay}
+              onUpdateMaxAssetsPerDay={setMaxAssetsPerDay}
+              onRebalanceSchedule={handleRebalanceSchedule}
+              schedules={schedules}
             />
           )}
-          {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentNames} onUpdate={handleUpdateMember} />}
+          {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
           {activeView === 'knowledge-base' && <KnowledgeBase />}
         </main>
       </div>

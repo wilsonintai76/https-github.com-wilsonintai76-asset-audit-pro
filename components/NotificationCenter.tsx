@@ -17,7 +17,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications?.filter(n => !n.read).length || 0;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -57,7 +57,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <h4 className="font-bold text-slate-900 flex items-center gap-2">
               Notifications
-              <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md">{notifications.length}</span>
+              <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-md">{notifications?.length || 0}</span>
             </h4>
             <button 
               onClick={onClearAll}
@@ -68,7 +68,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
           </div>
 
           <div className="max-h-[400px] overflow-y-auto">
-            {notifications.length === 0 ? (
+            {!notifications || notifications.length === 0 ? (
               <div className="p-10 text-center">
                 <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
                   <BellOff className="w-6 h-6" />

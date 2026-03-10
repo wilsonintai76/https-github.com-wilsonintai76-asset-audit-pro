@@ -1,12 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
-import { Location, Department, User, UserRole } from '../types';
-import { Network, ChevronDown, MapPin, Landmark, User as UserIcon, Phone, Pencil, Trash2, MapPinned } from 'lucide-react';
+import { Location, UserRole, Department } from '../types';
+import { Network, ChevronDown, MapPin, Landmark, User, Phone, Pencil, Trash2, MapPinned, Building2, Layers } from 'lucide-react';
 
 interface LocationManagementProps {
   locations: Location[];
   departments: Department[];
-  users: User[];
   userRoles: UserRole[];
   userDeptId?: string;
   onAdd: (loc: Omit<Location, 'id'>) => void;
@@ -15,16 +14,18 @@ interface LocationManagementProps {
 }
 
 export const LocationManagement: React.FC<LocationManagementProps> = ({ 
-  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete 
+  locations, departments, userRoles, userDeptId, onAdd, onUpdate, onDelete 
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('All');
-  const [formData, setFormData] = useState({
-    name: '',
+  const [selectedBlockFilter, setSelectedBlockFilter] = useState('All');
+  const [selectedLevelFilter, setSelectedLevelFilter] = useState('All');
+  const [formData, setFormData] = useState({ 
+    name: '', 
     abbr: '',
-    departmentId: userDeptId || '',
-    building: '',
+    departmentId: userDeptId || '', 
+    building: '', 
     level: '',
     description: '',
     supervisorId: '',
@@ -37,54 +38,93 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
 
-  // Lookup maps for display
-  const deptIdToName = useMemo(() => new Map(departments.map(d => [d.id, d.name])), [departments]);
-  const userIdToName = useMemo(() => new Map(users.map(u => [u.id, u.name])), [users]);
-
   const filteredLocations = useMemo(() => {
+    // 1. Initial filter based on permissions (Coordinators only see their own department)
+    let base = (isCoordinator && !isAdmin)
+      ? locations.filter(l => l.departmentId === userDeptId) 
+      : locations;
+
+    // 2. Apply the UI department filter
+    if (selectedDeptFilter !== 'All') {
+      base = base.filter(l => l.departmentId === selectedDeptFilter);
+    }
+
+    // 3. Apply Block filter
+    if (selectedBlockFilter !== 'All') {
+      base = base.filter(l => l.building === selectedBlockFilter);
+    }
+
+    // 4. Apply Level filter
+    if (selectedLevelFilter !== 'All') {
+      base = base.filter(l => l.level === selectedLevelFilter);
+    }
+
+    // 5. Sort by Department -> Building -> Level
+    return [...base].sort((a, b) => {
+      if (a.departmentId !== b.departmentId) {
+        return a.departmentId.localeCompare(b.departmentId);
+      }
+      const buildingA = a.building || '';
+      const buildingB = b.building || '';
+      if (buildingA !== buildingB) {
+        return buildingA.localeCompare(buildingB);
+      }
+      
+      const levelA = a.level || '';
+      const levelB = b.level || '';
+      
+      // Custom sort for levels based on the LEVELS array order
+      const indexA = LEVELS.indexOf(levelA);
+      const indexB = LEVELS.indexOf(levelB);
+      
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      
+      return levelA.localeCompare(levelB);
+    });
+  }, [locations, isCoordinator, isAdmin, userDeptId, selectedDeptFilter, selectedBlockFilter, selectedLevelFilter]);
+
+  // Derived options for filters
+  const availableBlocks = useMemo(() => {
     let base = (isCoordinator && !isAdmin)
       ? locations.filter(l => l.departmentId === userDeptId)
       : locations;
-
+    
     if (selectedDeptFilter !== 'All') {
-      base = base.filter(l => deptIdToName.get(l.departmentId) === selectedDeptFilter);
+      base = base.filter(l => l.departmentId === selectedDeptFilter);
     }
+    
+    const blocks: string[] = base.map(l => l.building).filter((b): b is string => !!b);
+    return Array.from(new Set(blocks)).sort();
+  }, [locations, isCoordinator, isAdmin, userDeptId, selectedDeptFilter]);
 
-    return [...base].sort((a, b) => {
-      const deptA = deptIdToName.get(a.departmentId) ?? '';
-      const deptB = deptIdToName.get(b.departmentId) ?? '';
-      if (deptA !== deptB) return deptA.localeCompare(deptB);
-      const buildingA = a.building || '';
-      const buildingB = b.building || '';
-      if (buildingA !== buildingB) return buildingA.localeCompare(buildingB);
-      const levelA = a.level || '';
-      const levelB = b.level || '';
-      const indexA = LEVELS.indexOf(levelA);
-      const indexB = LEVELS.indexOf(levelB);
+  const availableLevels = useMemo(() => {
+    let base = (isCoordinator && !isAdmin)
+      ? locations.filter(l => l.departmentId === userDeptId)
+      : locations;
+    
+    if (selectedDeptFilter !== 'All') {
+      base = base.filter(l => l.departmentId === selectedDeptFilter);
+    }
+    if (selectedBlockFilter !== 'All') {
+      base = base.filter(l => l.building === selectedBlockFilter);
+    }
+    
+    const levels: string[] = base.map(l => l.level).filter((l): l is string => !!l);
+    return Array.from(new Set(levels)).sort((a, b) => {
+      const indexA = LEVELS.indexOf(a);
+      const indexB = LEVELS.indexOf(b);
       if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-      return levelA.localeCompare(levelB);
+      return a.localeCompare(b);
     });
-  }, [locations, isCoordinator, isAdmin, userDeptId, selectedDeptFilter, deptIdToName]);
-
-  const emptyForm = () => ({
-    name: '', abbr: '',
-    departmentId: userDeptId || '',
-    building: '', level: '', description: '',
-    supervisorId: '', contact: '', totalAssets: 0
-  });
+  }, [locations, isCoordinator, isAdmin, userDeptId, selectedDeptFilter, selectedBlockFilter]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalData: Omit<Location, 'id'> = {
-      name:         formData.name,
-      abbr:         formData.abbr,
-      departmentId: isAdmin ? formData.departmentId : (userDeptId || formData.departmentId),
-      building:     formData.building,
-      level:        formData.level,
-      description:  formData.description,
-      supervisorId: formData.supervisorId || '',
-      contact:      formData.contact,
-      totalAssets:  formData.totalAssets,
+    const finalData = {
+      ...formData,
+      departmentId: isAdmin ? formData.departmentId : (userDeptId || formData.departmentId)
     };
     if (editingId) {
       onUpdate(editingId, finalData);
@@ -93,21 +133,31 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
       onAdd(finalData);
       setIsAdding(false);
     }
-    setFormData(emptyForm());
+    setFormData({ 
+      name: '', 
+      abbr: '', 
+      departmentId: userDeptId || '', 
+      building: '', 
+      level: '',
+      description: '', 
+      supervisorId: '', 
+      contact: '',
+      totalAssets: 0
+    });
   };
 
   const startEdit = (loc: Location) => {
     setEditingId(loc.id);
-    setFormData({
-      name:         loc.name,
-      abbr:         loc.abbr || '',
-      departmentId: loc.departmentId,
-      building:     loc.building,
-      level:        loc.level || '',
-      description:  loc.description || '',
+    setFormData({ 
+      name: loc.name, 
+      abbr: loc.abbr || '',
+      departmentId: loc.departmentId, 
+      building: loc.building, 
+      level: loc.level || '',
+      description: loc.description || '',
       supervisorId: loc.supervisorId || '',
-      contact:      loc.contact || '',
-      totalAssets:  loc.totalAssets || 0
+      contact: loc.contact || '',
+      totalAssets: loc.totalAssets || 0
     });
     setIsAdding(true);
   };
@@ -115,7 +165,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
   // Helper to get consistent color for departments
   const getColorIndex = (str: string) => {
     let hash = 0;
-    for (let i = 0; i < str.length; i++) {
+    for (let i = 0; i < (str?.length || 0); i++) {
       hash = str.charCodeAt(i) + ((hash << 5) - hash);
     }
     return Math.abs(hash);
@@ -136,9 +186,9 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Audit Locations</h3>
+          <h3 className="text-xl font-bold text-slate-900">Locations</h3>
           <p className="text-sm text-slate-500">
-            {(isCoordinator && !isAdmin) ? `Managing locations for ${userDept}` : 'Institutional site mapping and asset nodes.'}
+            {(isCoordinator && !isAdmin) ? `Managing locations for ${userDeptId}` : 'Institutional site mapping and asset nodes.'}
           </p>
         </div>
         
@@ -150,21 +200,60 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
               <select
                 className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-sm appearance-none cursor-pointer"
                 value={selectedDeptFilter}
-                onChange={(e) => setSelectedDeptFilter(e.target.value)}
+                onChange={(e) => {
+                  setSelectedDeptFilter(e.target.value);
+                  setSelectedBlockFilter('All');
+                  setSelectedLevelFilter('All');
+                }}
               >
                 <option value="All">All Departments</option>
                 {departments.map(d => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
+                  <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
             </div>
           )}
 
-          {!isAdding && (
+          {/* Block Filter */}
+          <div className="relative min-w-[160px] w-full sm:w-auto">
+            <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <select
+              className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-sm appearance-none cursor-pointer"
+              value={selectedBlockFilter}
+              onChange={(e) => {
+                setSelectedBlockFilter(e.target.value);
+                setSelectedLevelFilter('All');
+              }}
+            >
+              <option value="All">All Blocks</option>
+              {availableBlocks.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+          </div>
+
+          {/* Level Filter */}
+          <div className="relative min-w-[160px] w-full sm:w-auto">
+            <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <select
+              className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-sm appearance-none cursor-pointer"
+              value={selectedLevelFilter}
+              onChange={(e) => setSelectedLevelFilter(e.target.value)}
+            >
+              <option value="All">All Levels</option>
+              {availableLevels.map(l => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+          </div>
+
+          {!isAdding && isAdmin && (
             <div className="flex gap-2 w-full sm:w-auto">
               <button 
-                onClick={() => { setIsAdding(true); setEditingId(null); setFormData(emptyForm()); }}
+                onClick={() => { setIsAdding(true); setEditingId(null); setFormData({ name: '', abbr: '', departmentId: userDeptId || '', building: '', level: '', description: '', supervisorId: '', contact: '', totalAssets: 0 }); }}
                 className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <MapPin className="w-4 h-4" />
@@ -233,17 +322,13 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Site Supervisor</label>
-              <select
+              <input 
+                required
+                placeholder="Name of Supervisor"
                 className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
                 value={formData.supervisorId}
                 onChange={e => setFormData({ ...formData, supervisorId: e.target.value })}
-              >
-                <option value="">— Unassigned —</option>
-                {users
-                  .filter(u => !formData.departmentId || u.departmentId === formData.departmentId)
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+              />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Contact Number</label>
@@ -292,9 +377,8 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredLocations.map(loc => {
-                 const deptName = deptIdToName.get(loc.departmentId) ?? '';
-                 const supervisorName = userIdToName.get(loc.supervisorId ?? '') ?? '';
-                 const colorClass = AVATAR_COLORS[getColorIndex(deptName) % AVATAR_COLORS.length];
+                 const dept = departments.find(d => d.id === loc.departmentId);
+                 const colorClass = AVATAR_COLORS[getColorIndex(dept?.name || loc.departmentId) % AVATAR_COLORS.length];
                  return (
                   <tr key={loc.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="px-6 py-4">
@@ -308,10 +392,11 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                             {loc.building && <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">{loc.building}</span>}
                             {loc.level && <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">{loc.level}</span>}
                           </div>
+                          
                           <div className="mt-1.5">
                               <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase rounded border border-slate-200 flex items-center gap-1 w-fit">
                                 <Landmark className="w-3 h-3 opacity-50" />
-                                {deptName || loc.departmentId}
+                                {dept?.name || loc.departmentId}
                               </span>
                           </div>
                         </div>
@@ -319,16 +404,17 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap align-middle">
                       <div className="flex flex-col gap-1">
-                        {supervisorName ? (
+                        {loc.supervisorId ? (
                             <div className="text-xs font-bold text-slate-700 flex items-center gap-2">
                                 <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
-                                    <UserIcon className="w-3 h-3" />
+                                    <User className="w-3 h-3" />
                                 </div>
-                                {supervisorName}
+                                {loc.supervisorId}
                             </div>
                         ) : (
                             <span className="text-[10px] text-slate-400 italic">Unassigned</span>
                         )}
+                        
                         {loc.contact && (
                             <div className="text-[10px] text-slate-500 font-medium pl-8 flex items-center gap-1.5">
                                 <Phone className="w-3 h-3 opacity-70" />
@@ -343,27 +429,29 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-left align-middle">
-                      <div className="flex gap-1 justify-start">
-                        <button 
-                          onClick={() => startEdit(loc)} 
-                          className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors"
-                          title="Edit Location"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => onDelete(loc.id)} 
-                          className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors"
-                          title="Remove Location"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-1 justify-start">
+                          <button 
+                            onClick={() => startEdit(loc)} 
+                            className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors"
+                            title="Edit Location"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => onDelete(loc.id)} 
+                            className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors"
+                            title="Remove Location"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
               })}
-              {filteredLocations.length === 0 && (
+              {(!filteredLocations || filteredLocations.length === 0) && (
                 <tr>
                   <td colSpan={4} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center max-w-xs mx-auto">
@@ -371,13 +459,17 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                         <MapPinned className="w-8 h-8" />
                       </div>
                       <h4 className="text-slate-900 font-bold mb-1">No Locations Found</h4>
-                      <p className="text-xs text-slate-500">No records match your current department filter or access level.</p>
-                      {isAdmin && (
+                      <p className="text-xs text-slate-500">No records match your current filters.</p>
+                      {(selectedDeptFilter !== 'All' || selectedBlockFilter !== 'All' || selectedLevelFilter !== 'All') && (
                         <button 
-                          onClick={() => setSelectedDeptFilter('All')}
+                          onClick={() => {
+                            setSelectedDeptFilter('All');
+                            setSelectedBlockFilter('All');
+                            setSelectedLevelFilter('All');
+                          }}
                           className="mt-4 text-xs font-bold text-blue-600 hover:underline"
                         >
-                          Show All Departments
+                          Clear All Filters
                         </button>
                       )}
                     </div>

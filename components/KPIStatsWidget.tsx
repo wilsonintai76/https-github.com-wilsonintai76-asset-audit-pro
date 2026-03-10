@@ -25,7 +25,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
 
   // 2. Compute Stats per Tier
   const tierStats = useMemo(() => {
-    if (!activePhase || kpiTiers.length === 0) return [];
+    if (!activePhase || !kpiTiers || kpiTiers.length === 0) return [];
 
     return kpiTiers.map(tier => {
       // Find departments in this tier based on asset count range
@@ -33,13 +33,13 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
         (d.totalAssets >= tier.minAssets) && (d.totalAssets <= tier.maxAssets)
       );
       
-      const targetPercentage = tier.targets[activePhase.id] || 0;
+      const targetPercentage = activePhase ? (tier.targets[activePhase.id] || 0) : 0;
 
       // Calculate details for each department
       const deptDetails = deptsInTier.map(d => {
-        const deptSchedules = schedules.filter(s => s.department === d.name);
-        const total = deptSchedules.length;
-        const completed = deptSchedules.filter(s => s.status === 'Completed').length;
+        const deptSchedules = schedules.filter(s => s.departmentId === d.id);
+        const total = deptSchedules?.length || 0;
+        const completed = deptSchedules?.filter(s => s.status === 'Completed').length || 0;
         const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
         
         return {
@@ -61,7 +61,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
       return {
         ...tier,
         departments: deptDetails,
-        deptCount: deptsInTier.length,
+        deptCount: deptsInTier?.length || 0,
         actualPercentage,
         targetPercentage,
         status: actualPercentage >= targetPercentage ? 'On Track' : 'At Risk'
@@ -137,7 +137,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                  <div className="mt-4 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-1">
                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Department Breakdown</h5>
                     
-                    {stat.departments.length === 0 ? (
+                    {(!stat.departments || stat.departments.length === 0) ? (
                         <p className="text-xs text-slate-400 italic">No departments fall into this asset tier.</p>
                     ) : (
                         <div className="space-y-3">
@@ -175,7 +175,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
            );
         })}
 
-        {tierStats.length === 0 && (
+        {(!tierStats || tierStats.length === 0) && (
            <div className="text-center py-6 text-slate-400 text-xs italic">
              No KPI tiers configured. Please contact admin.
            </div>

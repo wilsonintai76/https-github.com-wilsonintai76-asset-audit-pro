@@ -58,8 +58,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
   const showAuditorDashboard = isCertified;
   
   const canAccessSchedule = isAdmin || isCoordinator || isSupervisor || isStaff;
-  const canAccessLocations = isAdmin || isCoordinator;
+  const canAccessLocations = isAdmin;
   const canAccessTeam = isAdmin;
+  const canAccessDepartments = isAdmin;
   const canAccessAdminSettings = isAdmin;
 
   return (
@@ -120,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
               />
             )}
             
-            {(canAccessLocations || canAccessTeam || canAccessAdminSettings) && (
+            {(canAccessLocations || canAccessTeam || canAccessDepartments || canAccessAdminSettings) && (
               <div className="px-2 pt-6 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Administration</div>
             )}
 
@@ -133,7 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
               />
             )}
 
-            {canAccessAdminSettings && (
+            {canAccessDepartments && (
               <NavItem 
                 icon={Network} 
                 label="Departments" 

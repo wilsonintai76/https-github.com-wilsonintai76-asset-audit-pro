@@ -1,10 +1,12 @@
 
 import React, { useMemo, useRef } from 'react';
 import Papa from 'papaparse';
-import { CrossAuditPermission, Department, User, AuditPhase, KPITier, UserRole, Location, AuditGroup } from '../types';
+import { CrossAuditPermission, Department, User, AuditPhase, KPITier, UserRole, Location, AuditSchedule } from '../types';
 import { CrossAuditManagement } from './CrossAuditManagement';
+import { AuditConstraints } from './AuditConstraints';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
 import { KPISettings } from './KPISettings';
+import { TierDistributionTable } from './TierDistributionTable';
 import { Zap, Sliders, ArrowRight, FileSpreadsheet } from 'lucide-react';
 
 interface SystemSettingsProps {
@@ -28,10 +30,10 @@ interface SystemSettingsProps {
   onClearAllLocations: () => void;
   onClearAllDepartments: () => void;
   onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
-  auditGroups: AuditGroup[];
-  onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
-  onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
-  onDeleteAuditGroup: (id: string) => Promise<void>;
+  maxAssetsPerDay: number;
+  onUpdateMaxAssetsPerDay: (val: number) => void;
+  onRebalanceSchedule: () => Promise<void>;
+  schedules: AuditSchedule[];
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({ 
@@ -55,10 +57,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onClearAllLocations,
   onClearAllDepartments,
   onBulkAddLocs,
-  auditGroups,
-  onAddAuditGroup,
-  onUpdateAuditGroup,
-  onDeleteAuditGroup
+  maxAssetsPerDay,
+  onUpdateMaxAssetsPerDay,
+  onRebalanceSchedule,
+  schedules
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -108,7 +110,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
         if (isRawAssetList) {
           // Aggregation Mode
-          const locMap: Record<string, { department: string, pic: string, totalAssets: number }> = {};
+          const locMap: Record<string, { departmentId: string, supervisorId: string, totalAssets: number }> = {};
 
           results.data.forEach((row: any) => {
             const locName = row['Lokasi Terkini'] || row['lokasi terkini'] || row['LOKASI TERKINI'] || row['Location'] || row['location'];
@@ -119,10 +121,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             if (locName && deptName) {
               const key = `${locName}|${deptName}`;
               if (!locMap[key]) {
-                locMap[key] = { department: deptName, pic: supervisor || '', totalAssets: 0 };
+                locMap[key] = { departmentId: deptName, supervisorId: supervisor || '', totalAssets: 0 };
               }
               if (supervisor) {
-                locMap[key].pic = supervisor;
+                locMap[key].supervisorId = supervisor;
               }
               if (label) {
                 locMap[key].totalAssets += 1;
@@ -131,16 +133,16 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           });
 
           Object.entries(locMap).forEach(([key, data]) => {
-            const [name] = key.split('|');
-            // Only add if admin
+            const [name, dept] = key.split('|');
+            // Only add if department matches (or admin)
             if (isAdmin) {
                newLocs.push({
                 name: name,
                 abbr: name.substring(0, 3).toUpperCase(),
-                departmentId: data.department, // temp: dept name string, resolved to UUID in App.tsx
+                departmentId: data.departmentId,
                 building: '', // Not in raw data
                 level: '',    // Not in raw data
-                supervisorId: data.pic || '',
+                supervisorId: data.supervisorId,
                 contact: '',  // Not in raw data
                 description: 'Imported from Asset List',
                 totalAssets: data.totalAssets
@@ -167,10 +169,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
               newLocs.push({ 
                 name, 
                 abbr, 
-                departmentId: department, // temp: dept name string, resolved to UUID in App.tsx
+                departmentId: department, 
                 building, 
                 level, 
-                supervisorId: pic,
+                supervisorId: pic, 
                 contact, 
                 description,
                 totalAssets
@@ -181,7 +183,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           });
         }
 
-        if (newLocs.length > 0) {
+        if (newLocs?.length > 0) {
           onBulkAddLocs(newLocs);
           alert(`Successfully imported ${newLocs.length} locations${isRawAssetList ? ' (aggregated from raw asset list)' : ''}.`);
         } else {
@@ -282,6 +284,30 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onDeleteTier={onDeleteKPITier}
       />
 
+      {phases?.length > 0 && kpiTiers?.length > 0 && (
+        <TierDistributionTable 
+          departments={departments}
+          kpiTiers={kpiTiers}
+          phases={phases}
+          schedules={schedules}
+        />
+      )}
+
+      {isAdmin && (
+        <div className="flex justify-center">
+          <button 
+            onClick={onRebalanceSchedule}
+            className="group relative px-8 py-4 bg-slate-900 text-white rounded-[24px] text-sm font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="relative flex items-center gap-3">
+              <Zap className="w-5 h-5 text-emerald-400" />
+              Rebalance Audit Schedule
+            </div>
+          </button>
+        </div>
+      )}
+
       <CrossAuditManagement 
         departments={departments}
         users={users}
@@ -291,10 +317,11 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onRemovePermission={onRemovePermission}
         onUpdateDepartment={onUpdateDepartment}
         onBulkUpdateDepartments={onBulkUpdateDepartments}
-        auditGroups={auditGroups}
-        onAddAuditGroup={onAddAuditGroup}
-        onUpdateAuditGroup={onUpdateAuditGroup}
-        onDeleteAuditGroup={onDeleteAuditGroup}
+      />
+
+      <AuditConstraints 
+        maxAssetsPerDay={maxAssetsPerDay}
+        onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
       />
 
       {isAdmin && (

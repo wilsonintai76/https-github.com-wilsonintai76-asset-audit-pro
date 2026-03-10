@@ -20,16 +20,24 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
     name: '', minAssets: 0, maxAssets: 0, targets: {}
   });
 
-  // Constraints: Number of tiers depends on number of phases, capped at 4.
-  const maxAllowedTiers = Math.min(4, phases.length > 0 ? phases.length : 1);
-  const isMaxTiersReached = tiers.length >= maxAllowedTiers;
+  // Constraints: Number of tiers is capped at 4.
+  const maxAllowedTiers = 4;
+  const isMaxTiersReached = (tiers?.length || 0) >= maxAllowedTiers;
+
+  const sortedPhases = [...phases].sort((a,b) => a.startDate.localeCompare(b.startDate));
+  const sortedTiers = [...tiers].sort((a, b) => a.minAssets - b.minAssets);
 
   const startEdit = (tier: KPITier) => {
     setIsAdding(false);
     setEditingId(tier.id);
+    
+    // Find previous tier to determine minAssets
+    const tierIndex = sortedTiers.findIndex(t => t.id === tier.id);
+    const calculatedMin = tierIndex > 0 ? sortedTiers[tierIndex - 1].maxAssets + 1 : 0;
+
     setFormData({
       name: tier.name,
-      minAssets: tier.minAssets,
+      minAssets: calculatedMin,
       maxAssets: tier.maxAssets,
       targets: { ...tier.targets }
     });
@@ -39,6 +47,18 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
     setEditingId(null);
     setIsAdding(false);
     setFormData({ name: '', minAssets: 0, maxAssets: 0, targets: {} });
+  };
+
+  const handleAddClick = () => {
+    const nextMin = sortedTiers.length > 0 ? sortedTiers[sortedTiers.length - 1].maxAssets + 1 : 0;
+    setFormData({
+      name: '',
+      minAssets: nextMin,
+      maxAssets: nextMin + 500, // Default range
+      targets: {}
+    });
+    setIsAdding(true);
+    setEditingId(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -73,16 +93,13 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
     }
   };
 
-  const sortedPhases = [...phases].sort((a,b) => a.startDate.localeCompare(b.startDate));
-  const sortedTiers = [...tiers].sort((a, b) => a.minAssets - b.minAssets);
-
   return (
     <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden p-8 mt-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h3 className="text-xl font-bold text-slate-900">Completion KPI Targets</h3>
           <p className="text-sm text-slate-500">
-            Define up to {maxAllowedTiers} asset tiers (based on {phases.length} phases).
+            Define up to {maxAllowedTiers} asset tiers.
           </p>
         </div>
         {!isAdding && !editingId && (
@@ -94,7 +111,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                </div>
              ) : (
                <button 
-                onClick={() => { resetForm(); setIsAdding(true); }}
+                onClick={handleAddClick}
                 className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" />
@@ -120,14 +137,15 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                     />
                 </div>
                 <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Min Assets</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
+                      Min Assets
+                      <span className="text-[8px] font-normal lowercase text-slate-400">(Auto-calculated)</span>
+                    </label>
                     <input 
-                        required 
+                        readOnly
                         type="number"
-                        min="0"
-                        className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" 
+                        className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed outline-none" 
                         value={formData.minAssets} 
-                        onChange={e => setFormData({ ...formData, minAssets: parseInt(e.target.value) || 0 })} 
                     />
                 </div>
                 <div className="space-y-1">
@@ -135,7 +153,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                     <input 
                         required 
                         type="number"
-                        min="0"
+                        min={formData.minAssets + 1}
                         className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" 
                         value={formData.maxAssets} 
                         onChange={e => setFormData({ ...formData, maxAssets: parseInt(e.target.value) || 0 })} 
@@ -163,7 +181,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                             </div>
                         </div>
                     ))}
-                    {sortedPhases.length === 0 && <p className="text-xs text-slate-400 italic col-span-4">Add audit phases first to set targets.</p>}
+                    {(!sortedPhases || sortedPhases.length === 0) && <p className="text-xs text-slate-400 italic col-span-4">Add audit phases first to set targets.</p>}
                 </div>
             </div>
 
@@ -217,14 +235,15 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                     {isEditing ? (
                        <div className="flex items-center gap-2">
                          <input 
+                            readOnly
                             type="number"
-                            className="w-16 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20"
+                            className="w-16 px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-400 cursor-not-allowed"
                             value={formData.minAssets}
-                            onChange={e => setFormData({...formData, minAssets: parseInt(e.target.value)})}
                          />
                          <span className="text-slate-400">-</span>
                          <input 
                             type="number"
+                            min={formData.minAssets + 1}
                             className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20"
                             value={formData.maxAssets}
                             onChange={e => setFormData({...formData, maxAssets: parseInt(e.target.value)})}
@@ -291,9 +310,9 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                 </tr>
               );
             })}
-            {sortedTiers.length === 0 && !isAdding && (
+            {(!sortedTiers || sortedTiers.length === 0) && !isAdding && (
                <tr>
-                 <td colSpan={3 + sortedPhases.length} className="px-6 py-12 text-center text-slate-400 italic">
+                 <td colSpan={3 + (sortedPhases?.length || 0)} className="px-6 py-12 text-center text-slate-400 italic">
                     No asset tiers defined. Add a tier to start tracking KPIs.
                  </td>
                </tr>

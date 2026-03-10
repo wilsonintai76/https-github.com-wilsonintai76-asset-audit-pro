@@ -107,7 +107,6 @@ export const INITIAL_AUDITS: Omit<AuditSchedule, 'id'>[] = [
     date: '2024-12-01',
     status: 'Pending',
     departmentId: 'dummy-dept-id',
-    building: 'Hostel Complex',
     phaseId: 'p1'
   },
   {
@@ -118,7 +117,6 @@ export const INITIAL_AUDITS: Omit<AuditSchedule, 'id'>[] = [
     date: '2024-12-05',
     status: 'Pending',
     departmentId: 'dummy-dept-id',
-    building: 'Engineering Block E',
     phaseId: 'p1'
   },
   {
@@ -129,7 +127,6 @@ export const INITIAL_AUDITS: Omit<AuditSchedule, 'id'>[] = [
     date: '2024-11-28',
     status: 'Pending',
     departmentId: 'dummy-dept-id',
-    building: 'Central Library',
     phaseId: 'p1'
   }
 ];

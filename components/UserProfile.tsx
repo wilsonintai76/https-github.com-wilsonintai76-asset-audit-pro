@@ -1,11 +1,11 @@
 
 import React, { useState, useMemo } from 'react';
-import { User } from '../types';
+import { User, Department } from '../types';
 import { Mail, CheckCircle2, User as UserIcon, Phone, Info, Loader2, Award, AlertCircle, RotateCw, Shield } from 'lucide-react';
 
 interface UserProfileProps {
   user: User;
-  departments: string[];
+  departments: Department[];
   onUpdate: (id: string, data: Partial<User>) => void;
 }
 
@@ -13,7 +13,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
   const [formData, setFormData] = useState({
     name: user.name,
     contactNumber: user.contactNumber || '',
-    department: user.department || '',
+    departmentId: user.departmentId || '',
     pin: ''
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -130,12 +130,12 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                       <select 
                         required
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all appearance-none"
-                        value={formData.department}
-                        onChange={e => setFormData({ ...formData, department: e.target.value })}
+                        value={formData.departmentId}
+                        onChange={e => setFormData({ ...formData, departmentId: e.target.value })}
                       >
                         <option value="">Select Department</option>
                         {departments.map(d => (
-                          <option key={d} value={d}>{d}</option>
+                          <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                       </select>
                     </div>
@@ -165,7 +165,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                   <div>
                     <h4 className="text-xs font-bold text-blue-900 mb-1">Account Metadata</h4>
                     <p className="text-[10px] text-blue-700/70 leading-relaxed font-medium">
-                      Assigned Department: <strong>{user.department || 'General'}</strong><br/>
+                      Assigned Department: <strong>{departments.find(d => d.id === user.departmentId)?.name || 'General'}</strong><br/>
                       Roles: <strong>{user.roles.join(', ')}</strong><br/>
                       Last Login: <strong>{user.lastActive}</strong>
                     </p>

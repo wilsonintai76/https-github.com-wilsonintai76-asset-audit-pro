@@ -220,59 +220,60 @@ CREATE POLICY "Public Access" ON cross_audits FOR ALL USING (true) WITH CHECK (t
 CREATE POLICY "Public Access" ON kpi_tiers    FOR ALL USING (true) WITH CHECK (true);
 
 -- =============================================================
--- INDEXES  (FK columns + common filter columns)
+-- RPC FUNCTIONS FOR COMPLEX OPERATIONS
 -- =============================================================
--- audit_phases
-CREATE INDEX idx_audit_phases_dates       ON audit_phases(start_date, end_date);
 
--- departments
-CREATE INDEX idx_departments_head         ON departments(head_of_dept_id);
+-- 1. Force Delete Location (Deletes associated audits first)
+CREATE OR REPLACE FUNCTION force_delete_location(loc_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  DELETE FROM audits WHERE location_id = loc_id;
+  DELETE FROM locations WHERE id = loc_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- users
-CREATE INDEX idx_users_department_id      ON users(department_id);
-CREATE INDEX idx_users_status             ON users(status);
-CREATE INDEX idx_users_roles              ON users USING GIN (roles);
+-- 2. Force Delete Department (Deletes locations, audits, and users first)
+CREATE OR REPLACE FUNCTION force_delete_department(dept_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  -- Delete audits associated with locations in this department
+  DELETE FROM audits WHERE location_id IN (SELECT id FROM locations WHERE department_id = dept_id);
+  -- Delete audits directly associated with this department
+  DELETE FROM audits WHERE department_id = dept_id;
+  -- Delete locations
+  DELETE FROM locations WHERE department_id = dept_id;
+  -- Delete users (except those who might be needed elsewhere, but schema says SET NULL for head_of_dept)
+  DELETE FROM users WHERE department_id = dept_id;
+  -- Delete the department
+  DELETE FROM departments WHERE id = dept_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- locations
-CREATE INDEX idx_locations_department_id  ON locations(department_id);
-CREATE INDEX idx_locations_supervisor_id  ON locations(supervisor_id);
+-- 3. Clear All Locations
+CREATE OR REPLACE FUNCTION clear_all_locations()
+RETURNS VOID AS $$
+BEGIN
+  DELETE FROM audits;
+  DELETE FROM locations;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- audits
-CREATE INDEX idx_audits_phase_id          ON audits(phase_id);
-CREATE INDEX idx_audits_department_id     ON audits(department_id);
-CREATE INDEX idx_audits_location_id       ON audits(location_id);
-CREATE INDEX idx_audits_supervisor_id     ON audits(supervisor_id);
-CREATE INDEX idx_audits_date              ON audits(date);
-CREATE INDEX idx_audits_status            ON audits(status);
-
--- cross_audits
-CREATE INDEX idx_cross_audits_auditor     ON cross_audits(auditor_dept_id);
-CREATE INDEX idx_cross_audits_target      ON cross_audits(target_dept_id);
-
--- =============================================================
--- QUICK REFERENCE: safe delete order
--- =============================================================
--- To delete a DEPARTMENT:
---   1. DELETE FROM audits       WHERE department_id = $id   (or location_id IN dept locations)
---   2. DELETE FROM locations    WHERE department_id = $id
---   3. DELETE FROM departments  WHERE id = $id
---      → cross_audits rows auto-deleted  (CASCADE)
---      → users.department_id auto-nulled (SET NULL)
---      → departments.head_of_dept_id already nullable
---
--- To delete a LOCATION:
---   1. DELETE FROM audits    WHERE location_id = $id
---   2. DELETE FROM locations WHERE id = $id
---
--- To delete an AUDIT PHASE:
---   1. DELETE FROM audits      WHERE phase_id = $id
---   2. DELETE FROM audit_phases WHERE id = $id
---
--- To delete a USER:
---   DELETE FROM users WHERE id = $id
---   → audits.supervisor_id / auditor1_id / auditor2_id auto-nulled (SET NULL)
---   → locations.supervisor_id auto-nulled                          (SET NULL)
---   → departments.head_of_dept_id auto-nulled                      (SET NULL)
+-- 4. Clear All Departments
+CREATE OR REPLACE FUNCTION clear_all_departments(keep_user_id TEXT DEFAULT NULL)
+RETURNS VOID AS $$
+BEGIN
+  DELETE FROM audits;
+  DELETE FROM locations;
+  -- Delete users except the one to keep
+  IF keep_user_id IS NOT NULL THEN
+    DELETE FROM users WHERE id <> keep_user_id;
+    UPDATE users SET department_id = NULL WHERE id = keep_user_id;
+  ELSE
+    DELETE FROM users;
+  END IF;
+  DELETE FROM departments;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =============================================================
 -- SEED DATA – Initial Admin User
@@ -288,8 +289,8 @@ INSERT INTO users (
   dashboard_config
 ) VALUES (
   '1891',
-  'Admin',
-  'admin@assetauditpro.com',
+  'Wilson Intai',
+  'wilsonintai76@gmail.com',
   '1234',
   ARRAY['Admin'],
   'Active',
@@ -297,6 +298,8 @@ INSERT INTO users (
   '{"showStats":true,"showTrends":true,"showUpcoming":true,"showCertification":true,"showDeptDistribution":true}'
 )
 ON CONFLICT (id) DO UPDATE SET
+  name        = EXCLUDED.name,
+  email       = EXCLUDED.email,
   roles       = EXCLUDED.roles,
   pin         = EXCLUDED.pin,
   status      = EXCLUDED.status,
