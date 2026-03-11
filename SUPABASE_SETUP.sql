@@ -84,7 +84,7 @@ CREATE TABLE users (
   pin                  TEXT         DEFAULT '1234',
   roles                TEXT[]       NOT NULL DEFAULT '{}'
                          CONSTRAINT chk_roles CHECK (
-                           roles <@ ARRAY['Admin','Coordinator','HeadOfDept','Supervisor','Auditor','Staff','Guest']::TEXT[]
+                           roles <@ ARRAY['Admin','Coordinator','Supervisor','Auditor','Staff','Guest']::TEXT[]
                          ),
   picture              TEXT,
   department_id        UUID,        -- FK to departments(id) added via ALTER TABLE below
@@ -93,8 +93,11 @@ CREATE TABLE users (
   last_active          TIMESTAMP WITH TIME ZONE,
   certification_issued DATE,
   certification_expiry DATE,
+  designation          TEXT         CONSTRAINT chk_user_designation CHECK (
+                           designation IS NULL OR designation IN ('Head Of Department','Coordinator','Supervisor','Lecturer')
+                         ),
   status               TEXT NOT NULL DEFAULT 'Active'
-                         CONSTRAINT chk_user_status CHECK (status IN ('Active','Inactive','Suspended')),
+                         CONSTRAINT chk_user_status CHECK (status IN ('Active','Inactive','Suspended','Pending')),
   is_verified          BOOLEAN NOT NULL DEFAULT false,
   dashboard_config     JSONB   NOT NULL DEFAULT '{
     "showStats": true,
@@ -250,29 +253,40 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 3. Clear All Locations
+-- 3. Clear All Locations (and their audits)
 CREATE OR REPLACE FUNCTION clear_all_locations()
 RETURNS VOID AS $$
 BEGIN
-  DELETE FROM audits;
-  DELETE FROM locations;
+  -- We must delete audits first because they reference locations with RESTRICT
+  DELETE FROM audits WHERE true;
+  DELETE FROM locations WHERE true;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 4. Clear All Departments
+-- 4. Clear All Departments and all associated data
 CREATE OR REPLACE FUNCTION clear_all_departments(keep_user_id TEXT DEFAULT NULL)
 RETURNS VOID AS $$
 BEGIN
-  DELETE FROM audits;
-  DELETE FROM locations;
-  -- Delete users except the one to keep
+  -- 1. Remove all transactional data
+  DELETE FROM audits WHERE true;
+  DELETE FROM locations WHERE true;
+  DELETE FROM cross_audits WHERE true;
+  
+  -- 2. Handle users (keeping the specific one if provided)
   IF keep_user_id IS NOT NULL THEN
+    -- First null out references to depts to avoid constraint issues during user/dept removal
+    UPDATE users SET department_id = NULL WHERE true;
+    UPDATE departments SET head_of_dept_id = NULL WHERE true;
+    
     DELETE FROM users WHERE id <> keep_user_id;
-    UPDATE users SET department_id = NULL WHERE id = keep_user_id;
   ELSE
-    DELETE FROM users;
+    UPDATE departments SET head_of_dept_id = NULL WHERE true;
+    DELETE FROM users WHERE true;
   END IF;
-  DELETE FROM departments;
+  
+  -- 3. Remove structural data
+  DELETE FROM departments WHERE true;
+  -- Note: audit_groups and audit_phases are NOT cleared as they are system configuration
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -287,6 +301,7 @@ INSERT INTO users (
   roles,
   status,
   is_verified,
+  designation,
   dashboard_config
 ) VALUES (
   '1891',
@@ -296,6 +311,7 @@ INSERT INTO users (
   ARRAY['Admin'],
   'Active',
   true,
+  'Head Of Department',
   '{"showStats":true,"showTrends":true,"showUpcoming":true,"showCertification":true,"showDeptDistribution":true}'
 )
 ON CONFLICT (id) DO UPDATE SET
@@ -304,4 +320,5 @@ ON CONFLICT (id) DO UPDATE SET
   roles       = EXCLUDED.roles,
   pin         = EXCLUDED.pin,
   status      = EXCLUDED.status,
+  designation = EXCLUDED.designation,
   is_verified = EXCLUDED.is_verified;

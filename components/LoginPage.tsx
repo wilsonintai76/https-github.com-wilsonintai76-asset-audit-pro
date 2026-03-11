@@ -42,7 +42,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onDemoLogin, isLoggingIn, 
     email: '',
     pin: '',
     departmentId: '',
-    contactNumber: ''
+    contactNumber: '',
+    designation: ''
   });
   const [departments, setDepartments] = useState<Department[]>([]);
   const [regSuccess, setRegSuccess] = useState(false);
@@ -264,17 +265,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onDemoLogin, isLoggingIn, 
                             onChange={e => setRegData({...regData, email: e.target.value})}
                         />
                     </div>
-                    <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</label>
-                        <select
-                            required 
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-                            value={regData.departmentId}
-                            onChange={e => setRegData({...regData, departmentId: e.target.value})}
-                        >
-                            <option value="">Select Department</option>
-                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</label>
+                            <select
+                                required 
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                                value={regData.departmentId}
+                                onChange={e => setRegData({...regData, departmentId: e.target.value})}
+                            >
+                                <option value="">Select Department</option>
+                                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Designation</label>
+                            <select
+                                required 
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                                value={regData.designation}
+                                onChange={e => setRegData({...regData, designation: e.target.value as any})}
+                            >
+                                <option value="">Select Designation</option>
+                                <option value="Head Of Department">Head Of Department</option>
+                                <option value="Coordinator">Coordinator</option>
+                                <option value="Supervisor">Supervisor</option>
+                                <option value="Lecturer">Lecturer</option>
+                            </select>
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">

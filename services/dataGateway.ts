@@ -149,6 +149,8 @@ class DataGateway {
         certificationIssued: u.certification_issued,
         certificationExpiry: u.certification_expiry,
         dashboardConfig: u.dashboard_config,
+        status: u.status,
+        designation: u.designation
       })) as User[];
     }
     return [];
@@ -185,7 +187,7 @@ class DataGateway {
 
   async verifyUser(id: string): Promise<User> {
     if (supabase) {
-      const { data, error } = await supabase.from('users').update({ is_verified: true }).eq('id', id).select().single();
+      const { data, error } = await supabase.from('users').update({ is_verified: true, status: 'Active' }).eq('id', id).select().single();
       if (error) throw error;
 
       const result = data as any;
@@ -197,7 +199,9 @@ class DataGateway {
         lastActive: result.last_active,
         certificationIssued: result.certification_issued,
         certificationExpiry: result.certification_expiry,
-        dashboardConfig: result.dashboard_config
+        dashboardConfig: result.dashboard_config,
+        status: result.status,
+        designation: result.designation
       } as User;
     }
     throw new Error("Supabase client not initialized");

@@ -11,7 +11,9 @@ export interface AuditSchedule {
   phaseId: string;
 }
 
-export type UserRole = 'Admin' | 'Coordinator' | 'Supervisor' | 'Staff' | 'Guest';
+export type Designation = 'Head Of Department' | 'Coordinator' | 'Supervisor' | 'Lecturer';
+
+export type UserRole = 'Admin' | 'Coordinator' | 'Supervisor' | 'Auditor' | 'Staff' | 'Guest';
 export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard';
 
 export interface User {
@@ -20,6 +22,7 @@ export interface User {
   email: string;
   pin?: string;
   roles: UserRole[]; 
+  designation?: Designation;
   picture?: string;
   departmentId?: string;
   contactNumber?: string;
@@ -27,7 +30,7 @@ export interface User {
   lastActive?: string;
   certificationIssued?: string; // ISO-8601 date string
   certificationExpiry?: string; // ISO-8601 date string
-  status: 'Active' | 'Inactive' | 'Suspended';
+  status: 'Active' | 'Inactive' | 'Suspended' | 'Pending';
   isVerified?: boolean;
   dashboardConfig?: DashboardConfig;
 }
@@ -36,7 +39,7 @@ export interface Department {
   id: string;
   name: string;
   abbr: string;
-  headOfDeptId: string;
+  headOfDeptId: string | null;
   description: string;
   auditGroup?: string;
   totalAssets?: number;

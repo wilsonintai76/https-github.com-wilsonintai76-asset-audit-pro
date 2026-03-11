@@ -13,7 +13,7 @@ interface TeamManagementProps {
   onUpdateMember: (id: string, user: Partial<User>) => void;
   onDeleteMember: (id: string) => void;
   onUpdateRoles: (userId: string, newRoles: UserRole[]) => void;
-  onUpdateStatus: (userId: string, status: 'Active' | 'Inactive' | 'Suspended') => void;
+  onUpdateStatus: (userId: string, status: 'Active' | 'Inactive' | 'Suspended' | 'Pending') => void;
   currentUserRoles: UserRole[];
   departments: Department[];
   customConfirm: (title: string, message: string, onConfirm: () => void, isDestructive?: boolean) => void;
@@ -35,6 +35,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     email: '',
     departmentId: '',
     role: 'Staff' as UserRole,
+    designation: '' as string,
     contactNumber: '',
     pin: ''
   });
@@ -42,8 +43,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const isAdmin = currentUserRoles.includes('Admin');
 
   // Pending users logic
-  const pendingUsers = useMemo(() => users.filter(u => u.isVerified === false), [users]);
-  const verifiedUsers = useMemo(() => users.filter(u => u.isVerified !== false), [users]);
+  const pendingUsers = useMemo(() => users.filter(u => u.status === 'Pending'), [users]);
+  const verifiedUsers = useMemo(() => users.filter(u => u.status !== 'Pending'), [users]);
 
   const filteredUsers = useMemo(() => {
     return verifiedUsers.filter(u => 
@@ -54,7 +55,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const handleVerify = async (user: User) => {
       try {
           await gateway.verifyUser(user.id);
-          onUpdateMember(user.id, { isVerified: true });
+          onUpdateMember(user.id, { isVerified: true, status: 'Active' });
       } catch (e) {
           console.error("Verification failed", e);
           alert("Failed to verify user.");
@@ -67,6 +68,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       case 'Admin': return ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
       case 'Coordinator': return ['Coordinator', 'Supervisor', 'Staff'];
       case 'Supervisor': return ['Supervisor', 'Staff'];
+      case 'Auditor': return ['Auditor', 'Staff'];
       case 'Staff': return ['Staff'];
       case 'Guest': return ['Guest'];
       default: return ['Staff'];
@@ -154,6 +156,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         name: formData.name,
         email: formData.email,
         departmentId: formData.departmentId,
+        designation: formData.designation as any,
         roles: assignedRoles,
         contactNumber: formData.contactNumber,
         pin: formData.pin || '1234', // Default PIN if not provided
@@ -166,7 +169,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   };
 
   const resetForm = () => {
-    setFormData({ staffId: '', name: '', email: '', departmentId: '', role: 'Staff', contactNumber: '', pin: '' });
+    setFormData({ staffId: '', name: '', email: '', departmentId: '', role: 'Staff', designation: '', contactNumber: '', pin: '' });
     setIsFormOpen(false);
     setEditingId(null);
   };
@@ -175,6 +178,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     if (user.roles.includes('Admin')) return 'Admin';
     if (user.roles.includes('Coordinator')) return 'Coordinator';
     if (user.roles.includes('Supervisor')) return 'Supervisor';
+    if (user.roles.includes('Auditor')) return 'Auditor';
     if (user.roles.includes('Guest')) return 'Guest';
     return 'Staff';
   };
@@ -196,6 +200,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       email: user.email,
       departmentId: user.departmentId || '',
       role: getHighestRole(user),
+      designation: user.designation || '',
       contactNumber: user.contactNumber || '',
       pin: '' // Leave blank so we don't show existing PIN, only update if typed
     });
@@ -252,7 +257,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                               <p className="font-bold text-slate-900 text-sm truncate">{user.name}</p>
                               <div className="flex items-center gap-2 mt-1">
                                   <span className="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{user.id}</span>
-                                  <span className="text-[9px] text-slate-500 truncate">{departments.find(d => d.id === user.departmentId)?.name || user.departmentId}</span>
+                                  <span className="text-[9px] text-slate-500 truncate">{user.designation} • {departments.find(d => d.id === user.departmentId)?.name || user.departmentId}</span>
                               </div>
                           </div>
                           <div className="flex gap-2">
@@ -329,8 +334,20 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
               </select>
             </div>
             <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Role Level</label>
+              <label className="text-[10px] font-black uppercase text-slate-400">Designation</label>
+              <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.designation} onChange={e => setFormData({ ...formData, designation: e.target.value })}>
+                <option value="">Select Designation</option>
+                <option value="Head Of Department">Head Of Department</option>
+                <option value="Coordinator">Coordinator</option>
+                <option value="Supervisor">Supervisor</option>
+                <option value="Lecturer">Lecturer</option>
+              </select>
+            </div>
+            <div className="space-y-1 lg:col-span-1">
+              <label className="text-[10px] font-black uppercase text-slate-400">Role Level (RBAC)</label>
               <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}>
+                <option value="Guest">Guest (Viewer)</option>
+                <option value="Auditor">Auditor</option>
                 <option value="Staff">Staff</option>
                 <option value="Supervisor">Supervisor</option>
                 <option value="Coordinator">Coordinator</option>
@@ -395,11 +412,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                         <div>
                           <div className="text-sm font-bold text-slate-900">{user.name}</div>
                           <div className="flex items-center gap-2 mt-1">
-                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${getRoleBadgeStyle(highestRole)}`}>
-                              {highestRole}
-                            </span>
-                            <span className="text-[9px] text-slate-400 font-bold uppercase">{departments.find(d => d.id === user.departmentId)?.name || user.departmentId}</span>
-                          </div>
+                             <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${getRoleBadgeStyle(highestRole)}`}>
+                               {highestRole}
+                             </span>
+                             <span className="text-[9px] text-slate-400 font-bold uppercase">{user.designation}</span>
+                             <span className="text-[9px] text-slate-400 font-bold uppercase">•</span>
+                             <span className="text-[9px] text-slate-400 font-bold uppercase">{departments.find(d => d.id === user.departmentId)?.name || user.departmentId}</span>
+                           </div>
                         </div>
                       </div>
                     </td>

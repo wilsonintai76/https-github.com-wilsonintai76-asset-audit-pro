@@ -17,7 +17,7 @@ interface DepartmentManagementProps {
 export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ departments, locations, onAdd, onBulkAdd, onUpdate, onDelete, isAdmin = true }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', abbr: '', headOfDeptId: '', description: '', totalAssets: 0 });
+  const [formData, setFormData] = useState({ name: '', abbr: '', headOfDeptId: null as string | null, description: '', totalAssets: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- HANDLERS ---
@@ -31,7 +31,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ depa
       onAdd(formData);
       setIsAdding(false);
     }
-    setFormData({ name: '', abbr: '', headOfDeptId: '', description: '', totalAssets: 0 });
+    setFormData({ name: '', abbr: '', headOfDeptId: null, description: '', totalAssets: 0 });
   };
 
   const startEdit = (dept: Department) => {
@@ -69,7 +69,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ depa
         
         {!isAdding && isAdmin && (
           <div className="flex gap-2 w-full md:w-auto">
-            <button onClick={() => { setIsAdding(true); setEditingId(null); setFormData({ name: '', abbr: '', headOfDeptId: '', description: '', totalAssets: 0 }); }} className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+            <button onClick={() => { setIsAdding(true); setEditingId(null); setFormData({ name: '', abbr: '', headOfDeptId: null, description: '', totalAssets: 0 }); }} className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
               <Plus className="w-4 h-4 mr-2 inline-block" />New Dept
             </button>
           </div>
@@ -89,8 +89,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ depa
               <input required placeholder="e.g. BIOS" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.abbr} onChange={e => setFormData({ ...formData, abbr: e.target.value.toUpperCase() })} />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Head of Department</label>
-              <input required placeholder="Name of Dean/Head" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.headOfDeptId} onChange={e => setFormData({ ...formData, headOfDeptId: e.target.value })} />
+              <label className="text-[10px] font-black uppercase text-slate-400">Head of Department (Optional)</label>
+              <input placeholder="Name of Dean/Head" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.headOfDeptId || ''} onChange={e => setFormData({ ...formData, headOfDeptId: e.target.value || null })} />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400">Total Assets</label>

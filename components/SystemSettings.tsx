@@ -199,8 +199,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ['Name', 'Abbr', 'Department', 'Building', 'Level', 'Supervisor', 'Contact', 'Description', 'Total Assets'];
-    const sample = ['Main Chemistry Lab', 'MCL-01', 'Biological Sciences', 'Science Block A', 'FIRST FLOOR', 'Dr. Supervisor', 'x1234', 'Main lab for chemistry', '150'];
+    const headers = ['Name', 'Abbr', 'Department', 'Building', 'Level', 'Supervisor Name', 'Contact', 'Description', 'Total Assets'];
+    const sample = ['Main Chemistry Lab', 'MCL-01', 'Biological Sciences', 'Science Block A', 'FIRST FLOOR', 'Dr. Supervisor Name', 'x1234', 'Main lab for chemistry', '150'];
     const csvContent = [headers.join(','), sample.join(',')].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -261,7 +261,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
       {/* GLOBAL ACTIVE PHASE HEADER */}
-      <div className={`p-8 rounded-[40px] border-2 shadow-2xl transition-all duration-500 overflow-hidden relative ${activePhase
+      <div className={`p-8 rounded-[40px] border-2 transition-all duration-500 overflow-hidden relative ${activePhase
           ? 'bg-slate-900 border-emerald-500/50 text-white'
           : 'bg-white border-slate-200 text-slate-900'
         }`}>

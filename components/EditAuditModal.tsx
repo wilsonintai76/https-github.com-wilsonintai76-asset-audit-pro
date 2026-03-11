@@ -158,7 +158,7 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Site Supervisor</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Supervisor Name</label>
               <div className="relative">
                 <select
                   required
@@ -167,9 +167,16 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
                   onChange={e => setFormData({...formData, supervisorId: e.target.value})}
                 >
                   <option value="">Select Supervisor</option>
-                  {users.filter(u => u.roles.includes('Supervisor') || u.roles.includes('Admin') || u.roles.includes('Coordinator')).map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.id})</option>
-                  ))}
+                  {users
+                    .filter(u => {
+                      const hasRole = u.roles.includes('Supervisor') || u.roles.includes('Admin') || u.roles.includes('Coordinator');
+                      const matchesDept = !formData.departmentId || u.departmentId === formData.departmentId;
+                      return hasRole && matchesDept;
+                    })
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))
+                  }
                   {/* Fallback if the supervisor is not in the list but exists as a string */}
                   {formData.supervisorId && !users.find(u => u.id === formData.supervisorId) && (
                     <option value={formData.supervisorId}>{formData.supervisorId}</option>

@@ -65,7 +65,7 @@ export const authService = {
     try {
       if (!supabase) throw new Error('Supabase not configured');
       
-      const payload: any = { ...userData, roles: ['Staff'] };
+      const payload: any = { ...userData, roles: ['Guest'], status: 'Pending' };
       if (userData.contactNumber !== undefined) {
         payload.contact_number = userData.contactNumber;
         delete payload.contactNumber;

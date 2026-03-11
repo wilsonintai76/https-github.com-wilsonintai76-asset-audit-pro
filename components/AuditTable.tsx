@@ -3,6 +3,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import Papa from 'papaparse';
 import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase } from '../types';
 import { NewAuditModal } from './NewAuditModal';
+import { EditAuditModal } from './EditAuditModal';
 import { AuditReportModal } from './AuditReportModal';
 import { 
   ShieldOff, 
@@ -21,7 +22,8 @@ import {
   RotateCcw, 
   FileText, 
   Search,
-  Filter
+  Filter,
+  Pencil
 } from 'lucide-react';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
 
@@ -59,6 +61,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   maxAssetsPerDay
 }) => {
   const [reportAudit, setReportAudit] = useState<AuditSchedule | null>(null);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [editingAudit, setEditingAudit] = useState<AuditSchedule | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('All');
   const [selectedLevel, setSelectedLevel] = useState('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -434,6 +438,14 @@ export const AuditTable: React.FC<AuditTableProps> = ({
          {canAddAudit && (
           <div className="flex items-center gap-2">
             <button 
+              onClick={() => setShowNewModal(true)}
+              disabled={!hasPhases}
+              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all border ${!hasPhases ? 'bg-slate-100 text-slate-300 border-slate-200' : 'bg-white text-blue-500 border-blue-200 hover:bg-blue-50 hover:border-blue-300 shadow-sm shadow-blue-500/10'}`}
+              title="Add New Audit"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+            <button 
               onClick={() => fileInputRef.current?.click()}
               disabled={!hasPhases}
               className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all border ${!hasPhases ? 'bg-slate-100 text-slate-300 border-slate-200' : 'bg-white text-slate-500 border-slate-200 hover:text-emerald-500 hover:border-emerald-200'}`}
@@ -452,7 +464,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
               <tr>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48 sticky left-0 bg-slate-50 z-30 border-r border-slate-100">Date</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64 sticky left-48 bg-slate-50 z-30 border-r border-slate-100">Location</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Site Supervisor</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Supervisor Name</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Auditors</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-32 text-center">Status</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-16 text-center"></th>
@@ -542,7 +554,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                            <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0">
                              <UserCheck className="w-4 h-4" />
                            </div>
-                           {audit.supervisorId}
+                           {users.find(u => u.id === audit.supervisorId)?.name || audit.supervisorId}
                         </div>
                         {loc?.contact && (
                           <div className="flex items-center gap-2 pl-10.5">
@@ -597,6 +609,15 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
                     <td className="px-8 py-6 align-top text-center">
                         <div className="flex items-center justify-center gap-2">
+                          {(isAdmin || isSupervisor) && !isLocked && (
+                            <button
+                              onClick={() => setEditingAudit(audit)}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors border border-slate-100 hover:border-amber-100 shadow-sm"
+                              title="Edit Audit Details"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           {audit.status === 'Completed' && (
                               <button
                                   onClick={() => setReportAudit(audit)}
@@ -633,6 +654,30 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         <AuditReportModal 
             audit={reportAudit}
             onClose={() => setReportAudit(null)}
+        />
+      )}
+
+      {showNewModal && (
+        <NewAuditModal
+          onClose={() => setShowNewModal(false)}
+          onAdd={onAddAudit}
+          departments={allDepartments}
+          locations={allLocations}
+          auditPhases={auditPhases}
+          existingSchedules={schedules}
+          users={users}
+        />
+      )}
+
+      {editingAudit && (
+        <EditAuditModal
+          audit={editingAudit}
+          onClose={() => setEditingAudit(null)}
+          onUpdate={onUpdateAudit}
+          departments={allDepartments}
+          locations={allLocations}
+          auditPhases={auditPhases}
+          users={users}
         />
       )}
     </div>

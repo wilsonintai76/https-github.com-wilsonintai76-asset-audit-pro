@@ -1,18 +1,18 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { AuditSchedule, Department, Location, AuditPhase } from '../types';
+import { AuditSchedule, Department, Location, AuditPhase, User } from '../types';
 import { X, CalendarDays, ChevronDown, CalendarPlus } from 'lucide-react';
 
 interface NewAuditModalProps {
   onClose: () => void;
-  onAdd: (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1' | 'auditor2'>) => void;
+  onAdd: (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1Id' | 'auditor2Id'>) => void;
   departments: Department[];
   locations: Location[];
   auditPhases: AuditPhase[];
   existingSchedules: AuditSchedule[];
+  users: User[];
 }
 
-export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, departments, locations, auditPhases, existingSchedules }) => {
+export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, departments, locations, auditPhases, existingSchedules, users }) => {
   const [formData, setFormData] = useState({
     departmentId: '',
     locationId: '',
@@ -197,15 +197,29 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Site Supervisor</label>
-              <input 
-                required
-                type="text"
-                placeholder="Auto-filled or Enter Name"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
-                value={formData.supervisorId}
-                onChange={e => setFormData({...formData, supervisorId: e.target.value})}
-              />
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Supervisor Name</label>
+              <div className="relative">
+                <select
+                  required
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer"
+                  value={formData.supervisorId}
+                  onChange={e => setFormData({...formData, supervisorId: e.target.value})}
+                >
+                  <option value="">Select Supervisor</option>
+                  {users
+                    .filter(u => {
+                      const hasRole = u.roles.includes('Supervisor') || u.roles.includes('Admin') || u.roles.includes('Coordinator');
+                      const matchesDept = !formData.departmentId || u.departmentId === formData.departmentId;
+                      return hasRole && matchesDept;
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))
+                  }
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+              </div>
             </div>
             
             <div className="space-y-1">

@@ -597,7 +597,7 @@ const App: React.FC = () => {
           await gateway.addDepartment({
             name: originalName,
             abbr: originalName.substring(0, 5).toUpperCase(),
-            headOfDeptId: 'To be assigned',
+            headOfDeptId: null,
             description: `Imported: ${originalName}`,
             auditGroup: 'Group A'
           });
@@ -1114,13 +1114,14 @@ const App: React.FC = () => {
         setDepartments([]);
         setLocations([]);
         setSchedules([]);
+        setCrossAuditPermissions([]);
 
         // Refresh users to only keep the current user
         const updatedUsers = await gateway.getUsers();
         setUsers(updatedUsers);
-
-        // Update current user's department to null in state
-        setCurrentUser(prev => ({ ...prev, departmentId: undefined }));
+        
+        // Update current user's department to null in state if it's currently set
+        setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
 
         setNotifications(prev => [{
           id: `clear-dept-${Date.now()}`,
@@ -1221,7 +1222,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateUserStatus = async (id: string, status: 'Active' | 'Inactive' | 'Suspended') => {
+  const handleUpdateUserStatus = async (id: string, status: 'Active' | 'Inactive' | 'Suspended' | 'Pending') => {
     try {
       await gateway.updateUser(id, { status });
       setUsers(await gateway.getUsers());
@@ -1414,6 +1415,7 @@ const App: React.FC = () => {
                 onDeleteAudit={handleDeleteAudit}
                 crossAuditPermissions={crossAuditPermissions}
                 auditPhases={auditPhases}
+                maxAssetsPerDay={maxAssetsPerDay}
               />
             </div>
           )}
@@ -1447,6 +1449,7 @@ const App: React.FC = () => {
             <LocationManagement
               locations={visibleLocations}
               departments={visibleDepartments}
+              users={users}
               userRoles={currentUser.roles}
               userDeptId={currentUser.departmentId}
               onAdd={handleAddLoc}
