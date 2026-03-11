@@ -6,11 +6,12 @@ import { Mail, CheckCircle2, User as UserIcon, Phone, Info, Loader2, Award, Aler
 interface UserProfileProps {
   user: User;
   departments: Department[];
-  onUpdate: (id: string, data: Partial<User>) => void;
+  onUpdate: (id: string, data: Partial<User>) => Promise<void> | void;
 }
 
 export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onUpdate }) => {
   const [formData, setFormData] = useState({
+    id: user.id,
     name: user.name,
     contactNumber: user.contactNumber || '',
     departmentId: user.departmentId || '',
@@ -19,9 +20,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!/^\d{4}$/.test(formData.id)) {
+      alert("Staff ID must be exactly 4 digits.");
+      return;
+    }
+
     if (formData.pin && !/^\d{4}$/.test(formData.pin)) {
       alert("PIN must be exactly 4 digits.");
       return;
@@ -29,17 +35,24 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
 
     setIsSaving(true);
     
-    // Simulate API delay
-    setTimeout(() => {
+    try {
       const updates: Partial<User> = { ...formData };
       if (!updates.pin) delete updates.pin; // Don't overwrite if empty
       
-      onUpdate(user.id, updates);
-      setIsSaving(false);
+      if (user.status === 'Pending') {
+        updates.status = 'Active';
+      }
+      
+      await onUpdate(user.id, updates);
+      
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       setFormData(prev => ({ ...prev, pin: '' })); // Clear PIN field after save
-    }, 600);
+    } catch (e) {
+      // Error is handled by App.tsx showError, we just stop the saving state here
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleRenew = () => {
@@ -94,6 +107,22 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
             <div className="lg:col-span-2">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Staff ID (4 Digits)</label>
+                    <div className="relative group">
+                      <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
+                      <input 
+                        required
+                        type="text"
+                        maxLength={4}
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+                        placeholder="e.g. 1001"
+                        value={formData.id}
+                        onChange={e => setFormData({ ...formData, id: e.target.value.toUpperCase() })}
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Official Display Name</label>
                     <div className="relative group">

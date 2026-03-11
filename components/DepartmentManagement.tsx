@@ -1,12 +1,13 @@
 
 import React, { useState, useRef } from 'react';
 import Papa from 'papaparse';
-import { Department, Location } from '../types';
+import { Department, Location, User } from '../types';
 import { FileSpreadsheet, Plus, Layers, UserRound, Boxes, Pencil, Trash2 } from 'lucide-react';
+import { DepartmentModal } from './DepartmentModal';
 
 interface DepartmentManagementProps {
   departments: Department[];
-  locations: Location[];
+  users: User[];
   onAdd: (dept: Omit<Department, 'id'>) => void;
   onBulkAdd: (depts: Omit<Department, 'id'>[]) => void;
   onUpdate: (id: string, dept: Partial<Department>) => void;
@@ -14,36 +15,29 @@ interface DepartmentManagementProps {
   isAdmin?: boolean;
 }
 
-export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ departments, locations, onAdd, onBulkAdd, onUpdate, onDelete, isAdmin = true }) => {
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ name: '', abbr: '', headOfDeptId: null as string | null, description: '', totalAssets: 0 });
+export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ departments, locations, users, onAdd, onBulkAdd, onUpdate, onDelete, isAdmin = true }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingDept, setEditingDept] = useState<Department | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- HANDLERS ---
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingId) {
-      onUpdate(editingId, formData);
-      setEditingId(null);
+  const handleSave = (data: Omit<Department, 'id'> | Partial<Department>) => {
+    if (editingDept) {
+      onUpdate(editingDept.id, data as Partial<Department>);
     } else {
-      onAdd(formData);
-      setIsAdding(false);
+      onAdd(data as Omit<Department, 'id'>);
     }
-    setFormData({ name: '', abbr: '', headOfDeptId: null, description: '', totalAssets: 0 });
   };
 
   const startEdit = (dept: Department) => {
-    setEditingId(dept.id);
-    setFormData({ 
-      name: dept.name, 
-      abbr: dept.abbr || '', 
-      headOfDeptId: dept.headOfDeptId, 
-      description: dept.description,
-      totalAssets: dept.totalAssets || 0
-    });
-    setIsAdding(true);
+    setEditingDept(dept);
+    setIsModalOpen(true);
+  };
+
+  const startAdd = () => {
+    setEditingDept(null);
+    setIsModalOpen(true);
   };
 
   // Helper for colors
@@ -67,46 +61,25 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ depa
           <p className="text-sm text-slate-500">Manage base department data. Grouping and pairing is handled in System Settings.</p>
         </div>
         
-        {!isAdding && isAdmin && (
+        {isAdmin && (
           <div className="flex gap-2 w-full md:w-auto">
-            <button onClick={() => { setIsAdding(true); setEditingId(null); setFormData({ name: '', abbr: '', headOfDeptId: null, description: '', totalAssets: 0 }); }} className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
-              <Plus className="w-4 h-4 mr-2 inline-block" />New Dept
+            <button onClick={startAdd} className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2">
+              <Plus className="w-4 h-4" />New Dept
             </button>
           </div>
         )}
       </div>
 
-      {/* FORM */}
-      {isAdding && (
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-3xl border border-blue-100 shadow-sm animate-in fade-in slide-in-from-top-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Department Name</label>
-              <input required placeholder="e.g. Biological Sciences" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Abbreviation</label>
-              <input required placeholder="e.g. BIOS" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.abbr} onChange={e => setFormData({ ...formData, abbr: e.target.value.toUpperCase() })} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Head of Department (Optional)</label>
-              <input placeholder="Name of Dean/Head" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.headOfDeptId || ''} onChange={e => setFormData({ ...formData, headOfDeptId: e.target.value || null })} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Total Assets</label>
-              <input required type="number" min="0" placeholder="e.g. 450" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" value={formData.totalAssets} onChange={e => setFormData({ ...formData, totalAssets: parseInt(e.target.value) || 0 })} />
-            </div>
-          </div>
-          <div className="space-y-1 mb-6">
-            <label className="text-[10px] font-black uppercase text-slate-400">Description</label>
-            <textarea className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none h-20 resize-none" value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/10 hover:bg-blue-700 transition-colors">{editingId ? 'Update' : 'Save'} Department</button>
-            <button type="button" onClick={() => setIsAdding(false)} className="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200 transition-colors">Cancel</button>
-          </div>
-        </form>
-      )}
+      {/* MODAL */}
+      <DepartmentModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSave}
+        initialData={editingDept}
+        users={users}
+        isAdmin={isAdmin}
+      />
+
 
       {/* LIST */}
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">

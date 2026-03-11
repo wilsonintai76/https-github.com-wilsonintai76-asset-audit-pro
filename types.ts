@@ -102,3 +102,19 @@ export interface KPITier {
   // Key is phase.id, Value is percentage target (0-100)
   targets: Record<string, number>;
 }
+
+export interface DepartmentMapping {
+  id: string;
+  sourceName: string;
+  targetDepartmentId: string;
+}
+
+export interface SystemActivity {
+  id: string;
+  type: 'SCHEDULE_DATE' | 'AUDITOR_ASSIGNED' | 'LOCATION_CREATED' | 'AUDIT_COMPLETED' | 'ADMIN_RESET';
+  userId: string | null;
+  auditId?: string;
+  message: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}

@@ -33,6 +33,8 @@ DROP TABLE IF EXISTS users        CASCADE;
 DROP TABLE IF EXISTS departments  CASCADE;
 DROP TABLE IF EXISTS audit_groups CASCADE;
 DROP TABLE IF EXISTS audit_phases CASCADE;
+DROP TABLE IF EXISTS system_activities CASCADE;
+DROP TABLE IF EXISTS department_mappings CASCADE;
 
 -- =============================================================
 -- 0. AUDIT GROUPS
@@ -202,6 +204,32 @@ CREATE TABLE kpi_tiers (
 );
 
 -- =============================================================
+-- 8. DEPARTMENT MAPPINGS
+--    Used to map names from imported CSVs to official department IDs
+-- =============================================================
+CREATE TABLE department_mappings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_name TEXT NOT NULL UNIQUE,
+  target_department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- =============================================================
+-- 9. SYSTEM ACTIVITIES
+--    Tracks major system events (Scheduling, Assignments, etc.)
+-- =============================================================
+CREATE TABLE system_activities (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        TEXT NOT NULL,
+  user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+  audit_id    UUID REFERENCES audits(id) ON DELETE CASCADE,
+  message     TEXT NOT NULL,
+  metadata    JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- =============================================================
 -- ROW LEVEL SECURITY
 -- =============================================================
 ALTER TABLE audit_groups ENABLE ROW LEVEL SECURITY;
@@ -212,6 +240,8 @@ ALTER TABLE locations    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audits       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cross_audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kpi_tiers    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE department_mappings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_activities   ENABLE ROW LEVEL SECURITY;
 
 -- Public access policies (replace with role-based policies in production)
 CREATE POLICY "Public Access" ON audit_groups FOR ALL USING (true) WITH CHECK (true);
@@ -222,6 +252,8 @@ CREATE POLICY "Public Access" ON locations    FOR ALL USING (true) WITH CHECK (t
 CREATE POLICY "Public Access" ON audits       FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON cross_audits FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON kpi_tiers    FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON department_mappings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON system_activities   FOR ALL USING (true) WITH CHECK (true);
 
 -- =============================================================
 -- RPC FUNCTIONS FOR COMPLEX OPERATIONS
@@ -285,14 +317,34 @@ BEGIN
   END IF;
   
   -- 3. Remove structural data
+  DELETE FROM department_mappings WHERE true;
   DELETE FROM departments WHERE true;
   -- Note: audit_groups and audit_phases are NOT cleared as they are system configuration
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =============================================================
--- SEED DATA – Initial Admin User
+-- SEED DATA – System Infrastructure & Admin
 -- =============================================================
+
+-- 1. Create a dedicated System Department for Admins
+INSERT INTO departments (
+  id,
+  name,
+  abbr,
+  description,
+  audit_group
+) VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  'SYSTEM MANAGEMENT',
+  'SYSTEM',
+  'Dedicated department for application administrators and system management.',
+  'Group A'
+) ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  abbr = EXCLUDED.abbr;
+
+-- 2. Create the SuperAdmin User
 INSERT INTO users (
   id,
   name,
@@ -302,16 +354,18 @@ INSERT INTO users (
   status,
   is_verified,
   designation,
+  department_id,
   dashboard_config
 ) VALUES (
-  '1891',
-  'Wilson Intai',
-  'wilsonintai76@gmail.com',
-  '1234',
+  '0000',
+  'SuperAdmin',
+  'admin@asset-audit.pro',
+  '9999',
   ARRAY['Admin'],
   'Active',
   true,
   'Head Of Department',
+  '00000000-0000-0000-0000-000000000000',
   '{"showStats":true,"showTrends":true,"showUpcoming":true,"showCertification":true,"showDeptDistribution":true}'
 )
 ON CONFLICT (id) DO UPDATE SET
@@ -321,4 +375,11 @@ ON CONFLICT (id) DO UPDATE SET
   pin         = EXCLUDED.pin,
   status      = EXCLUDED.status,
   designation = EXCLUDED.designation,
+  department_id = EXCLUDED.department_id,
   is_verified = EXCLUDED.is_verified;
+
+-- 3. Link Department Head
+UPDATE departments 
+SET head_of_dept_id = '0000'
+WHERE id = '00000000-0000-0000-0000-000000000000';
+

@@ -293,89 +293,126 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       )}
 
       {isFormOpen && (
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-3xl border border-blue-100 shadow-sm animate-in fade-in slide-in-from-top-2 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
-             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Staff ID</label>
-              <input 
-                required 
-                disabled={!!editingId && !editingId.startsWith('T-')} // Only allow editing if it's a temporary ID
-                placeholder="e.g. 1001"
-                className={`w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold ${!!editingId && !editingId.startsWith('T-') ? 'opacity-60 cursor-not-allowed' : ''}`}
-                value={formData.staffId} 
-                onChange={e => {
-                    // Allow T-xxxx or digits
-                    const val = e.target.value;
-                    if (val.startsWith('T-')) {
-                      setFormData({ ...formData, staffId: val });
-                    } else {
-                      const digits = val.replace(/\D/g, '').slice(0,4);
-                      setFormData({ ...formData, staffId: digits });
-                    }
-                }} 
-              />
-              {editingId?.startsWith('T-') && (
-                <p className="text-[9px] text-amber-600 font-bold mt-1">Please update temporary ID to a real 4-digit Staff ID.</p>
-              )}
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[32px] w-full max-w-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="bg-blue-600 p-6 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                  <UserIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">{editingId ? 'Edit Team Member' : 'New Member'}</h3>
+                  <p className="text-blue-100 text-xs mt-0.5">Manage institutional credentials and access levels.</p>
+                </div>
+              </div>
+              <button 
+                onClick={resetForm}
+                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 transition-all active:scale-95 text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Full Name</label>
-              <input required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+            
+            <div className="p-6 overflow-y-auto">
+              <form id="member-form" onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Staff ID</label>
+                    <input 
+                      required 
+                      disabled={!!editingId && !editingId.startsWith('T-')} 
+                      placeholder="e.g. 1001"
+                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold ${!!editingId && !editingId.startsWith('T-') ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      value={formData.staffId} 
+                      onChange={e => {
+                          const val = e.target.value;
+                          if (val.startsWith('T-')) {
+                            setFormData({ ...formData, staffId: val });
+                          } else {
+                            const digits = val.replace(/\D/g, '').slice(0,4);
+                            setFormData({ ...formData, staffId: digits });
+                          }
+                      }} 
+                    />
+                    {editingId?.startsWith('T-') && (
+                      <p className="text-[9px] text-amber-600 font-bold mt-1">Please update temporary ID to a real 4-digit Staff ID.</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Full Name</label>
+                    <input required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Email</label>
+                    <input required type="email" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Department</label>
+                    <select required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.departmentId} onChange={e => setFormData({ ...formData, departmentId: e.target.value })}>
+                      <option value="">Select Dept</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Designation</label>
+                    <select required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.designation} onChange={e => setFormData({ ...formData, designation: e.target.value })}>
+                      <option value="">Select Designation</option>
+                      <option value="Head Of Department">Head Of Department</option>
+                      <option value="Coordinator">Coordinator</option>
+                      <option value="Supervisor">Supervisor</option>
+                      <option value="Lecturer">Lecturer</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Role Level (RBAC)</label>
+                    <select required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}>
+                      <option value="Guest">Guest (Viewer)</option>
+                      <option value="Auditor">Auditor</option>
+                      <option value="Staff">Staff</option>
+                      <option value="Supervisor">Supervisor</option>
+                      <option value="Coordinator">Coordinator</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Contact</label>
+                    <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-slate-400">PIN (4 Digits)</label>
+                    <input 
+                      type="password" 
+                      maxLength={4}
+                      pattern="\d{4}"
+                      placeholder={editingId ? "Leave blank to keep current" : "e.g. 1234"}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono" 
+                      value={formData.pin} 
+                      onChange={e => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '').slice(0,4) })} 
+                    />
+                  </div>
+                </div>
+              </form>
             </div>
-            <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Email</label>
-              <input required type="email" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
-            </div>
-            <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Department</label>
-              <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.departmentId} onChange={e => setFormData({ ...formData, departmentId: e.target.value })}>
-                <option value="">Select Dept</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Designation</label>
-              <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.designation} onChange={e => setFormData({ ...formData, designation: e.target.value })}>
-                <option value="">Select Designation</option>
-                <option value="Head Of Department">Head Of Department</option>
-                <option value="Coordinator">Coordinator</option>
-                <option value="Supervisor">Supervisor</option>
-                <option value="Lecturer">Lecturer</option>
-              </select>
-            </div>
-            <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Role Level (RBAC)</label>
-              <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}>
-                <option value="Guest">Guest (Viewer)</option>
-                <option value="Auditor">Auditor</option>
-                <option value="Staff">Staff</option>
-                <option value="Supervisor">Supervisor</option>
-                <option value="Coordinator">Coordinator</option>
-                <option value="Admin">Admin</option>
-              </select>
-            </div>
-            <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Contact</label>
-              <input className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
-            </div>
-            <div className="space-y-1 lg:col-span-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">PIN (4 Digits)</label>
-              <input 
-                type="password" 
-                maxLength={4}
-                pattern="\d{4}"
-                placeholder={editingId ? "Leave blank to keep current" : "e.g. 1234"}
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono" 
-                value={formData.pin} 
-                onChange={e => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '').slice(0,4) })} 
-              />
+
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3 justify-end items-center">
+              <button 
+                type="button" 
+                onClick={resetForm} 
+                className="px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                form="member-form"
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all text-center"
+              >
+                {editingId ? 'Update' : 'Save'} Member
+              </button>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold">{editingId ? 'Update' : 'Save'} Member</button>
-            <button type="button" onClick={resetForm} className="px-6 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold">Cancel</button>
-          </div>
-        </form>
+        </div>
       )}
 
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">

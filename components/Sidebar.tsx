@@ -25,6 +25,7 @@ interface SidebarProps {
   onLogout: () => void;
   userRoles: UserRole[];
   isCertified?: boolean;
+  userStatus?: string;
 }
 
 interface NavItemProps {
@@ -48,20 +49,21 @@ const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick })
   </button>
 );
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, onViewChange, onLogout, userRoles, isCertified }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, onViewChange, onLogout, userRoles, isCertified, userStatus }) => {
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
   const isStaff = userRoles.includes('Staff');
+  const isPending = userStatus === 'Pending';
 
   // Show Auditor Dashboard if user is certified, regardless of role (except Guest maybe, but Guests usually aren't certified)
-  const showAuditorDashboard = isCertified;
+  const showAuditorDashboard = !isPending && isCertified;
   
-  const canAccessSchedule = isAdmin || isCoordinator || isSupervisor || isStaff;
-  const canAccessLocations = isAdmin;
-  const canAccessTeam = isAdmin;
-  const canAccessDepartments = isAdmin;
-  const canAccessAdminSettings = isAdmin;
+  const canAccessSchedule = !isPending && (isAdmin || isCoordinator || isSupervisor || isStaff);
+  const canAccessLocations = !isPending && isAdmin;
+  const canAccessTeam = !isPending && isAdmin;
+  const canAccessDepartments = !isPending && isAdmin;
+  const canAccessAdminSettings = !isPending && isAdmin;
 
   return (
     <>
@@ -96,12 +98,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
 
           <nav className="flex-grow space-y-2">
             <div className="px-2 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Main Menu</div>
-            <NavItem 
-              icon={PieChart} 
-              label="Overview" 
-              active={activeView === 'overview'} 
-              onClick={() => { onViewChange('overview'); onClose(); }} 
-            />
+            
+            {isPending && (
+              <div className="px-4 py-3 bg-amber-50 rounded-xl border border-amber-100 text-amber-800 text-xs mb-4">
+                <span className="font-bold flex items-center gap-2 mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  Profile Incomplete
+                </span>
+                Please update your profile information.
+              </div>
+            )}
+            
+            {!isPending && (
+              <NavItem 
+                icon={PieChart} 
+                label="Overview" 
+                active={activeView === 'overview'} 
+                onClick={() => { onViewChange('overview'); onClose(); }} 
+              />
+            )}
             
             {showAuditorDashboard && (
               <NavItem 

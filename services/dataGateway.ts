@@ -1,5 +1,5 @@
 
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, DepartmentMapping, SystemActivity } from '../types';
 import { supabase } from './supabase';
 import { localDB } from './localDB';
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
@@ -562,6 +562,73 @@ class DataGateway {
   async deleteKPITier(id: string) {
     if (supabase) {
       const { error } = await supabase.from('kpi_tiers').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  // --- DEPARTMENT MAPPINGS ---
+  async getDepartmentMappings(): Promise<DepartmentMapping[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('department_mappings').select('*');
+      if (error) throw error;
+      return (data || []).map((m: any) => ({
+        id: m.id,
+        sourceName: m.source_name,
+        targetDepartmentId: m.target_department_id,
+      })) as DepartmentMapping[];
+    }
+    return [];
+  }
+
+  async addDepartmentMapping(mapping: Omit<DepartmentMapping, 'id'>) {
+    if (supabase) {
+      const payload: any = {
+        source_name: mapping.sourceName,
+        target_department_id: mapping.targetDepartmentId,
+      };
+      const { error } = await supabase.from('department_mappings').insert([payload]);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async deleteDepartmentMapping(id: string) {
+    if (supabase) {
+      const { error } = await supabase.from('department_mappings').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  // --- SYSTEM ACTIVITIES ---
+  async getActivities(): Promise<SystemActivity[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('system_activities').select('*').order('created_at', { ascending: false }).limit(50);
+      if (error) throw error;
+      return (data || []).map((a: any) => ({
+        ...a,
+        userId: a.user_id,
+        auditId: a.audit_id,
+        timestamp: a.created_at
+      })) as SystemActivity[];
+    }
+    return [];
+  }
+
+  async addActivity(activity: Omit<SystemActivity, 'id' | 'timestamp'>) {
+    if (supabase) {
+      const payload: any = {
+        type: activity.type,
+        user_id: activity.userId,
+        audit_id: activity.auditId,
+        message: activity.message,
+        metadata: activity.metadata
+      };
+      const { error } = await supabase.from('system_activities').insert([payload]);
       if (error) throw error;
       return;
     }

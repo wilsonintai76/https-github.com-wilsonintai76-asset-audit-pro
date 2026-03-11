@@ -26,6 +26,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
+import { WorkflowTracker } from './WorkflowTracker';
 
 interface AuditTableProps {
   schedules: AuditSchedule[];
@@ -542,6 +543,9 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             {locationLevel}
                           </div>
                         )}
+                        <div className="mt-2">
+                           <WorkflowTracker audit={audit} />
+                        </div>
                         <span className="inline-flex w-fit px-2.5 py-1 bg-slate-100 text-slate-600 text-[9px] font-black uppercase rounded-lg border border-slate-200 mt-1 tracking-widest">
                           {allDepartments.find(d => d.id === audit.departmentId)?.name || audit.departmentId}
                         </span>

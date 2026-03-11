@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { gateway } from './services/dataGateway';
 import { ItemNotFoundError } from './services/localDB';
-import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier } from './types';
+import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, DepartmentMapping, SystemActivity } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -16,7 +16,8 @@ import { LocationManagement } from './components/LocationManagement';
 import { UserProfile } from './components/UserProfile';
 import { LandingPage } from './components/LandingPage';
 import { KnowledgeBase } from './components/KnowledgeBase';
-import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle } from 'lucide-react';
+import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
+import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X } from 'lucide-react';
 
 const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   showStats: true,
@@ -42,6 +43,9 @@ const App: React.FC = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [auditPhases, setAuditPhases] = useState<AuditPhase[]>([]);
   const [kpiTiers, setKpiTiers] = useState<KPITier[]>([]);
+  const [departmentMappings, setDepartmentMappings] = useState<DepartmentMapping[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [activities, setActivities] = useState<SystemActivity[]>([]);
 
   // UI State
   const [selectedDept, setSelectedDept] = useState<string>('All');
@@ -65,18 +69,50 @@ const App: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [connectionErrorMessage, setConnectionErrorMessage] = useState<string | null>(null);
 
+  const showToast = useCallback((message: string, type: ToastType = 'success') => {
+    const id = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, { id, type, message }]);
+  }, []);
+
+  const closeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const logActivity = useCallback(async (type: SystemActivity['type'], message: string, auditId?: string, metadata?: any) => {
+    if (!currentUser) return;
+    try {
+      const activity = {
+        type,
+        message,
+        userId: currentUser.id,
+        auditId,
+        metadata
+      };
+      await gateway.addActivity(activity);
+      // Refresh activities
+      const updated = await gateway.getActivities();
+      setActivities(updated);
+    } catch (e) {
+      console.error("Failed to log activity:", e);
+    }
+  }, [currentUser]);
+
   // --- INITIAL DATA LOAD ---
   const loadAllData = useCallback(async () => {
     try {
-      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData] = await Promise.all([
+      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, mappingsData, activitiesData] = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
         gateway.getDepartments(),
         gateway.getLocations(),
         gateway.getPermissions(),
         gateway.getAuditPhases(),
-        gateway.getKPITiers()
+        gateway.getKPITiers(),
+        gateway.getDepartmentMappings(),
+        gateway.getActivities()
       ]);
+
+      setActivities(activitiesData);
 
       // Ensure 3 phases exist
       let finalPhases = phasesData;
@@ -128,6 +164,7 @@ const App: React.FC = () => {
       setCrossAuditPermissions(permsData);
       setAuditPhases(finalPhases);
       setKpiTiers(finalKpiTiers);
+      setDepartmentMappings(mappingsData);
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
       setConnectionErrorMessage("Failed to load application data. Please refresh.");
@@ -189,11 +226,13 @@ const App: React.FC = () => {
     setCurrentUser(finalUser);
 
     // Default view logic
-    // If user is NOT Admin, but is certified, default to auditor dashboard
     const isCertified = finalUser.certificationExpiry && new Date(finalUser.certificationExpiry) > new Date();
     const isAdmin = finalUser.roles.includes('Admin');
 
-    if (!isAdmin && isCertified) {
+    if (finalUser.status === 'Pending') {
+      setViewState('app');
+      setActiveView('profile');
+    } else if (!isAdmin && isCertified) {
       setViewState('app');
       setActiveView('auditor-dashboard');
     } else {
@@ -286,7 +325,9 @@ const App: React.FC = () => {
       const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
       const isAdmin = user.roles.includes('Admin');
 
-      if (!isAdmin && isCertified && activeView === 'overview') {
+      if (user.status === 'Pending') {
+        setActiveView('profile');
+      } else if (!isAdmin && isCertified && activeView === 'overview') {
         setActiveView('auditor-dashboard');
       }
 
@@ -337,6 +378,8 @@ const App: React.FC = () => {
     return !!(audit.date && (audit.auditor1Id || audit.auditor2Id));
   };
 
+  const isSystemLocked = useMemo(() => schedules.some(isAuditLocked), [schedules]);
+
   const handleAddAudit = async (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1Id' | 'auditor2Id'>) => {
     try {
       // Auto-assign phase based on department assets
@@ -350,6 +393,7 @@ const App: React.FC = () => {
         auditor2Id: null
       });
       setSchedules(prev => [...prev, newAudit]);
+      showToast('Audit added successfully');
       return newAudit;
     } catch (e) {
       showError(e, 'Failed to Add Audit');
@@ -488,6 +532,7 @@ const App: React.FC = () => {
         type: 'success',
         read: false
       }, ...prev]);
+      showToast('Audits imported successfully');
     } catch (e) {
       showError(e, 'Bulk Import Failed');
     }
@@ -498,6 +543,7 @@ const App: React.FC = () => {
       try {
         await gateway.deleteAudit(id);
         setSchedules(prev => prev.filter(s => s.id !== id));
+        showToast('Audit deleted successfully');
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -514,6 +560,13 @@ const App: React.FC = () => {
       const updates: Partial<AuditSchedule> = slot === 1 ? { auditor1Id: userId } : { auditor2Id: userId };
       await gateway.updateAudit(id, updates);
       setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+      
+      const auditor = users.find(u => u.id === userId);
+      const audit = schedules.find(s => s.id === id);
+      const loc = locations.find(l => l.id === audit?.locationId);
+      if (auditor && loc) {
+        logActivity('AUDITOR_ASSIGNED', `${auditor.name} assigned to audit at ${loc.name}`, id);
+      }
     } catch (e) {
       showError(e, 'Assignment Failed');
     }
@@ -546,6 +599,12 @@ const App: React.FC = () => {
     try {
       await gateway.updateAudit(id, { date });
       setSchedules(prev => prev.map(s => s.id === id ? { ...s, date } : s));
+      
+      const audit = schedules.find(s => s.id === id);
+      const loc = locations.find(l => l.id === audit?.locationId);
+      if (loc) {
+        logActivity('SCHEDULE_DATE', `Audit date set to ${date} for ${loc.name}`, id);
+      }
     } catch (e) {
       showError(e, 'Date Update Failed');
     }
@@ -566,7 +625,11 @@ const App: React.FC = () => {
   const handleAddLoc = async (loc: Omit<Location, 'id'>) => {
     try {
       const newLoc = await gateway.addLocation(loc);
-      setLocations(await gateway.getLocations());
+      const updatedLocs = await gateway.getLocations();
+      setLocations(updatedLocs);
+      
+      logActivity('LOCATION_CREATED', `New location created: ${loc.name} (${loc.departmentId})`);
+      
       setNotifications(prev => [{
         id: `auto-${Date.now()}`,
         title: 'Auto-Schedule Created',
@@ -575,6 +638,7 @@ const App: React.FC = () => {
         type: 'success',
         read: false
       }, ...prev]);
+      showToast('Location added successfully');
     } catch (e) {
       showError(e, 'Failed to Add Location');
     }
@@ -790,6 +854,7 @@ const App: React.FC = () => {
           }
         }
       }
+      showToast('Location updated successfully');
     } catch (e) {
       showError(e, 'Location Update Failed');
     }
@@ -812,6 +877,7 @@ const App: React.FC = () => {
       try {
         await gateway.deleteLocation(id);
         setLocations(await gateway.getLocations());
+        showToast('Location deleted successfully');
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -838,8 +904,38 @@ const App: React.FC = () => {
 
   const handleAddDept = async (dept: Omit<Department, 'id'>) => {
     try {
-      await gateway.addDepartment(dept);
+      let finalHeadId = dept.headOfDeptId;
+      if (finalHeadId && finalHeadId.trim() !== '') {
+        const existingUser = users.find(u => u.id === finalHeadId || u.name.toLowerCase() === finalHeadId!.toLowerCase());
+        if (existingUser) {
+          finalHeadId = existingUser.id;
+        } else {
+          // Create temp user
+          const tempId = Math.floor(1000 + Math.random() * 9000).toString();
+          const tempStaffId = `T-${tempId}`;
+          const tempUser: User = {
+            id: tempStaffId,
+            name: finalHeadId,
+            email: `temp${tempId}@asset-audit.pro`,
+            roles: ['Staff'],
+            designation: 'Head Of Department',
+            status: 'Pending',
+            isVerified: false,
+            pin: tempId
+          };
+          await gateway.addUser(tempUser);
+          finalHeadId = tempStaffId;
+        }
+      } else {
+        finalHeadId = null;
+      }
+      
+      await gateway.addDepartment({ ...dept, headOfDeptId: finalHeadId });
       setDepartments(await gateway.getDepartments());
+      showToast('Department added successfully');
+      if (finalHeadId && finalHeadId !== dept.headOfDeptId) {
+        setUsers(await gateway.getUsers());
+      }
     } catch (e) {
       showError(e, 'Failed to Add Department');
     }
@@ -847,8 +943,40 @@ const App: React.FC = () => {
 
   const handleBulkAddDepts = async (newDepts: Omit<Department, 'id'>[]) => {
     try {
-      for (const d of newDepts) await gateway.addDepartment(d);
+      let usersChanged = false;
+      let currentUsers = [...users];
+      
+      for (const d of newDepts) {
+        let finalHeadId = d.headOfDeptId;
+        if (finalHeadId && finalHeadId.trim() !== '') {
+          const existingUser = currentUsers.find(u => u.id === finalHeadId || u.name.toLowerCase() === finalHeadId!.toLowerCase());
+          if (existingUser) {
+            finalHeadId = existingUser.id;
+          } else {
+            const tempId = Math.floor(1000 + Math.random() * 9000).toString();
+            const tempStaffId = `T-${tempId}`;
+            const tempUser: User = {
+              id: tempStaffId,
+              name: finalHeadId,
+              email: `temp${tempId}@asset-audit.pro`,
+              roles: ['Staff'],
+              designation: 'Head Of Department',
+              status: 'Pending',
+              isVerified: false,
+              pin: tempId
+            };
+            await gateway.addUser(tempUser);
+            currentUsers.push(tempUser);
+            finalHeadId = tempStaffId;
+            usersChanged = true;
+          }
+        } else {
+          finalHeadId = null;
+        }
+        await gateway.addDepartment({ ...d, headOfDeptId: finalHeadId });
+      }
       setDepartments(await gateway.getDepartments());
+      if (usersChanged) setUsers(await gateway.getUsers());
     } catch (e) {
       showError(e, 'Bulk Import Failed');
     }
@@ -858,6 +986,7 @@ const App: React.FC = () => {
     try {
       await gateway.updateDepartment(id, updates);
       setDepartments(await gateway.getDepartments());
+      showToast('Department updated successfully');
     } catch (e) {
       showError(e, 'Department Update Failed');
     }
@@ -896,6 +1025,7 @@ const App: React.FC = () => {
       try {
         await gateway.deleteDepartment(id);
         setDepartments(await gateway.getDepartments());
+        showToast('Department deleted successfully');
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -923,6 +1053,7 @@ const App: React.FC = () => {
     try {
       await gateway.addPermission({ auditorDeptId: auditorDept, targetDeptId: targetDept, isMutual, isActive: true });
       setCrossAuditPermissions(await gateway.getPermissions());
+      showToast('Permission added successfully');
     } catch (e) {
       showError(e, 'Failed to Add Permission');
     }
@@ -932,6 +1063,7 @@ const App: React.FC = () => {
     try {
       await gateway.deletePermission(id);
       setCrossAuditPermissions(await gateway.getPermissions());
+      showToast('Permission removed successfully');
     } catch (e) {
       showError(e, 'Permission Removal Failed');
     }
@@ -950,6 +1082,7 @@ const App: React.FC = () => {
     try {
       await gateway.updateAuditPhase(id, updates);
       setAuditPhases(await gateway.getAuditPhases());
+      showToast('Phase updated successfully');
     } catch (e) {
       showError(e, 'Phase Update Failed');
     }
@@ -959,6 +1092,7 @@ const App: React.FC = () => {
     try {
       await gateway.addAuditPhase(phase);
       setAuditPhases(await gateway.getAuditPhases());
+      showToast('Phase added successfully');
     } catch (e) {
       showError(e, 'Failed to Add Phase');
     }
@@ -1042,6 +1176,7 @@ const App: React.FC = () => {
       try {
         await gateway.deleteAuditPhase(id);
         setAuditPhases(await gateway.getAuditPhases());
+        showToast('Phase deleted successfully');
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -1057,6 +1192,7 @@ const App: React.FC = () => {
     try {
       await gateway.addKPITier(tier);
       setKpiTiers(await gateway.getKPITiers());
+      showToast('KPI Tier added successfully');
     } catch (e) {
       showError(e, 'Failed to Add KPI Tier');
     }
@@ -1066,6 +1202,7 @@ const App: React.FC = () => {
     try {
       await gateway.updateKPITier(id, updates);
       setKpiTiers(await gateway.getKPITiers());
+      showToast('KPI Tier updated successfully');
     } catch (e) {
       showError(e, 'KPI Tier Update Failed');
     }
@@ -1076,6 +1213,7 @@ const App: React.FC = () => {
       try {
         await gateway.deleteKPITier(id);
         setKpiTiers(await gateway.getKPITiers());
+        showToast('KPI Tier deleted successfully');
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -1087,34 +1225,36 @@ const App: React.FC = () => {
     });
   };
 
-  const handleClearAllLocations = async () => {
-    customConfirm("Clear All Locations", "Are you sure you want to delete all locations and their associated audits? This action cannot be undone.", async () => {
+  const handleResetLocations = async () => {
+    customConfirm("Reset Locations & Audits", "Are you sure you want to delete all locations and their associated audit schedules? This will NOT delete departments or users. Proceed?", async () => {
       try {
         await gateway.clearAllLocations();
         setLocations([]);
         setSchedules([]);
         setNotifications(prev => [{
-          id: `clear-loc-${Date.now()}`,
-          title: 'Locations Cleared',
-          message: 'All locations and associated audits have been deleted.',
+          id: `reset-loc-${Date.now()}`,
+          title: 'Locations Reset',
+          message: 'All locations and associated audit schedules have been deleted.',
           timestamp: 'Just now',
           type: 'success',
           read: false
         }, ...prev]);
+        showToast('All locations and audits reset successfully');
       } catch (e) {
-        showError(e, 'Failed to clear locations');
+        showError(e, 'Failed to reset locations');
       }
     });
   };
 
-  const handleClearAllDepartments = async () => {
-    customConfirm("Clear All Departments & Data", "Are you sure you want to delete all departments, locations, users, and audits? This action cannot be undone.", async () => {
+  const handleResetOperationalData = async () => {
+    customConfirm("Reset Operational Data", "This will delete all departments, locations, user accounts (except yours), and audit schedules. System settings like Audit Phases and KPI Tiers will be preserved. Proceed?", async () => {
       try {
         await gateway.clearAllDepartments(currentUser.id);
         setDepartments([]);
         setLocations([]);
         setSchedules([]);
         setCrossAuditPermissions([]);
+        setDepartmentMappings([]);
 
         // Refresh users to only keep the current user
         const updatedUsers = await gateway.getUsers();
@@ -1124,23 +1264,45 @@ const App: React.FC = () => {
         setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
 
         setNotifications(prev => [{
-          id: `clear-dept-${Date.now()}`,
-          title: 'System Cleared',
-          message: 'All departments and associated data have been deleted.',
+          id: `reset-ops-${Date.now()}`,
+          title: 'System Reset',
+          message: 'Operational data (Depts, Locs, Members) has been reset.',
           timestamp: 'Just now',
           type: 'success',
           read: false
         }, ...prev]);
+        showToast('Operational data reset successfully');
       } catch (e) {
-        showError(e, 'Failed to clear system data');
+        showError(e, 'Failed to reset operational data');
       }
     });
+  };
+
+  const handleAddDepartmentMapping = async (mapping: Omit<DepartmentMapping, 'id'>) => {
+    try {
+      await gateway.addDepartmentMapping(mapping);
+      setDepartmentMappings(await gateway.getDepartmentMappings());
+      showToast('Mapping added successfully');
+    } catch (e) {
+      showError(e, 'Failed to add department mapping');
+    }
+  };
+
+  const handleDeleteDepartmentMapping = async (id: string) => {
+    try {
+      await gateway.deleteDepartmentMapping(id);
+      setDepartmentMappings(await gateway.getDepartmentMappings());
+      showToast('Mapping deleted successfully');
+    } catch (e) {
+      showError(e, 'Failed to delete department mapping');
+    }
   };
 
   const handleAddMember = async (user: User) => {
     try {
       await gateway.addUser(user);
       setUsers(await gateway.getUsers());
+      showToast('Member added successfully');
     } catch (e) {
       showError(e, 'Failed to Add Member');
     }
@@ -1159,49 +1321,46 @@ const App: React.FC = () => {
     try {
       if (updates.id && updates.id !== id) {
         // ID is changing (Temp ID -> Real ID)
-        const existingUser = users.find(u => u.id === id);
-        if (!existingUser) throw new Error("User not found");
-
-        // 1. Create new user with new ID
-        const newUser = { ...existingUser, ...updates };
-        await gateway.addUser(newUser);
-
-        // 2. Update references in locations
-        const locsToUpdate = locations.filter(l => l.supervisorId === id);
-        for (const loc of locsToUpdate) {
-          await gateway.updateLocation(loc.id, { supervisorId: newUser.id });
+        const existingUserWithNewId = users.find(u => u.id === updates.id);
+        if (existingUserWithNewId) {
+          throw new Error(`The Staff ID ${updates.id} is already registered.`);
         }
-
-        // 3. Update references in audits
-        const auditsToUpdate = schedules.filter(s => s.supervisorId === id || s.auditor1Id === id || s.auditor2Id === id);
-        for (const audit of auditsToUpdate) {
-          const auditUpdates: Partial<AuditSchedule> = {};
-          if (audit.supervisorId === id) auditUpdates.supervisorId = newUser.id;
-          if (audit.auditor1Id === id) auditUpdates.auditor1Id = newUser.id;
-          if (audit.auditor2Id === id) auditUpdates.auditor2Id = newUser.id;
-          await gateway.updateAudit(audit.id, auditUpdates);
-        }
-
-        // 4. Delete old user
-        await gateway.deleteUser(id);
-
-        // 5. Refresh data
-        setUsers(await gateway.getUsers());
-        setLocations(await gateway.getLocations());
-        setSchedules(await gateway.getAudits());
-
+        
+        // Let Supabase handle the PK update and ON UPDATE CASCADE constraints natively!
+        await gateway.updateUser(id, updates);
+        
+        // Reload all data so dependencies reflect the new ID
+        await loadAllData(); 
+        
         if (currentUser?.id === id) {
-          setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
+          const freshUser = (await gateway.getUsers()).find(u => u.id === updates.id);
+          if (freshUser) {
+            localStorage.setItem('audit_pro_session', JSON.stringify(freshUser));
+            setCurrentUser(freshUser);
+            if (freshUser.status === 'Active' && activeView === 'profile') {
+              setActiveView('overview');
+            }
+          }
         }
       } else {
         await gateway.updateUser(id, updates);
         setUsers(await gateway.getUsers());
+        showToast('Profile updated successfully');
         if (currentUser?.id === id) {
-          setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
+          setCurrentUser(prev => {
+            if (!prev) return null;
+            const updated = { ...prev, ...updates };
+            localStorage.setItem('audit_pro_session', JSON.stringify(updated));
+            if (prev.status === 'Pending' && updated.status === 'Active') {
+              setActiveView('overview');
+            }
+            return updated;
+          });
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       showError(e, 'Member Update Failed');
+      throw e;
     }
   };
 
@@ -1210,6 +1369,7 @@ const App: React.FC = () => {
       try {
         await gateway.deleteUser(id);
         setUsers(await gateway.getUsers());
+        showToast('Member removed successfully');
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -1320,6 +1480,7 @@ const App: React.FC = () => {
         onLogout={handleLogout}
         userRoles={currentUser.roles}
         isCertified={currentUser.certificationExpiry && new Date(currentUser.certificationExpiry) > new Date()}
+        userStatus={currentUser.status}
       />
 
       <div className="flex-grow lg:pl-72 flex flex-col h-screen w-full">
@@ -1344,15 +1505,23 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setActiveView('knowledge-base')}
-              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${activeView === 'knowledge-base' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              title="Knowledge Base"
-            >
-              <BookOpen className="w-5 h-5" />
-            </button>
-            <NotificationCenter notifications={notifications} onMarkAsRead={() => { }} onClearAll={() => { }} />
-            <div className="h-8 w-px bg-slate-200"></div>
+            {currentUser.status !== 'Pending' && (
+              <>
+                <button
+                  onClick={() => setActiveView('knowledge-base')}
+                  className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${activeView === 'knowledge-base' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  title="Knowledge Base"
+                >
+                  <BookOpen className="w-5 h-5" />
+                </button>
+                <NotificationCenter 
+                  notifications={notifications} 
+                  onMarkAsRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))} 
+                  onClearAll={() => setNotifications([])} 
+                />
+                <div className="h-8 w-px bg-slate-200"></div>
+              </>
+            )}
             <button onClick={() => setActiveView('profile')} className="flex items-center gap-2 p-1 pr-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
               <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">{currentUser.name[0]}</div>
               <span className="text-xs font-bold text-slate-700 hidden sm:block">{currentUser.name}</span>
@@ -1377,6 +1546,7 @@ const App: React.FC = () => {
               departments={departmentsWithAssets}
               locations={locations}
               currentUser={currentUser}
+              activities={activities}
             />
           )}
           {activeView === 'auditor-dashboard' && (
@@ -1438,6 +1608,7 @@ const App: React.FC = () => {
             <DepartmentManagement
               departments={visibleDepartments}
               locations={visibleLocations}
+              users={users}
               onAdd={handleAddDept}
               onBulkAdd={handleBulkAddDepts}
               onUpdate={handleUpdateDept}
@@ -1477,14 +1648,18 @@ const App: React.FC = () => {
               onAddKPITier={handleAddKPITier}
               onUpdateKPITier={handleUpdateKPITier}
               onDeleteKPITier={handleDeleteKPITier}
-              onClearAllLocations={handleClearAllLocations}
-              onClearAllDepartments={handleClearAllDepartments}
+              onResetLocations={handleResetLocations}
+              onResetOperationalData={handleResetOperationalData}
+              isSystemLocked={isSystemLocked}
               onBulkAddLocs={handleBulkAddLocs}
               onBulkActivateStaff={handleBulkActivateStaff}
               maxAssetsPerDay={maxAssetsPerDay}
               onUpdateMaxAssetsPerDay={setMaxAssetsPerDay}
               onRebalanceSchedule={handleRebalanceSchedule}
               schedules={schedules}
+              departmentMappings={departmentMappings}
+              onAddDepartmentMapping={handleAddDepartmentMapping}
+              onDeleteDepartmentMapping={handleDeleteDepartmentMapping}
             />
           )}
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
@@ -1521,6 +1696,8 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onClose={closeToast} />
     </div>
   );
 };
