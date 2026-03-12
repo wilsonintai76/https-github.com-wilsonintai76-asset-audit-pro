@@ -1,13 +1,39 @@
 
 import React, { useMemo, useRef } from 'react';
 import Papa from 'papaparse';
+import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import { CrossAuditPermission, Department, User, AuditPhase, KPITier, UserRole, Location, AuditSchedule, DepartmentMapping } from '../types';
 import { CrossAuditManagement } from './CrossAuditManagement';
 import { AuditConstraints } from './AuditConstraints';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
 import { KPISettings } from './KPISettings';
 import { TierDistributionTable } from './TierDistributionTable';
-import { Zap, Sliders, ArrowRight, FileSpreadsheet, UserCheck, Lock, Unlock, AlertCircle } from 'lucide-react';
+import { Zap, Sliders, ArrowRight, FileSpreadsheet, UserCheck, Lock, Unlock, AlertCircle, Upload, ChevronDown, RefreshCw, CheckCircle } from 'lucide-react';
+
+const ASSET_BUILTIN_MAP: Record<string, string> = {
+  // Merged into SPPA departments
+  'unit kamsis':                                         'unit pengurusan kolej kediaman',
+  'pejabat pengarah':                                    'unit khidmat pengurusan',
+  'pejabat timbalan pengarah akademik':                  'unit khidmat pengurusan',
+  'pejabat timbalan pengarah sokongan akademik':         'unit khidmat pengurusan',
+  'unit pentadbiran':                                    'unit khidmat pengurusan',
+  'unit perolehan dan bekalan':                          'unit khidmat pengurusan',
+  'unit perakaunan dan bayaran':                         'unit khidmat pengurusan',
+  'unit pengurusan aset':                                'unit khidmat pengurusan',
+  // Name normalisation (& ↔ ko-kurikulum / dan)
+  'jabatan sukan & kokurikulum':                         'jabatan sukan ko-kurikulum dan kebudayaan',
+  'unit pengurusan kualiti':                             'unit jaminan kualiti',
+  'unit psikologi & kerjaya':                            'unit pengurusan psikologi',
+  'unit latihan & pendidikan lanjutan':                  'unit latihan dan pendidikan lanjutan',
+  'unit cisec':                                          'corporate, industrial services & employability centre',
+  'unit perhubungan & latihan industri':                 'unit perhubungan dan latihan industri',
+  'unit pembangunan instruksional & multimedia':         'unit pembangunan instruksional dan multimedia',
+  'unit pembangunan & senggaraan':                       'unit pembangunan dan senggaraan',
+  'unit r&d':                                            'unit penyelidikan, inovasi dan komersialan',
+  // Fallback aliases for renamed departments
+  'pejabat tp sokongan akademik':                        'pejabat tp sokongan akademik',
+  'pejabat tp akademik':                                 'pejabat tp akademik',
+};
 
 interface SystemSettingsProps {
   departments: Department[];
@@ -31,7 +57,8 @@ interface SystemSettingsProps {
   onResetOperationalData: () => void;
   isSystemLocked: boolean;
   onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
-  onBulkActivateStaff: (entries: { name: string; staffId: string; email: string; pin?: string }[]) => void;
+  onBulkAddDepts: (depts: Omit<Department, 'id'>[]) => void;
+  onBulkActivateStaff: (entries: { name: string; staffId: string; email: string; department?: string; designation?: string; role?: string; pin?: string }[]) => void;
   maxAssetsPerDay: number;
   onUpdateMaxAssetsPerDay: (val: number) => void;
   onRebalanceSchedule: () => Promise<void>;
@@ -39,6 +66,8 @@ interface SystemSettingsProps {
   departmentMappings: DepartmentMapping[];
   onAddDepartmentMapping: (mapping: Omit<DepartmentMapping, 'id'>) => Promise<void>;
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
+  onSyncLocationMappings: () => Promise<void>;
+  onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -63,6 +92,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onResetOperationalData,
   isSystemLocked,
   onBulkAddLocs,
+  onBulkAddDepts,
   onBulkActivateStaff,
   maxAssetsPerDay,
   onUpdateMaxAssetsPerDay,
@@ -70,14 +100,135 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   schedules,
   departmentMappings,
   onAddDepartmentMapping,
-  onDeleteDepartmentMapping
+  onDeleteDepartmentMapping,
+  onSyncLocationMappings,
+  onUpsertLocations,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const staffFileInputRef = useRef<HTMLInputElement>(null);
+  const deptFileInputRef = useRef<HTMLInputElement>(null);
+  const assetSyncRef = useRef<HTMLInputElement>(null);
   
   // Mapping Form State
   const [newMappingSource, setNewMappingSource] = React.useState('');
   const [newMappingTargetId, setNewMappingTargetId] = React.useState('');
+  const [csvSourceNames, setCsvSourceNames] = React.useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = React.useState(false);
+  const [isAssetSyncing, setIsAssetSyncing] = React.useState(false);
+  const [assetSyncStatus, setAssetSyncStatus] = React.useState<{ type: 'success' | 'error' | 'warn'; message: string; detail?: string } | null>(null);
+  const csvMappingRef = useRef<HTMLInputElement>(null);
+
+  const handleAssetSync = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !['csv', 'xlsx', 'xls'].includes(ext)) {
+      setAssetSyncStatus({ type: 'error', message: 'Please upload a .csv or .xlsx file.' });
+      if (assetSyncRef.current) assetSyncRef.current.value = '';
+      return;
+    }
+    setIsAssetSyncing(true);
+    setAssetSyncStatus(null);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const buffer = ev.target?.result as ArrayBuffer;
+        const wb = xlsxRead(buffer, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows: string[][] = xlsxUtils.sheet_to_json(ws, { header: 1, defval: '' }) as string[][];
+        if (rows.length < 2) throw new Error('File appears empty.');
+        const header = rows[0].map(h => String(h).toLowerCase().trim());
+        const labelCol = header.findIndex(h => h === 'label' || h.includes('label'));
+        const bahagianCol = header.findIndex(h => h.includes('bahagian') || h === 'department');
+        const lokasiCol = header.findIndex(h => h.includes('lokasi') || h.includes('location'));
+        if (labelCol === -1 || bahagianCol === -1)
+          throw new Error(`Could not find Label/Bahagian columns. Headers found: ${rows[0].slice(0, 6).join(', ')}`);
+        const seenLabels = new Set<string>();
+        const bahagianCounts: Record<string, number> = {};
+        // key: "lokasiName|||bahagianName" → asset count at that location
+        const locationCounts: Record<string, number> = {};
+        for (const row of rows.slice(1)) {
+          const label = String(row[labelCol] || '').trim();
+          const bahagian = String(row[bahagianCol] || '').trim();
+          if (!label || !bahagian) continue;
+          if (seenLabels.has(label)) continue;
+          seenLabels.add(label);
+          bahagianCounts[bahagian] = (bahagianCounts[bahagian] || 0) + 1;
+          if (lokasiCol !== -1) {
+            const lokasi = String(row[lokasiCol] || '').trim();
+            if (lokasi) locationCounts[`${lokasi}|||${bahagian}`] = (locationCounts[`${lokasi}|||${bahagian}`] || 0) + 1;
+          }
+        }
+        // Build dept lookup
+        const deptByNorm: Record<string, string> = {};
+        for (const d of departments) deptByNorm[d.name.trim().toLowerCase()] = d.id;
+
+        // Helper: map a Bahagian name to a dept UUID using 4-layer matching
+        const resolveBahagian = (bahagian: string): string | undefined => {
+          const bLow = bahagian.toLowerCase().trim();
+          const appMap = departmentMappings.find(m => m.sourceName.trim().toLowerCase() === bLow);
+          if (appMap) return appMap.targetDepartmentId;
+          if (deptByNorm[bLow]) return deptByNorm[bLow];
+          const sppaName = ASSET_BUILTIN_MAP[bLow];
+          if (sppaName) {
+            const id = deptByNorm[sppaName] || Object.entries(deptByNorm).find(([n]) => n.includes(sppaName.slice(0, 15)))?.[1];
+            if (id) return id;
+          }
+          const bNorm = bLow.replace(/\s*&\s*/g, ' dan ').replace(/\s+/g, ' ');
+          return Object.entries(deptByNorm).find(([n]) => n.replace(/\s*&\s*/g, ' dan ').replace(/\s+/g, ' ') === bNorm)?.[1];
+        };
+
+        // Dept totals
+        const deptTotals: Record<string, number> = {};
+        const unmatched: string[] = [];
+        for (const [bahagian, count] of Object.entries(bahagianCounts)) {
+          const deptId = resolveBahagian(bahagian);
+          if (deptId) { deptTotals[deptId] = (deptTotals[deptId] || 0) + count; }
+          else unmatched.push(`${bahagian} (${count})`);
+        }
+        if (Object.keys(deptTotals).length === 0) {
+          setAssetSyncStatus({ type: 'error', message: 'No departments matched.', detail: `Unmatched: ${unmatched.slice(0, 5).join('; ')}` });
+          return;
+        }
+        await onBulkUpdateDepartments(Object.entries(deptTotals).map(([id, total]) => ({ id, data: { totalAssets: total } })));
+
+        // Location objects — one per unique "Lokasi Terkini + Bahagian" pair
+        const locationObjects: Omit<Location, 'id'>[] = [];
+        for (const [locKey, count] of Object.entries(locationCounts)) {
+          const sep = locKey.indexOf('|||');
+          const lokasiName = locKey.slice(0, sep);
+          const bahagian = locKey.slice(sep + 3);
+          const deptId = resolveBahagian(bahagian);
+          if (!deptId) continue;
+          locationObjects.push({
+            name: lokasiName,
+            abbr: lokasiName.split(/\s+/).map((w: string) => w[0] || '').join('').toUpperCase().slice(0, 6),
+            departmentId: deptId,
+            building: '',
+            description: '',
+            supervisorId: '',
+            contact: '',
+            totalAssets: count,
+          });
+        }
+        if (locationObjects.length > 0) await onUpsertLocations(locationObjects);
+
+        const total = Object.values(deptTotals).reduce((a, b) => a + b, 0);
+        const unmatchedAssets = unmatched.reduce((s, u) => { const m = u.match(/\((\d+)\)$/); return s + (m ? +m[1] : 0); }, 0);
+        setAssetSyncStatus({
+          type: unmatched.length > 0 ? 'warn' : 'success',
+          message: `Synced ${Object.keys(deptTotals).length} departments — ${total.toLocaleString()} assets${locationObjects.length > 0 ? `, ${locationObjects.length} locations` : ''}`,
+          detail: unmatched.length > 0 ? `${unmatched.length} unmatched Bahagian (${unmatchedAssets} assets): ${unmatched.slice(0, 5).join('; ')}${unmatched.length > 5 ? '...' : ''}` : undefined
+        });
+      } catch (err: any) {
+        setAssetSyncStatus({ type: 'error', message: err.message || 'Failed to parse file' });
+      } finally {
+        setIsAssetSyncing(false);
+        if (assetSyncRef.current) assetSyncRef.current.value = '';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
   const isAdmin = userRoles.includes('Admin');
 
@@ -221,6 +372,60 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleDeptFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const firstRow = results.data[0] as any;
+        if (!firstRow) { alert('CSV is empty.'); return; }
+
+        // Reject if this looks like a location or asset CSV (wrong file uploaded)
+        const colKeys = Object.keys(firstRow).map(k => k.toLowerCase().trim());
+        const isAssetOrLocationCsv =
+          colKeys.some(k => ['lokasi terkini', 'location', 'name', 'building', 'level', 'label', 'asset', 'no siri'].includes(k));
+        if (isAssetOrLocationCsv) {
+          alert('This looks like a Location or Asset CSV, not a Department CSV.\n\nA Department CSV should only have columns: ABBR and DEPARTMENT.\n\nPlease download the Department Template and use the correct file.');
+          if (deptFileInputRef.current) deptFileInputRef.current.value = '';
+          return;
+        }
+
+        const newDepts: Omit<Department, 'id'>[] = [];
+        results.data.forEach((row: any) => {
+          const name = (row['DEPARTMENT'] || row['Department'] || row['department'] || row['JABATAN'] || row['Jabatan'] || row['jabatan'] || row['NAME'] || row['Name'] || '').trim();
+          const abbr = (row['ABBR'] || row['Abbr'] || row['abbr'] || row['ABBREVIATION'] || row['SHORT'] || '').trim();
+          if (name) {
+            newDepts.push({
+              name,
+              abbr: abbr || name.substring(0, 4).toUpperCase(),
+              headOfDeptId: null,
+              description: '',
+              auditGroup: 'Group A',
+            });
+          }
+        });
+        if (newDepts.length > 0) {
+          onBulkAddDepts(newDepts);
+        } else {
+          alert('No valid departments found. Ensure CSV has a DEPARTMENT (or JABATAN) column.\n\nDownload the Department Template for the correct format.');
+        }
+      },
+      error: () => alert('Failed to parse CSV.'),
+    });
+    if (deptFileInputRef.current) deptFileInputRef.current.value = '';
+  };
+
+  const handleDownloadDeptTemplate = () => {
+    const csv = ['ABBR,DEPARTMENT', 'JKA,JABATAN KEJURUTERAAN AWAM', 'JKE,JABATAN KEJURUTERAAN ELEKTRIK'].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'department_import_template.csv';
+    link.click();
+  };
+
   const handleDownloadTemplate = () => {
     const headers = ['Name', 'Abbr', 'Department', 'Building', 'Level', 'Supervisor Name', 'Contact', 'Description', 'Total Assets'];
     const sample = ['Main Chemistry Lab', 'MCL-01', 'Biological Sciences', 'Science Block A', 'FIRST FLOOR', 'Dr. Supervisor Name', 'x1234', 'Main lab for chemistry', '150'];
@@ -245,18 +450,21 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const entries: { name: string; staffId: string; email: string; pin?: string }[] = [];
+        const entries: { name: string; staffId: string; email: string; department?: string; designation?: string; role?: string; pin?: string }[] = [];
         results.data.forEach((row: any) => {
-          const name = (row['Name'] || row['name'] || '').trim();
-          const staffId = (row['StaffID'] || row['Staff ID'] || row['staff_id'] || '').trim();
-          const email = (row['Email'] || row['email'] || '').trim();
+          const name = (row['Name'] || row['name'] || row['NAME'] || '').trim();
+          const staffId = (row['Staff ID'] || row['StaffID'] || row['staff_id'] || row['STAFF ID'] || '').trim();
+          const email = (row['Email'] || row['email'] || row['EMAIL'] || '').trim();
+          const department = (row['department'] || row['Department'] || row['DEPARTMENT'] || '').trim();
+          const designation = (row['Designation'] || row['designation'] || row['DESIGNATION'] || '').trim();
+          const role = (row['Role'] || row['role'] || row['ROLE'] || '').trim();
           const pin = (row['PIN'] || row['pin'] || '').trim();
-          if (name && staffId) entries.push({ name, staffId, email, pin: pin || undefined });
+          if (name || staffId) entries.push({ name, staffId, email, department: department || undefined, designation: designation || undefined, role: role || undefined, pin: pin || undefined });
         });
         if (entries.length > 0) {
           onBulkActivateStaff(entries);
         } else {
-          alert("No valid entries found. Ensure 'Name' and 'StaffID' columns exist.");
+          alert("No valid entries found. Ensure 'Staff ID' and 'Name' columns exist.");
         }
       },
       error: () => alert('Failed to parse CSV.')
@@ -265,15 +473,15 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   };
 
   const handleDownloadStaffTemplate = () => {
-    const headers = ['Name', 'StaffID', 'Email', 'PIN'];
-    const sample = ['SHAHRIZAL BIN SHABUDDIN', '1001', 'shahrizal@example.com', '1234'];
+    const headers = ['Staff ID', 'Name', 'department', 'Designation', 'Role'];
+    const sample = ['1001', 'SHAHRIZAL BIN SHABUDDIN', 'JABATAN KEJURUTERAAN AWAM', 'Head Of Department', 'Staff'];
     const csvContent = [headers.join(','), sample.join(',')].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', 'staff_activation_template.csv');
+      link.setAttribute('download', 'staff_import_template.csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -356,6 +564,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           kpiTiers={kpiTiers}
           phases={phases}
           schedules={schedules}
+          maxAssetsPerDay={maxAssetsPerDay}
         />
       )}
 
@@ -393,70 +602,208 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       {isAdmin && (
         <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
           <h3 className="text-xl font-bold text-slate-900 mb-2">Data Management</h3>
-          <p className="text-sm text-slate-500 mb-6">Import locations and departments from CSV files.</p>
+          <p className="text-sm text-slate-500 mb-6">Follow the steps below in order: set up departments first, then staff, then import locations.</p>
 
-          <div className="flex flex-wrap gap-4">
+          <div className="space-y-6">
             <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
             <input type="file" ref={staffFileInputRef} className="hidden" accept=".csv" onChange={handleStaffFileUpload} />
-            <button
-              onClick={handleDownloadTemplate}
-              className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
-            >
-              Location Template
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Import Locations CSV
-            </button>
-            <button
-              onClick={handleDownloadStaffTemplate}
-              className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
-            >
-              Staff Activation Template
-            </button>
-            <button
-              onClick={() => staffFileInputRef.current?.click()}
-              className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
-            >
-              <UserCheck className="w-4 h-4" />
-              Activate Staff CSV
-            </button>
+            <input type="file" ref={deptFileInputRef} className="hidden" accept=".csv" onChange={handleDeptFileUpload} />
+
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Step 1 — Departments</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleDownloadDeptTemplate}
+                  className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
+                >
+                  Department Template
+                </button>
+                <button
+                  onClick={() => deptFileInputRef.current?.click()}
+                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Import Departments CSV
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Step 2 — Staff</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleDownloadStaffTemplate}
+                  className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
+                >
+                  Staff Template
+                </button>
+                <button
+                  onClick={() => staffFileInputRef.current?.click()}
+                  className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center gap-2"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  Import Staff CSV
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Step 3 — Locations</p>
+              <p className="text-xs text-slate-400 mb-3">Set up mapping rules below before importing if your CSV uses different department names.</p>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all"
+                >
+                  Location Template
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Import Locations CSV
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Step 4 — Sync Asset Counts</p>
+              <p className="text-xs text-slate-400 mb-3">Upload the asset register Excel file (.xlsx) to automatically update the total asset count for each department. Duplicates are removed by label automatically.</p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button
+                  onClick={() => assetSyncRef.current?.click()}
+                  disabled={isAssetSyncing}
+                  className="px-5 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-500/20 hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-60"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isAssetSyncing ? 'animate-spin' : ''}`} />
+                  {isAssetSyncing ? 'Syncing...' : 'Sync Asset Counts'}
+                </button>
+                <input ref={assetSyncRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleAssetSync} />
+                {assetSyncStatus && (
+                  <div className={`flex items-start gap-2 px-4 py-2.5 rounded-xl text-xs font-medium border flex-1 ${assetSyncStatus.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : assetSyncStatus.type === 'warn' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                    {assetSyncStatus.type === 'success' ? <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                    <div>
+                      <div>{assetSyncStatus.message}</div>
+                      {assetSyncStatus.detail && <div className="opacity-70 mt-0.5">{assetSyncStatus.detail}</div>}
+                    </div>
+                    <button onClick={() => setAssetSyncStatus(null)} className="ml-auto opacity-50 hover:opacity-100">✕</button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {isAdmin && (
         <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm mt-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Sliders className="w-5 h-5 text-indigo-500" />
-            <h3 className="text-xl font-bold text-slate-900">Department Mapping Rules</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+            <div className="flex items-center gap-3">
+              <Sliders className="w-5 h-5 text-indigo-500" />
+              <h3 className="text-xl font-bold text-slate-900">Department Mapping Rules</h3>
+            </div>
+            <button
+              onClick={async () => {
+                setIsSyncing(true);
+                await onSyncLocationMappings();
+                setIsSyncing(false);
+              }}
+              disabled={isSyncing || departmentMappings.length === 0}
+              title="Re-apply all mapping rules to existing locations that still carry a raw source department name"
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none shrink-0"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              {isSyncing ? 'Syncing...' : 'Sync Locations'}
+            </button>
           </div>
-          <p className="text-sm text-slate-500 mb-6">Create rules to map raw department names from uploaded asset lists to official system departments. This is useful for consolidated units (e.g., mapping various units to "Unit Khidmat Pengurusan").</p>
+          <p className="text-sm text-slate-500 mb-4">Create rules to map raw department names from uploaded asset lists to official system departments. This is useful for consolidated units (e.g., mapping various units to "Unit Khidmat Pengurusan").</p>
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800 space-y-1.5">
+            <p className="font-black uppercase tracking-widest text-amber-600 mb-1">How it works</p>
+            <p>① Add mapping rules here (source raw name → official department).</p>
+            <p>② Then import your Location CSV — rules apply <span className="font-bold">automatically</span> during upload.</p>
+            <p>③ <span className="font-bold">Sync Locations</span> is a <span className="font-bold">repair tool</span> — use it only if locations were already imported <span className="italic">before</span> the rules existed and still carry the wrong department.</p>
+          </div>
 
-          <div className="flex flex-col md:flex-row gap-4 mb-8">
+          {/* Optional: upload asset CSV to pre-load additional source names not yet in the system */}
+          <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black uppercase text-indigo-500 tracking-widest mb-1">Step 1 — Upload Your Asset CSV</p>
+              <p className="text-xs text-slate-500">Upload your asset/location CSV to extract all raw department names. These will populate the Source dropdown so you can map them to official departments.</p>
+              {csvSourceNames.length > 0 && (
+                <p className="text-xs font-bold text-indigo-700 mt-1">✓ {csvSourceNames.length} department name{csvSourceNames.length !== 1 ? 's' : ''} found — pick one in the Source dropdown below.</p>
+              )}
+            </div>
             <input
-              type="text"
-              placeholder="Source Name in CSV (e.g., UNIT PENTADBIRAN)"
-              className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium w-full md:w-1/3 outline-none focus:ring-2 focus:ring-blue-500/20"
-              value={newMappingSource}
-              onChange={e => setNewMappingSource(e.target.value)}
+              ref={csvMappingRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                Papa.parse(file, {
+                  header: true,
+                  skipEmptyLines: true,
+                  complete: (results) => {
+                    const rows = results.data as Record<string, string>[];
+                    const deptKey = Object.keys(rows[0] || {}).find(k =>
+                      /department|jabatan|dept|bahagian/i.test(k)
+                    );
+                    if (!deptKey) {
+                      alert('Could not find a department column in the CSV. Expected a column named "Department", "Jabatan", "Bahagian", or "Dept".');
+                      return;
+                    }
+                    const names = Array.from(new Set(
+                      rows.map(r => (r[deptKey] || '').trim().toUpperCase()).filter(Boolean)
+                    )).sort();
+                    setCsvSourceNames(names);
+                  }
+                });
+                e.target.value = '';
+              }}
             />
+            <button
+              onClick={() => csvMappingRef.current?.click()}
+              className="px-5 py-2.5 bg-white border border-indigo-200 text-indigo-700 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-indigo-100 transition-all active:scale-95 shrink-0"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Asset CSV
+            </button>
+          </div>
+
+          {/* Add Rule row */}
+          <div className="flex flex-col md:flex-row gap-4 mb-8 items-center">
+            <div className="relative w-full md:w-1/3">
+              <select
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none"
+                value={newMappingSource}
+                onChange={e => setNewMappingSource(e.target.value)}
+              >
+                <option value="">{csvSourceNames.length === 0 ? '← Upload Asset CSV first' : 'Pick raw dept name from CSV'}</option>
+                {csvSourceNames
+                  .filter(n => !departmentMappings.some(m => m.sourceName.toUpperCase() === n.toUpperCase()))
+                  .map(n => <option key={n} value={n}>{n}</option>)
+                }
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+            </div>
             <div className="flex items-center text-slate-400 justify-center">
               <ArrowRight className="w-5 h-5" />
             </div>
-            <select
-              className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium w-full md:w-1/3 outline-none focus:ring-2 focus:ring-blue-500/20"
-              value={newMappingTargetId}
-              onChange={e => setNewMappingTargetId(e.target.value)}
-            >
-              <option value="">Select Official Department</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+            <div className="relative w-full md:w-1/3">
+              <select
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none"
+                value={newMappingTargetId}
+                onChange={e => setNewMappingTargetId(e.target.value)}
+              >
+                <option value="">Select Official Department</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+            </div>
             <button
               onClick={() => {
                 if (!newMappingSource.trim() || !newMappingTargetId) {
@@ -476,7 +823,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 setNewMappingTargetId('');
               }}
               disabled={!newMappingSource.trim() || !newMappingTargetId}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all disabled:opacity-50"
+              className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all disabled:opacity-50 shrink-0"
             >
               Add Rule
             </button>
@@ -487,7 +834,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50">
-                    <th className="py-3 px-4 font-bold text-xs text-slate-500 uppercase tracking-wider border-b">Raw Source Name (CSV)</th>
+                    <th className="py-3 px-4 font-bold text-xs text-slate-500 uppercase tracking-wider border-b">Raw Source Name</th>
                     <th className="py-3 px-4 font-bold text-xs text-slate-500 uppercase tracking-wider border-b">Maps To (Official Dept)</th>
                     <th className="py-3 px-4 font-bold text-xs text-slate-500 uppercase tracking-wider border-b w-24">Actions</th>
                   </tr>
@@ -522,6 +869,17 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           ) : (
             <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-300">
               <p className="text-sm text-slate-500 font-medium">No mapping rules defined.</p>
+            </div>
+          )}
+
+          {/* Next step reminder */}
+          {departmentMappings.length > 0 && (
+            <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3 text-xs text-emerald-800">
+              <span className="text-lg leading-none">✓</span>
+              <div>
+                <p className="font-black uppercase tracking-widest text-emerald-700 mb-0.5">Mapping rules saved</p>
+                <p>You're ready. Go to <span className="font-bold">Data Management → Step 3 — Locations</span> above and click <span className="font-bold">Import Locations CSV</span>. The mapping rules will apply automatically.</p>
+              </div>
             </div>
           )}
         </div>

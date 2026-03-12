@@ -144,15 +144,17 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     const myEntity = getEntityName(currentUser?.departmentId || '');
     const targetEntity = getEntityName(targetDeptId);
 
-    if (myEntity === targetEntity && !isAdmin) return false;
-
-    const hasPermission = crossAuditPermissions.some(p => 
-      p.auditorDept === myEntity && 
-      p.targetDept === targetEntity && 
+    // Check for an explicit cross-audit permission (including self-audit: auditorDept === targetDept)
+    const hasPermission = crossAuditPermissions.some(p =>
+      p.auditorDept === myEntity &&
+      p.targetDept === targetEntity &&
       p.isActive
     );
-    
-    return isAdmin || hasPermission;
+
+    if (isAdmin) return true;
+    // Block same-entity unless there is an explicit self-audit permission
+    if (myEntity === targetEntity) return hasPermission;
+    return hasPermission;
   };
 
   const getUserContact = (userId: string) => {
@@ -488,6 +490,11 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                 
                 const isPast = audit.date && audit.date < todayStr;
                 const userCanAudit = canAuditDepartment(audit.departmentId);
+                // Self-audit: the supervisor of this specific location cannot audit it
+                const myEntity = getEntityName(currentUser?.departmentId || '');
+                const targetEntity = getEntityName(audit.departmentId);
+                const isSelfAudit = myEntity === targetEntity;
+                const isSupervisorConflict = isSelfAudit && currentUser?.id === audit.supervisorId;
                 const isDateValid = isDateInValidPhase(audit.date, audit.phaseId);
                 const locationLevel = loc?.level;
 
@@ -581,6 +588,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             canManageAssignments={canManageAssignments && !isLocked}
                             canSelfAssignSelf={canSelfAssignSelf && !isLocked}
                             userCanAudit={userCanAudit}
+                            isSupervisorConflict={isSupervisorConflict}
                             isCurrentUserAssigned={isCurrentUserAssigned}
                             isPast={isPast}
                             isDateValid={isDateValid}
@@ -682,6 +690,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
           locations={allLocations}
           auditPhases={auditPhases}
           users={users}
+          isSupervisor={isSupervisor && !isAdmin}
         />
       )}
     </div>

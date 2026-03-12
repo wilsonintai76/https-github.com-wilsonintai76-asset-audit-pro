@@ -290,7 +290,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onDemoLogin, isLoggingIn, 
                                 <option value="Head Of Department">Head Of Department</option>
                                 <option value="Coordinator">Coordinator</option>
                                 <option value="Supervisor">Supervisor</option>
-                                <option value="Lecturer">Lecturer</option>
+                                <option value="Staff">Staff</option>
                             </select>
                         </div>
                     </div>

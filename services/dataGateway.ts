@@ -145,6 +145,7 @@ class DataGateway {
         departmentId: u.department_id,
         contactNumber: u.contact_number,
         isVerified: u.is_verified,
+        mustChangePIN: u.must_change_pin,
         lastActive: u.last_active,
         certificationIssued: u.certification_issued,
         certificationExpiry: u.certification_expiry,
@@ -162,6 +163,7 @@ class DataGateway {
       if (user.departmentId !== undefined) { payload.department_id = user.departmentId; delete payload.departmentId; }
       if (user.contactNumber !== undefined) { payload.contact_number = user.contactNumber; delete payload.contactNumber; }
       if (user.isVerified !== undefined) { payload.is_verified = user.isVerified; delete payload.isVerified; }
+      if (user.mustChangePIN !== undefined) { payload.must_change_pin = user.mustChangePIN; delete payload.mustChangePIN; }
       if (user.lastActive !== undefined) { payload.last_active = user.lastActive; delete payload.lastActive; }
       if (user.certificationIssued !== undefined) { payload.certification_issued = user.certificationIssued; delete payload.certificationIssued; }
       if (user.certificationExpiry !== undefined) { payload.certification_expiry = user.certificationExpiry; delete payload.certificationExpiry; }
@@ -176,6 +178,7 @@ class DataGateway {
         departmentId: result.department_id,
         contactNumber: result.contact_number,
         isVerified: result.is_verified,
+        mustChangePIN: result.must_change_pin,
         lastActive: result.last_active,
         certificationIssued: result.certification_issued,
         certificationExpiry: result.certification_expiry,
@@ -213,6 +216,7 @@ class DataGateway {
       if (updates.departmentId !== undefined) { payload.department_id = updates.departmentId; delete payload.departmentId; }
       if (updates.contactNumber !== undefined) { payload.contact_number = updates.contactNumber; delete payload.contactNumber; }
       if (updates.isVerified !== undefined) { payload.is_verified = updates.isVerified; delete payload.isVerified; }
+      if (updates.mustChangePIN !== undefined) { payload.must_change_pin = updates.mustChangePIN; delete payload.mustChangePIN; }
       if (updates.lastActive !== undefined) { payload.last_active = updates.lastActive; delete payload.lastActive; }
       if (updates.certificationIssued !== undefined) { payload.certification_issued = updates.certificationIssued; delete payload.certificationIssued; }
       if (updates.certificationExpiry !== undefined) { payload.certification_expiry = updates.certificationExpiry; delete payload.certificationExpiry; }
@@ -242,18 +246,19 @@ class DataGateway {
   // --- DEPARTMENTS ---
   async getDepartments(): Promise<Department[]> {
     if (supabase) {
-      const { data, error } = await supabase.from('departments').select('*');
+      const { data, error } = await supabase.from('departments').select('*, head:users!fk_dept_head(name)');
       if (error) throw error;
       return (data || []).map((d: any) => ({
         ...d,
         headOfDeptId: d.head_of_dept_id,
-        auditGroup: d.audit_group
+        auditGroup: d.audit_group,
+        headName: d.head?.name ?? null
       })) as Department[];
     }
     return [];
   }
 
-  async addDepartment(dept: Omit<Department, 'id'>) {
+  async addDepartment(dept: Omit<Department, 'id'>): Promise<Department> {
     if (supabase) {
       const payload: any = { ...dept };
       if (dept.headOfDeptId !== undefined) { payload.head_of_dept_id = dept.headOfDeptId; }
@@ -264,9 +269,9 @@ class DataGateway {
       delete payload.auditGroup;
       delete payload.totalAssets;
 
-      const { error } = await supabase.from('departments').insert([payload]);
+      const { data, error } = await supabase.from('departments').insert([payload]).select().single();
       if (error) throw error;
-      return;
+      return { ...data, headOfDeptId: data.head_of_dept_id, auditGroup: data.audit_group } as Department;
     }
     throw new Error("Supabase client not initialized");
   }

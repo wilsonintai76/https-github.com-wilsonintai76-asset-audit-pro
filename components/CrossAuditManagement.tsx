@@ -62,11 +62,34 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [isApplied, setIsApplied] = useState(false);
   const [activeModal, setActiveModal] = useState<'apply' | 'reset' | null>(null);
 
+  // Internal Audit option
+  type InternalAuditMode = 'off' | 'all' | 'specific';
+  const [internalAuditMode, setInternalAuditMode] = useState<InternalAuditMode>('off');
+  const [internalAuditDepts, setInternalAuditDepts] = useState<Set<string>>(new Set());
+  const [showInternalPanel, setShowInternalPanel] = useState(false);
+
+  const canSelfAudit = (entityName: string): boolean => {
+    if (internalAuditMode === 'off') return false;
+    if (internalAuditMode === 'all') return true;
+    return internalAuditDepts.has(entityName);
+  };
+
+  // Minimum auditors required specifically for internal (self) audit
+  const MIN_SELF_AUDIT_AUDITORS = 3;
+
+  const toggleInternalDept = (name: string) => {
+    setInternalAuditDepts(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
   // 1. Compute Stats for Each Department
   const deptStats = useMemo(() => {
     return departments.map(dept => {
       const auditorCount = users.filter(u => 
-        u.department === dept.name && 
+        u.departmentId === dept.id && 
         (u.roles.includes('Staff') || u.roles.includes('Supervisor') || u.roles.includes('Coordinator') || u.roles.includes('Admin')) &&
         u.status === 'Active'
       ).length || 0;
@@ -190,9 +213,17 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const handleAddManualPair = async () => {
     if (!manualAuditor || !manualTarget) return;
-    if (manualAuditor === manualTarget) {
-      alert("Conflict Detected: A unit cannot audit its own assets. Please select a different pairing.");
+    if (manualAuditor === manualTarget && !canSelfAudit(manualAuditor)) {
+      alert("Conflict Detected: This unit is not permitted to audit its own assets. Enable Internal Audit (All or select this department) to allow self-audit.");
       return;
+    }
+    // Warn if self-auditing dept has insufficient staff (min 3 for internal audit)
+    if (manualAuditor === manualTarget) {
+      const selfEntity = entities.find(e => e.name === manualAuditor);
+      if (selfEntity && selfEntity.auditors < MIN_SELF_AUDIT_AUDITORS) {
+        alert(`Warning: "${manualAuditor}" has only ${selfEntity.auditors} active staff. Internal audit requires at least 3 auditors from within the department.`);
+        return;
+      }
     }
     
     setIsProcessing(true);
@@ -215,7 +246,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   };
 
   const handleGridToggle = async (auditorName: string, targetName: string) => {
-    if (auditorName === targetName) return; // Prevent self-audit
+    if (auditorName === targetName && !canSelfAudit(auditorName)) return; // Prevent self-audit unless internal audit enabled
     
     const perm = permissions.find(p => p.auditorDept === auditorName && p.targetDept === targetName);
     
@@ -232,54 +263,55 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const handleAnalyzeAndGroup = async () => {
     setIsProcessing(true);
-    const standalones: typeof deptStats = [];
-    const pool: typeof deptStats = [];
-    
-    deptStats.forEach(d => {
-        const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
-        if (safeAssets >= assetThreshold && d.auditorCount >= minAuditors) {
-            standalones.push(d);
-        } else {
-            pool.push(d);
-        }
-    });
+    const getAssets = (d: typeof deptStats[0]) =>
+      typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
+
+    // Split into small pool (individual assets < threshold) and large pool (>= threshold)
+    const smallPool = [...deptStats]
+      .filter(d => getAssets(d) < assetThreshold)
+      .sort((a, b) => getAssets(a) - getAssets(b));
+
+    const largePool = [...deptStats]
+      .filter(d => getAssets(d) >= assetThreshold)
+      .sort((a, b) => getAssets(a) - getAssets(b));
 
     const updates: { id: string, data: Partial<Department> }[] = [];
-    standalones.forEach(d => updates.push({ id: d.id, data: { auditGroup: "" } }));
-
-    pool.sort((a, b) => {
-        const assetsA = typeof a.totalAssets === 'string' ? parseInt(a.totalAssets) : (a.totalAssets || 0);
-        const assetsB = typeof b.totalAssets === 'string' ? parseInt(b.totalAssets) : (b.totalAssets || 0);
-        return assetsA - assetsB;
-    });
-    
-    let currentGroup: typeof deptStats = [];
-    let currentAssets = 0;
-    let currentAuditors = 0;
     let groupIndex = 1;
 
-    pool.forEach(d => {
-        const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
-        currentGroup.push(d);
-        currentAssets += safeAssets;
-        currentAuditors += d.auditorCount;
+    // Generic accumulator: form groups by summing assets until target is reached
+    const accumulate = (pool: typeof deptStats, target: number) => {
+      let bucket: typeof deptStats = [];
+      let bucketAssets = 0;
+      let bucketAuditors = 0;
 
-        if (currentAssets >= assetThreshold && currentAuditors >= minAuditors) {
-             const groupName = `Group ${String.fromCharCode(64 + groupIndex)}`;
-             currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroup: groupName } }));
-             currentGroup = [];
-             currentAssets = 0;
-             currentAuditors = 0;
-             groupIndex++;
+      pool.forEach(d => {
+        bucket.push(d);
+        bucketAssets += getAssets(d);
+        bucketAuditors += d.auditorCount;
+
+        if (bucketAssets >= target && bucketAuditors >= minAuditors) {
+          const name = `Group ${String.fromCharCode(64 + groupIndex)}`;
+          bucket.forEach(m => updates.push({ id: m.id, data: { auditGroup: name } }));
+          bucket = [];
+          bucketAssets = 0;
+          bucketAuditors = 0;
+          groupIndex++;
         }
-    });
+      });
 
-    if (currentGroup?.length > 0) {
-        const targetName = groupIndex > 1 
-            ? `Group ${String.fromCharCode(64 + groupIndex - 1)}`
-            : `Group A`;
-        currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroup: targetName } }));
-    }
+      // Remaining depts that never reached target → append to last group
+      if (bucket.length > 0) {
+        const name = groupIndex > 1
+          ? `Group ${String.fromCharCode(64 + groupIndex - 1)}`
+          : `Group ${String.fromCharCode(64 + groupIndex++)}`;
+        bucket.forEach(m => updates.push({ id: m.id, data: { auditGroup: name } }));
+      }
+    };
+
+    // Small depts → groups capped at assetThreshold
+    accumulate(smallPool, assetThreshold);
+    // Large depts → groups capped at megaTargetThreshold (pairs/trios of similar-sized depts)
+    accumulate(largePool, megaTargetThreshold);
 
     await onBulkUpdateDepartments(updates);
     setIsProcessing(false);
@@ -340,13 +372,18 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     allTargets.forEach(target => {
         if (handledTargets.has(target.name)) return;
 
+        // Try to find a cross-dept partner with available capacity first
         const partner = validAuditorEntities
             .filter(e => e.name !== target.name)
             .sort((a, b) => {
                 const aLoad = workloadMap.get(a.name)!;
                 const bLoad = workloadMap.get(b.name)!;
                 return (aLoad.used / aLoad.max) - (bLoad.used / bLoad.max);
-            })[0];
+            })
+            .find(e => {
+                const load = workloadMap.get(e.name)!;
+                return load.used < load.max;
+            });
 
         if (partner) {
             workloadMap.get(partner.name)!.used++;
@@ -355,6 +392,36 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 auditors: [partner],
                 totalAuditorsInGroup: partner.auditors,
                 auditorSideAssets: partner.assets
+            });
+            handledTargets.add(target.name);
+        } else if (canSelfAudit(target.name)) {
+            // No cross-dept partner available — fall back to internal (self) audit
+            // Requires at least 3 auditors from within the department
+            const selfEntity = entities.find(e => e.name === target.name);
+            if (selfEntity && selfEntity.auditors >= MIN_SELF_AUDIT_AUDITORS) {
+                plan.push({
+                    target,
+                    auditors: [{ ...selfEntity, isJoint: false }],
+                    totalAuditorsInGroup: selfEntity.auditors,
+                    auditorSideAssets: selfEntity.assets
+                });
+                handledTargets.add(target.name);
+            }
+        }
+    });
+
+    // When internal audit is on, add self-pairs for any still-unhandled entities
+    // Final pass: self-pair any still-unhandled entity that is allowed internal audit
+    allTargets.forEach(target => {
+        if (handledTargets.has(target.name)) return;
+        if (!canSelfAudit(target.name)) return;
+        const selfEntity = entities.find(e => e.name === target.name);
+        if (selfEntity && selfEntity.auditors >= MIN_SELF_AUDIT_AUDITORS) {
+            plan.push({
+                target,
+                auditors: [{ ...selfEntity, isJoint: false }],
+                totalAuditorsInGroup: selfEntity.auditors,
+                auditorSideAssets: selfEntity.assets
             });
             handledTargets.add(target.name);
         }
@@ -367,7 +434,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* MODE SELECTOR */}
+      {/* MODE SELECTOR + INTERNAL AUDIT TOGGLE */}
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
         <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm">
           <button 
@@ -385,7 +452,86 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
             Manual Matrix
           </button>
         </div>
+
+        {/* Internal Audit Toggle */}
+        <div className="flex flex-col gap-2">
+          <div className="flex bg-white border border-slate-200 rounded-2xl shadow-sm p-1 gap-1">
+            {(['off', 'all', 'specific'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => { setInternalAuditMode(mode); setShowInternalPanel(mode === 'specific'); }}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                  internalAuditMode === mode
+                    ? mode === 'off' ? 'bg-slate-900 text-white' : 'bg-indigo-600 text-white shadow-md'
+                    : 'text-slate-400 hover:bg-slate-50'
+                }`}
+              >
+                {mode === 'off' ? 'Cross-Dept Only' : mode === 'all' ? 'Internal: All' : 'Internal: Specific'}
+              </button>
+            ))}
+          </div>
+          {internalAuditMode !== 'off' && (
+            <p className="text-[10px] text-center text-indigo-500 font-bold">
+              {internalAuditMode === 'all'
+                ? 'All departments may audit themselves'
+                : internalAuditDepts.size === 0
+                  ? 'No departments selected yet — click to choose'
+                  : `${internalAuditDepts.size} department${internalAuditDepts.size > 1 ? 's' : ''} may self-audit`
+              }
+            </p>
+          )}
+        </div>
       </div>
+
+      {/* Specific dept selector panel */}
+      {internalAuditMode === 'specific' && (
+        <div className="bg-indigo-50 border border-indigo-100 rounded-3xl p-5 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center justify-between mb-1">
+            <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest">Select Departments Allowed to Self-Audit</h4>
+            <div className="flex gap-2">
+              <button onClick={() => setInternalAuditDepts(new Set(entities.filter(e => e.auditors >= MIN_SELF_AUDIT_AUDITORS).map(e => e.name)))} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 px-3 py-1 bg-white border border-indigo-200 rounded-lg transition-colors">Select Eligible</button>
+              <button onClick={() => setInternalAuditDepts(new Set())} className="text-[10px] font-bold text-slate-500 hover:text-slate-700 px-3 py-1 bg-white border border-slate-200 rounded-lg transition-colors">Clear</button>
+            </div>
+          </div>
+          <p className="text-[10px] text-indigo-400 mb-4">Only departments with at least 3 active staff can perform internal audits. Departments below this threshold are disabled.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {entities.map(e => {
+              const selected = internalAuditDepts.has(e.name);
+              const hasAuditors = e.auditors >= MIN_SELF_AUDIT_AUDITORS;
+              return (
+                <button
+                  key={e.name}
+                  onClick={() => hasAuditors && toggleInternalDept(e.name)}
+                  disabled={!hasAuditors}
+                  title={!hasAuditors ? `${e.name} has ${e.auditors} active staff — needs at least ${MIN_SELF_AUDIT_AUDITORS} to self-audit` : undefined}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-left transition-all border ${
+                    !hasAuditors
+                      ? 'bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed'
+                      : selected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+                  }`}
+                >
+                  <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border ${
+                    !hasAuditors ? 'border-slate-200 bg-slate-200'
+                    : selected ? 'bg-white/30 border-white/50' : 'border-slate-300'
+                  }`}>
+                    {selected && hasAuditors && <Check className="w-2.5 h-2.5 text-white" />}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block truncate">{e.name}</span>
+                    <span className={`text-[9px] font-normal ${
+                      !hasAuditors ? 'text-slate-300' : selected ? 'text-indigo-200' : 'text-slate-400'
+                    }`}>
+                      {e.auditors} auditor{e.auditors !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {mgmtMode === 'auto' ? (
         <>
@@ -405,21 +551,32 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                     </div>
                   </div>
                   <p className="text-slate-400 text-sm leading-relaxed mb-8 max-w-md">
-                    Automated reciprocity logic. Ensures all teams consist of at least {minAuditors} qualified auditors and no unit audits itself.
+                    Automated reciprocity logic. Ensures all teams consist of at least {minAuditors} qualified auditors{internalAuditMode !== 'off' ? ` (${MIN_SELF_AUDIT_AUDITORS} for self-audit)` : ''} and no unit audits itself.
                   </p>
                   
                   <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                        <div className="text-[10px] font-bold text-rose-400 uppercase mb-1 flex items-center gap-2">
-                            <Ban className="w-3 h-3" /> Anti-Self Audit
+                      <div className={`p-4 rounded-2xl border transition-all ${
+                        internalAuditMode !== 'off'
+                          ? 'bg-indigo-500/10 border-indigo-500/20'
+                          : 'bg-white/5 border-white/5'
+                      }`}>
+                        <div className={`text-[10px] font-bold uppercase mb-1 flex items-center gap-2 ${
+                          internalAuditMode !== 'off' ? 'text-indigo-400' : 'text-rose-400'
+                        }`}>
+                          {internalAuditMode !== 'off'
+                            ? <><Building2 className="w-3 h-3" /> Internal Audit {internalAuditMode === 'all' ? '(All)' : `(${internalAuditDepts.size} depts)`}</>
+                            : <><Ban className="w-3 h-3" /> Anti-Self Audit</>
+                          }
                         </div>
-                        <p className="text-xs text-slate-400 font-medium">No entity audits own assets</p>
+                        <p className="text-xs text-slate-400 font-medium">
+                          {internalAuditMode !== 'off' ? 'Self-audit fallback enabled' : 'No entity audits own assets'}
+                        </p>
                       </div>
                       <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                         <div className="text-[10px] font-bold text-emerald-400 uppercase mb-1 flex items-center gap-2">
                             <Users className="w-3 h-3" /> Staffing
                         </div>
-                        <p className="text-xs text-slate-400 font-medium">Min {minAuditors} Auditors per team</p>
+                        <p className="text-xs text-slate-400 font-medium">Min {internalAuditMode !== 'off' ? MIN_SELF_AUDIT_AUDITORS : minAuditors} Auditors per team{internalAuditMode !== 'off' ? <span className="text-amber-400 ml-1">(self-audit: {MIN_SELF_AUDIT_AUDITORS})</span> : null}</p>
                       </div>
                   </div>
                 </div>
@@ -432,7 +589,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                           
                           <div className="mb-4">
                             <div className="w-full">
-                                <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">Efficiency Threshold (Assets)</label>
+                                <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">Small Group Threshold (Assets)</label>
+                                <p className="text-[9px] text-slate-500 mb-2">Departments with fewer assets than this are bundled together until their combined total reaches this value.</p>
                                 <div className="flex items-center gap-3 bg-black/20 rounded-xl px-4 py-3 border border-white/10">
                                   <Boxes className="w-4 h-4 text-blue-500" />
                                   <input 
@@ -470,7 +628,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                               <h4 className="text-lg font-bold text-white mb-4">Strategic Pairing</h4>
                                                             <div className="flex gap-4 items-end mb-4">
                                 <div className="flex-1">
-                                    <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">Mega Limit</label>
+                                    <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">Large Group Threshold</label>
+                                    <p className="text-[9px] text-slate-500 mb-1.5">Large depts (≥ small threshold) pair together until this total is reached.</p>
                                     <div className="flex items-center gap-2 bg-black/20 rounded-xl px-3 py-2 border border-white/10">
                                       <Zap className="w-3 h-3 text-amber-500" />
                                       <input 
@@ -685,10 +844,22 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                      
                                      return (
                                         <td key={`${auditor.name}-${target.name}`} className="p-2">
-                                           {isSelf ? (
-                                              <div className="w-8 h-8 mx-auto rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 cursor-not-allowed" title="Self-audit restricted">
+                                           {isSelf && !canSelfAudit(auditor.name) ? (
+                                              <div className="w-8 h-8 mx-auto rounded-lg bg-slate-100 flex items-center justify-center text-slate-300 cursor-not-allowed" title="Self-audit restricted — enable Internal Audit toggle to allow">
                                                  <Ban className="w-4 h-4" />
                                               </div>
+                                           ) : isSelf ? (
+                                              <button
+                                                 onClick={() => handleGridToggle(auditor.name, target.name)}
+                                                 className={`w-8 h-8 mx-auto rounded-lg flex items-center justify-center transition-all active:scale-95 border-2 border-dashed ${
+                                                   hasPerm
+                                                     ? 'bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20 hover:bg-indigo-600'
+                                                     : 'bg-indigo-50 border-indigo-200 text-indigo-300 hover:border-indigo-400 hover:text-indigo-500'
+                                                 }`}
+                                                 title={hasPerm ? `Internal: ${auditor.name} audits itself` : `Allow internal audit: ${auditor.name}`}
+                                              >
+                                                 <Building2 className="w-3.5 h-3.5" />
+                                              </button>
                                            ) : (
                                               <button
                                                  onClick={() => handleGridToggle(auditor.name, target.name)}
@@ -805,7 +976,14 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       <ConfirmationModal
         isOpen={activeModal === 'apply'}
         title="Apply Strategic Matrix?"
-        message="This will overwrite existing cross-departmental permissions to enforce anti-self-audit rules. JKE will audit other departments, but never JKE itself."
+        message={internalAuditMode !== 'off'
+          ? `This will overwrite existing permissions. ${
+              internalAuditMode === 'all'
+                ? 'All departments may be assigned as self-auditors as fallback.'
+                : `${internalAuditDepts.size} selected department(s) may self-audit as fallback.`
+            }`
+          : "This will overwrite existing cross-departmental permissions. No unit will be permitted to audit its own assets."
+        }
         confirmLabel="Apply Now"
         cancelLabel="Cancel"
         onConfirm={executeApply}

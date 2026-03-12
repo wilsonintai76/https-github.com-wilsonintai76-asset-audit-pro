@@ -4,24 +4,27 @@ import { CheckCircle2, XCircle } from 'lucide-react';
 
 export const AccessMatrix: React.FC = () => {
   const rows = [
-    { feature: 'Define Audit Phases', admin: true, coord: true, auditor: false },
-    { feature: 'Issue Staff Certificates', admin: true, coord: false, auditor: false },
-    { feature: 'Generate Audit Matrix', admin: true, coord: false, auditor: false },
-    { feature: 'Self-Assign (Requires Valid Cert)', admin: true, coord: true, auditor: true },
-    { feature: 'Complete Audit Status', admin: true, coord: true, auditor: true },
-    { feature: 'Manage Site Locations', admin: true, coord: true, auditor: false },
-    { feature: 'View KPI Trends', admin: true, coord: true, auditor: true }
+    { feature: 'Define Audit Phases', admin: true, coord: true, supervisor: false, auditor: false },
+    { feature: 'Issue Staff Certificates', admin: true, coord: false, supervisor: false, auditor: false },
+    { feature: 'Generate Audit Matrix', admin: true, coord: false, supervisor: false, auditor: false },
+    { feature: 'Manage Locations (Full CRUD + Assign Supervisor)', admin: true, coord: true, supervisor: false, auditor: false },
+    { feature: 'Update Location Block / Level / Total Assets', admin: true, coord: true, supervisor: true, auditor: false },
+    { feature: 'Set Audit Date', admin: true, coord: true, supervisor: true, auditor: false },
+    { feature: 'Self-Assign (Requires Valid Cert)', admin: true, coord: true, supervisor: true, auditor: true },
+    { feature: 'Complete Audit Status', admin: true, coord: true, supervisor: true, auditor: true },
+    { feature: 'View KPI Trends', admin: true, coord: true, supervisor: true, auditor: true }
   ];
 
   return (
     <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-left min-w-[600px]">
+        <table className="w-full text-left min-w-[700px]">
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-100">
               <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest">Core Functionality</th>
               <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Admin</th>
               <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Coordinator</th>
+              <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Supervisor</th>
               <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Auditor</th>
             </tr>
           </thead>
@@ -34,6 +37,9 @@ export const AccessMatrix: React.FC = () => {
                 </td>
                 <td className="px-8 py-5 text-center">
                   {row.coord ? <CheckCircle2 className="w-5 h-5 text-blue-500 mx-auto" /> : <XCircle className="w-5 h-5 text-slate-200 mx-auto" />}
+                </td>
+                <td className="px-8 py-5 text-center">
+                  {row.supervisor ? <CheckCircle2 className="w-5 h-5 text-blue-500 mx-auto" /> : <XCircle className="w-5 h-5 text-slate-200 mx-auto" />}
                 </td>
                 <td className="px-8 py-5 text-center">
                   {row.auditor ? <CheckCircle2 className="w-5 h-5 text-blue-500 mx-auto" /> : <XCircle className="w-5 h-5 text-slate-200 mx-auto" />}

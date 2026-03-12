@@ -1,8 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { KPITier, AuditPhase } from '../types';
-import { ConfirmationModal } from './ConfirmationModal';
-import { Lock, Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
+import { Save, Info } from 'lucide-react';
 
 interface KPISettingsProps {
   tiers: KPITier[];
@@ -12,303 +11,278 @@ interface KPISettingsProps {
   onDeleteTier: (id: string) => void;
 }
 
-export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTier, onUpdateTier, onDeleteTier }) => {
-  const [isAdding, setIsAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [tierToDelete, setTierToDelete] = useState<string | null>(null);
-  const [formData, setFormData] = useState<{ name: string, minAssets: number, maxAssets: number, targets: Record<string, number> }>({
-    name: '', minAssets: 0, maxAssets: 0, targets: {}
-  });
+const TIER_LABELS = ['Small', 'Medium', 'Large'] as const;
+const TIER_COLORS = [
+  { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-200', focus: 'focus:ring-emerald-500/20 focus:border-emerald-400' },
+  { bg: 'bg-amber-100',   text: 'text-amber-700',   border: 'border-amber-200',   focus: 'focus:ring-amber-500/20 focus:border-amber-400'   },
+  { bg: 'bg-rose-100',    text: 'text-rose-700',     border: 'border-rose-200',    focus: 'focus:ring-rose-500/20 focus:border-rose-400'     },
+];
 
-  // Constraints: Number of tiers is capped at 4.
-  const maxAllowedTiers = 4;
-  const isMaxTiersReached = (tiers?.length || 0) >= maxAllowedTiers;
-
-  const sortedPhases = [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate));
+export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onUpdateTier }) => {
   const sortedTiers = [...tiers].sort((a, b) => a.minAssets - b.minAssets);
+  const sortedPhases = [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-  const startEdit = (tier: KPITier) => {
-    setIsAdding(false);
-    setEditingId(tier.id);
+  const smallTier  = sortedTiers[0];
+  const mediumTier = sortedTiers[1];
+  const largeTier  = sortedTiers[2];
 
-    // Find previous tier to determine minAssets
-    const tierIndex = sortedTiers.findIndex(t => t.id === tier.id);
-    const calculatedMin = tierIndex > 0 ? sortedTiers[tierIndex - 1].maxAssets + 1 : 0;
+  // Threshold inputs
+  const [mediumStart, setMediumStart] = useState<number>(mediumTier?.minAssets ?? 101);
+  const [largeStart,  setLargeStart]  = useState<number>(largeTier?.minAssets  ?? 501);
+  const [thresholdsDirty, setThresholdsDirty] = useState(false);
 
-    setFormData({
-      name: tier.name,
-      minAssets: calculatedMin,
-      maxAssets: tier.maxAssets,
-      targets: { ...tier.targets }
-    });
-  };
+  // Per-tier per-phase target inputs (visit counts)
+  const [localTargets, setLocalTargets] = useState<Record<string, Record<string, number>>>({});
+  const [targetsDirty, setTargetsDirty] = useState(false);
 
-  const resetForm = () => {
-    setEditingId(null);
-    setIsAdding(false);
-    setFormData({ name: '', minAssets: 0, maxAssets: 0, targets: {} });
-  };
+  // Sync thresholds when tiers load/change
+  useEffect(() => {
+    if (mediumTier) setMediumStart(mediumTier.minAssets);
+    if (largeTier)  setLargeStart(largeTier.minAssets);
+    setThresholdsDirty(false);
+  }, [mediumTier?.minAssets, largeTier?.minAssets]);
 
-  const handleAddClick = () => {
-    const nextMin = sortedTiers.length > 0 ? sortedTiers[sortedTiers.length - 1].maxAssets + 1 : 0;
-    setFormData({
-      name: '',
-      minAssets: nextMin,
-      maxAssets: nextMin + 500, // Default range
-      targets: {}
-    });
-    setIsAdding(true);
-    setEditingId(null);
-  };
+  // Sync local targets when tiers load/change
+  useEffect(() => {
+    const init: Record<string, Record<string, number>> = {};
+    tiers.forEach(t => { init[t.id] = { ...t.targets }; });
+    setLocalTargets(init);
+    setTargetsDirty(false);
+  }, [tiers]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingId) {
-      onUpdateTier(editingId, formData);
+  const handleThresholdChange = (field: 'medium' | 'large', val: string) => {
+    const num = Math.max(1, parseInt(val) || 1);
+    if (field === 'medium') {
+      setMediumStart(num);
+      if (num >= largeStart) setLargeStart(num + 1);
     } else {
-      onAddTier(formData);
+      setLargeStart(Math.max(num, mediumStart + 1));
     }
-    resetForm();
+    setThresholdsDirty(true);
   };
 
-  const handleTargetChange = (phaseId: string, value: string) => {
-    const numVal = Math.min(100, Math.max(0, parseInt(value) || 0));
-    setFormData(prev => ({
+  const handleSaveThresholds = () => {
+    if (!smallTier || !mediumTier || !largeTier) return;
+    const safeL = Math.max(largeStart, mediumStart + 1);
+    onUpdateTier(smallTier.id,  { minAssets: 0,          maxAssets: mediumStart - 1 });
+    onUpdateTier(mediumTier.id, { minAssets: mediumStart, maxAssets: safeL - 1      });
+    onUpdateTier(largeTier.id,  { minAssets: safeL,       maxAssets: 1000000        });
+    setThresholdsDirty(false);
+  };
+
+  const handleTargetChange = (tierId: string, phaseId: string, val: string) => {
+    const num = Math.max(0, parseInt(val) || 0);
+    setLocalTargets(prev => ({
       ...prev,
-      targets: {
-        ...prev.targets,
-        [phaseId]: numVal
-      }
+      [tierId]: { ...(prev[tierId] || {}), [phaseId]: num },
     }));
+    setTargetsDirty(true);
   };
 
-  const handleDeleteClick = (id: string) => {
-    setTierToDelete(id);
+  const handleSaveTargets = () => {
+    sortedTiers.forEach(tier => {
+      if (localTargets[tier.id]) {
+        onUpdateTier(tier.id, { targets: localTargets[tier.id] });
+      }
+    });
+    setTargetsDirty(false);
   };
 
-  const confirmDelete = () => {
-    if (tierToDelete) {
-      onDeleteTier(tierToDelete);
-      setTierToDelete(null);
-    }
-  };
+  const formatRange = (min: number, max?: number) =>
+    max === undefined || max >= 1000000
+      ? `${min.toLocaleString()} +`
+      : `${min.toLocaleString()} – ${max.toLocaleString()}`;
+
+  if (!smallTier || !mediumTier || !largeTier) {
+    return (
+      <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm p-8 mt-8">
+        <p className="text-sm text-slate-400 italic text-center py-4">Loading tier configuration…</p>
+      </div>
+    );
+  }
+
+  const computedSmallMax  = mediumStart - 1;
+  const computedMediumMax = Math.max(largeStart, mediumStart + 1) - 1;
+  const computedLargeMin  = Math.max(largeStart, mediumStart + 1);
 
   return (
     <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden p-8 mt-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h3 className="text-xl font-bold text-slate-900">Completion KPI Targets</h3>
-          <p className="text-sm text-slate-500">
-            Define up to {maxAllowedTiers} asset tiers.
-          </p>
-        </div>
-        {/* Add Tier removed - fixed to 3 tiers */}
+
+      {/* Header */}
+      <div className="mb-6">
+        <h3 className="text-xl font-bold text-slate-900">Completion KPI Targets</h3>
+        <p className="text-sm text-slate-500 mt-1">
+          Set 2 size thresholds to split departments into Small, Medium, and Large tiers.
+          Then set how many audit visits are required per tier per phase.
+        </p>
       </div>
 
-      {isAdding && (
-        <form onSubmit={handleSubmit} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 mb-6 animate-in fade-in slide-in-from-top-2">
-          <h4 className="text-sm font-bold text-slate-700 mb-4">Create New Asset Tier</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Tier Name</label>
-              <input
-                readOnly
-                disabled
-                className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed outline-none"
-                value={formData.name}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
-                Min Assets
-                <span className="text-[8px] font-normal lowercase text-slate-400">(Auto-calculated)</span>
-              </label>
-              <input
-                readOnly
-                type="number"
-                className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed outline-none"
-                value={formData.minAssets}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Max Assets</label>
-              <input
-                required
-                type="number"
-                min={formData.minAssets + 1}
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
-                value={formData.maxAssets}
-                onChange={e => setFormData({ ...formData, maxAssets: parseInt(e.target.value) || 0 })}
-              />
-            </div>
+      {/* ── Threshold Section ── */}
+      <div className="bg-slate-50 rounded-2xl border border-slate-200 p-6 mb-8">
+        <h4 className="text-sm font-bold text-slate-700 mb-1">Department Size Thresholds</h4>
+        <p className="text-xs text-slate-400 mb-5">
+          Departments are automatically categorised based on their total asset count.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+          {/* Small — always 0 */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase inline-block mb-2">
+              Small
+            </span>
+            <p className="text-xs text-slate-600 font-medium">
+              0 – {computedSmallMax.toLocaleString()} assets
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Starts at 0 (fixed)</p>
           </div>
 
-          <div className="mb-6">
-            <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Completion Targets per Phase (%)</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {sortedPhases.map(phase => (
-                <div key={phase.id} className="space-y-1 bg-white p-3 rounded-xl border border-slate-100">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">{phase.name}</span>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      placeholder="0"
-                      className="w-full bg-transparent border-none text-sm font-bold focus:ring-0 p-0"
-                      value={formData.targets[phase.id] ?? ''}
-                      onChange={e => handleTargetChange(phase.id, e.target.value)}
-                    />
-                    <span className="text-xs text-slate-400">%</span>
-                  </div>
-                </div>
-              ))}
-              {(!sortedPhases || sortedPhases.length === 0) && <p className="text-xs text-slate-400 italic col-span-4">Add audit phases first to set targets.</p>}
-            </div>
+          {/* Medium threshold */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5">
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-black">Medium</span>
+              starts at (assets)
+            </label>
+            <input
+              type="number"
+              min="1"
+              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 outline-none"
+              value={mediumStart}
+              onChange={e => handleThresholdChange('medium', e.target.value)}
+            />
+            <p className="text-[11px] text-slate-400">
+              Range: {mediumStart.toLocaleString()} – {computedMediumMax.toLocaleString()}
+            </p>
           </div>
 
-          <div className="flex gap-2">
-            <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/10 hover:bg-blue-700 transition-colors">
-              Save Tier
+          {/* Large threshold */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1.5">
+              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-black">Large</span>
+              starts at (assets)
+            </label>
+            <input
+              type="number"
+              min={mediumStart + 1}
+              className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 outline-none"
+              value={largeStart}
+              onChange={e => handleThresholdChange('large', e.target.value)}
+            />
+            <p className="text-[11px] text-slate-400">
+              Range: {computedLargeMin.toLocaleString()} and above
+            </p>
+          </div>
+        </div>
+
+        {thresholdsDirty && (
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              onClick={handleSaveThresholds}
+              className="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/10 hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" /> Save Thresholds
             </button>
-            <button type="button" onClick={resetForm} className="px-6 py-2 bg-white text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors border border-slate-200">
+            <button
+              onClick={() => {
+                setMediumStart(mediumTier.minAssets);
+                setLargeStart(largeTier.minAssets);
+                setThresholdsDirty(false);
+              }}
+              className="px-5 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+            >
               Cancel
             </button>
           </div>
-        </form>
-      )}
+        )}
+      </div>
 
-      <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
-        <table className="w-full text-left min-w-[800px]">
-          <thead className="bg-slate-50/50 border-b border-slate-100">
-            <tr>
-              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48">Asset Tier</th>
-              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48">Range (Assets)</th>
-              {sortedPhases.map(phase => (
-                <th key={phase.id} className="px-4 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
-                  {phase.name} <br />
-                  <span className="text-[9px] font-normal opacity-70">Target %</span>
-                </th>
-              ))}
-              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {sortedTiers.map(tier => {
-              const isEditing = editingId === tier.id;
+      {/* ── Audit Visit Requirements Table ── */}
+      <div>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h4 className="text-sm font-bold text-slate-700">Audit Visit Requirements per Phase</h4>
+            <p className="text-xs text-slate-400 mt-0.5">
+              How many audit visits a department in each tier must complete per phase. Enter 0 to skip that phase for the tier.
+            </p>
+          </div>
+          {targetsDirty && (
+            <button
+              onClick={handleSaveTargets}
+              className="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/10 hover:bg-blue-700 transition-colors flex items-center gap-2 shrink-0"
+            >
+              <Save className="w-4 h-4" /> Save Targets
+            </button>
+          )}
+        </div>
 
-              return (
-                <tr key={tier.id} className={isEditing ? 'bg-blue-50/30' : 'hover:bg-slate-50/50 transition-colors'}>
-                  {/* Tier Name */}
-                  <td className="px-6 py-4">
-                    {isEditing ? (
-                      <input
-                        readOnly
-                        disabled
-                        className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500 cursor-not-allowed"
-                        value={formData.name}
-                      />
-                    ) : (
-                      <span className="font-bold text-slate-900 text-xs">{tier.name}</span>
-                    )}
-                  </td>
-
-                  {/* Range */}
-                  <td className="px-6 py-4">
-                    {isEditing ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          readOnly
-                          type="number"
-                          className="w-16 px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-400 cursor-not-allowed"
-                          value={formData.minAssets}
-                        />
-                        <span className="text-slate-400">-</span>
-                        <input
-                          type="number"
-                          min={formData.minAssets + 1}
-                          className="w-20 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20"
-                          value={formData.maxAssets}
-                          onChange={e => setFormData({ ...formData, maxAssets: parseInt(e.target.value) })}
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-500 font-mono">
-                        {tier.minAssets} - {tier.maxAssets > 1000000 ? '∞' : tier.maxAssets}
-                      </span>
-                    )}
-                  </td>
-
-                  {/* Phase Targets */}
+        {sortedPhases.length === 0 ? (
+          <div className="bg-slate-50 rounded-2xl border border-slate-100 p-6 text-center">
+            <p className="text-sm text-slate-400 italic">
+              Add audit phases in the Phases section above to set visit requirements.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
+            <table className="w-full text-left min-w-[520px]">
+              <thead className="bg-slate-50/80 border-b border-slate-200">
+                <tr>
+                  <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-28">Tier</th>
+                  <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-44">Asset Range</th>
                   {sortedPhases.map(phase => (
-                    <td key={phase.id} className="px-4 py-4 text-center">
-                      {isEditing ? (
-                        <div className="flex items-center justify-center">
+                    <th key={phase.id} className="px-4 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
+                      {phase.name}
+                      <span className="block text-[9px] font-normal normal-case opacity-60 mt-0.5">visits req.</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[
+                  { tier: smallTier,  label: 'Small',  colors: TIER_COLORS[0], range: formatRange(0, computedSmallMax)  },
+                  { tier: mediumTier, label: 'Medium', colors: TIER_COLORS[1], range: formatRange(mediumStart, computedMediumMax) },
+                  { tier: largeTier,  label: 'Large',  colors: TIER_COLORS[2], range: formatRange(computedLargeMin)      },
+                ].map(({ tier, label, colors, range }) => (
+                  <tr key={tier.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-5 py-4">
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-black ${colors.bg} ${colors.text}`}>
+                        {label}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="text-xs text-slate-500 font-mono">{range}</span>
+                    </td>
+                    {sortedPhases.map(phase => {
+                      const val = localTargets[tier.id]?.[phase.id] ?? tier.targets[phase.id] ?? 0;
+                      return (
+                        <td key={phase.id} className="px-4 py-3 text-center">
                           <input
                             type="number"
                             min="0"
-                            max="100"
-                            className="w-12 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center focus:ring-2 focus:ring-blue-500/20"
-                            value={formData.targets[phase.id] ?? ''}
-                            placeholder="-"
-                            onChange={e => handleTargetChange(phase.id, e.target.value)}
+                            max="99"
+                            className="w-16 mx-auto px-2 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-center focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 outline-none block"
+                            value={val === 0 ? '' : val}
+                            placeholder="0"
+                            onChange={e => handleTargetChange(tier.id, phase.id, e.target.value)}
                           />
-                          <span className="ml-1 text-[10px] text-slate-400">%</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1">
-                          <span className={`text-xs font-black ${tier.targets[phase.id] ? 'text-slate-700' : 'text-slate-300'}`}>
-                            {tier.targets[phase.id] ?? 0}%
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                  ))}
-
-                  {/* Actions */}
-                  <td className="px-6 py-4 text-right">
-                    {isEditing ? (
-                      <div className="flex justify-end gap-2">
-                        <button onClick={handleSubmit} className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-lg shadow-blue-500/20">
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button onClick={resetForm} className="w-8 h-8 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-300">
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex justify-end gap-2">
-                        {/* Delete removed - fixed to 3 tiers */}
-                        <button onClick={() => startEdit(tier)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center transition-colors">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {(!sortedTiers || sortedTiers.length === 0) && !isAdding && (
-              <tr>
-                <td colSpan={3 + (sortedPhases?.length || 0)} className="px-6 py-12 text-center text-slate-400 italic">
-                  No asset tiers defined. Add a tier to start tracking KPIs.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      <ConfirmationModal
-        isOpen={!!tierToDelete}
-        title="Remove Asset Tier?"
-        message="This will delete this KPI tier and all associated phase targets. This action is permanent."
-        confirmLabel="Yes, Delete Tier"
-        cancelLabel="Cancel"
-        onConfirm={confirmDelete}
-        onCancel={() => setTierToDelete(null)}
-        variant="danger"
-      />
+      {/* Info note */}
+      <div className="mt-6 flex items-start gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4">
+        <Info className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
+        <p className="text-xs text-blue-700">
+          <strong>How tiers work:</strong> When generating an audit schedule, each department's total asset count is matched
+          against the thresholds above. The matched tier's visit requirements are used to determine how many audits to
+          schedule per phase.
+        </p>
+      </div>
     </div>
   );
 };

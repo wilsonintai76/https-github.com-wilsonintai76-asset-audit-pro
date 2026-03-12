@@ -17,6 +17,7 @@ interface OverviewDashboardProps {
   locations?: Location[];
   currentUser: User;
   activities?: SystemActivity[];
+  maxAssetsPerDay?: number;
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
@@ -28,7 +29,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   departments = [],
   locations = [],
   currentUser,
-  activities = []
+  activities = [],
+  maxAssetsPerDay = 500
 }) => {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState('All');
@@ -198,7 +200,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           </div>
       </div>
 
-      {config.showStats && <StatsCards schedules={filteredSchedules} />}
+      {config.showStats && <StatsCards schedules={filteredSchedules} departments={departments} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
@@ -219,6 +221,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               kpiTiers={kpiTiers}
               phases={phases}
               schedules={schedules}
+              maxAssetsPerDay={maxAssetsPerDay}
             />
           )}
 

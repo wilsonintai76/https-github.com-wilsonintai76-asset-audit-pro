@@ -11,7 +11,7 @@ export interface AuditSchedule {
   phaseId: string;
 }
 
-export type Designation = 'Head Of Department' | 'Coordinator' | 'Supervisor' | 'Lecturer';
+export type Designation = 'Head Of Department' | 'Coordinator' | 'Supervisor' | 'Staff';
 
 export type UserRole = 'Admin' | 'Coordinator' | 'Supervisor' | 'Auditor' | 'Staff' | 'Guest';
 export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard';
@@ -32,6 +32,7 @@ export interface User {
   certificationExpiry?: string; // ISO-8601 date string
   status: 'Active' | 'Inactive' | 'Suspended' | 'Pending';
   isVerified?: boolean;
+  mustChangePIN?: boolean;
   dashboardConfig?: DashboardConfig;
 }
 
@@ -40,6 +41,7 @@ export interface Department {
   name: string;
   abbr: string;
   headOfDeptId: string | null;
+  headName?: string | null;
   description: string;
   auditGroup?: string;
   totalAssets?: number;

@@ -27,6 +27,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
 
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
+  const isSupervisor = userRoles.includes('Supervisor');
 
   const filteredLocations = useMemo(() => {
     let base = (isCoordinator && !isAdmin)
@@ -180,7 +181,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
           </div>
 
-          {isAdmin && (
+          {(isAdmin || (isCoordinator && !isAdmin)) && (
             <button 
               onClick={startAdd}
               className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
@@ -253,14 +254,18 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                       </span>
                     </td>
                     <td className="px-6 py-4 align-middle">
-                      {isAdmin && (
+                      {(isAdmin || isCoordinator || isSupervisor) && (
                         <div className="flex gap-1">
-                          <button onClick={() => startEdit(loc)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors">
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => onDelete(loc.id)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {(isAdmin || isCoordinator || isSupervisor) && (
+                            <button onClick={() => startEdit(loc)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors" title={isSupervisor && !isAdmin && !isCoordinator ? 'Edit Block / Level / Total Assets' : 'Edit Location'}>
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                          )}
+                          {(isAdmin || isCoordinator) && (
+                            <button onClick={() => onDelete(loc.id)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -293,6 +298,8 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
         departments={departments}
         users={users}
         isAdmin={isAdmin}
+        isCoordinator={isCoordinator}
+        isSupervisor={isSupervisor && !isAdmin && !isCoordinator}
         userDeptId={userDeptId}
       />
     </div>

@@ -19,6 +19,7 @@ interface AuditorAssignmentSlotProps {
   isCertified: boolean;
   isSupervisor: boolean;
   isCoordinator: boolean;
+  isSupervisorConflict: boolean;
   onAssign: (id: string, slot: 1 | 2, date: string, phaseId: string) => void;
   onUnassign: (id: string, slot: 1 | 2) => void;
   getUserContact: (userId: string) => string | null;
@@ -43,6 +44,7 @@ export const AuditorAssignmentSlot: React.FC<AuditorAssignmentSlotProps> = ({
   isCertified,
   isSupervisor,
   isCoordinator,
+  isSupervisorConflict,
   onAssign,
   onUnassign,
   getUserContact,
@@ -59,7 +61,7 @@ export const AuditorAssignmentSlot: React.FC<AuditorAssignmentSlotProps> = ({
   const canRemove = isAssigned && (canManageAssignments || isMe) && !isPast;
   
   // Check eligibility: Has field role + Valid Cert + No Conflict
-  const isDisabled = isAssigned || !canSelfAssignSelf || !userCanAudit || isCurrentUserAssigned || isPast || !isDateValid || !hasPhases || isUserOverLimit;
+  const isDisabled = isAssigned || !canSelfAssignSelf || !userCanAudit || isSupervisorConflict || isCurrentUserAssigned || isPast || !isDateValid || !hasPhases || isUserOverLimit;
   
   let disableReason = "";
   if (isAssigned) {
@@ -75,10 +77,14 @@ export const AuditorAssignmentSlot: React.FC<AuditorAssignmentSlotProps> = ({
     } else {
         disableReason = "Certification Required: Your auditor certificate is expired or invalid.";
     }
+  } else if (isSupervisorConflict) {
+    disableReason = "Conflict of Interest: You are the supervisor of this location and cannot audit it.";
   } else if (!userCanAudit) {
      const myEnt = getEntityName(currentUser?.departmentId || '');
      const targetEnt = getEntityName(audit.departmentId);
-     disableReason = myEnt === targetEnt ? "Conflict of Interest: You cannot audit your own department." : "Unauthorized Target: This location is outside your assigned audit matrix.";
+     disableReason = myEnt === targetEnt
+       ? "Conflict of Interest: Internal audit not enabled for your department."
+       : "Unauthorized Target: This location is outside your assigned audit matrix.";
   } else if (isCurrentUserAssigned) {
     disableReason = "Already assigned to a slot in this audit instance.";
   } else if (isPast) {

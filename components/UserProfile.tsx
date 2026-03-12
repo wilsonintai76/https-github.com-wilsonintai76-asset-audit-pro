@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { User, Department } from '../types';
-import { Mail, CheckCircle2, User as UserIcon, Phone, Info, Loader2, Award, AlertCircle, RotateCw, Shield } from 'lucide-react';
+import { Mail, CheckCircle2, User as UserIcon, Phone, Info, Loader2, Award, AlertCircle, RotateCw, Shield, KeyRound } from 'lucide-react';
 
 interface UserProfileProps {
   user: User;
@@ -33,11 +33,20 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
       return;
     }
 
+    if (user.mustChangePIN && !formData.pin) {
+      alert("You must set a new PIN before continuing.");
+      return;
+    }
+
     setIsSaving(true);
     
     try {
       const updates: Partial<User> = { ...formData };
       if (!updates.pin) delete updates.pin; // Don't overwrite if empty
+      
+      if (user.mustChangePIN && formData.pin) {
+        updates.mustChangePIN = false;
+      }
       
       if (user.status === 'Pending') {
         updates.status = 'Active';
@@ -89,6 +98,17 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
         </div>
 
         <div className="pt-16 pb-8 px-8">
+          {user.mustChangePIN && (
+            <div className="mb-6 flex items-start gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-amber-800">PIN Change Required</p>
+                <p className="text-xs text-amber-700 mt-0.5">Your account was created with a temporary PIN. Please set a new 4-digit PIN below before you can continue.</p>
+              </div>
+            </div>
+          )}
           <div className="flex justify-between items-start mb-8">
             <div>
               <h2 className="text-2xl font-black text-slate-900">{user.name}</h2>

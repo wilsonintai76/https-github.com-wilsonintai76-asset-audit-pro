@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Department, User } from '../types';
+import { Department, User, DepartmentMapping } from '../types';
 import { X, Layers, User as UserIcon, FileText, Boxes, Shield } from 'lucide-react';
 
 interface DepartmentModalProps {
@@ -10,6 +10,7 @@ interface DepartmentModalProps {
   initialData?: Department | null;
   users: User[];
   isAdmin: boolean;
+  departmentMappings?: DepartmentMapping[];
 }
 
 export const DepartmentModal: React.FC<DepartmentModalProps> = ({
@@ -18,7 +19,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
   onSave,
   initialData,
   users,
-  isAdmin
+  isAdmin,
+  departmentMappings = []
 }) => {
   const [formData, setFormData] = useState({
     name: '',
@@ -133,6 +135,21 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Mapped From (Source Names)</label>
+              {(() => {
+                const sources = departmentMappings.filter(m => m.targetDepartmentId === initialData?.id);
+                if (sources.length === 0) return (
+                  <p className="text-xs text-slate-400 italic px-1">No mapping rules point to this department yet.</p>
+                );
+                return (
+                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-2xl text-xs text-blue-800 leading-relaxed">
+                    {sources.map(m => m.sourceName).join(', ')}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="space-y-1.5">

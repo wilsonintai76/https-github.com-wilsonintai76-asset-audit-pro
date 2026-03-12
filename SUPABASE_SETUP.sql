@@ -96,11 +96,12 @@ CREATE TABLE users (
   certification_issued DATE,
   certification_expiry DATE,
   designation          TEXT         CONSTRAINT chk_user_designation CHECK (
-                           designation IS NULL OR designation IN ('Head Of Department','Coordinator','Supervisor','Lecturer')
+                           designation IS NULL OR designation IN ('Head Of Department','Coordinator','Supervisor','Staff')
                          ),
   status               TEXT NOT NULL DEFAULT 'Active'
                          CONSTRAINT chk_user_status CHECK (status IN ('Active','Inactive','Suspended','Pending')),
   is_verified          BOOLEAN NOT NULL DEFAULT false,
+  must_change_pin      BOOLEAN NOT NULL DEFAULT false,
   dashboard_config     JSONB   NOT NULL DEFAULT '{
     "showStats": true,
     "showTrends": true,

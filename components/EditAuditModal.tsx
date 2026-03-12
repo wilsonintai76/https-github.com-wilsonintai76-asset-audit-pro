@@ -10,9 +10,10 @@ interface EditAuditModalProps {
   locations: Location[];
   auditPhases: AuditPhase[];
   users: User[];
+  isSupervisor?: boolean;
 }
 
-export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, onUpdate, departments, locations, auditPhases, users }) => {
+export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, onUpdate, departments, locations, auditPhases, users, isSupervisor }) => {
   const [formData, setFormData] = useState({
     departmentId: audit.departmentId,
     locationId: audit.locationId,
@@ -89,7 +90,9 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
         <div className="bg-blue-600 p-5 md:p-6 text-white flex items-center justify-between">
           <div>
             <h3 className="text-lg md:text-xl font-bold">Edit Audit Schedule</h3>
-            <p className="text-blue-100 text-[10px] md:text-xs mt-1">Update the details for this audit.</p>
+            <p className="text-blue-100 text-[10px] md:text-xs mt-1">
+              {isSupervisor ? 'Supervisor access — set the audit date only.' : 'Update the details for this audit.'}
+            </p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
             <X className="w-4 h-4" />
@@ -102,7 +105,8 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
             <div className="relative">
               <select
                 required
-                className="w-full px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-bold text-blue-900 appearance-none cursor-pointer"
+                disabled={isSupervisor}
+                className="w-full px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-bold text-blue-900 appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 value={formData.phaseId}
                 onChange={e => setFormData({...formData, phaseId: e.target.value})}
               >
@@ -121,7 +125,8 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
               <div className="relative">
                 <select
                   required
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer"
+                  disabled={isSupervisor}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   value={formData.departmentId}
                   onChange={handleDeptChange}
                 >
@@ -139,7 +144,7 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
               <div className="relative">
                 <select
                   required
-                  disabled={!formData.departmentId || !formData.phaseId}
+                  disabled={!formData.departmentId || !formData.phaseId || isSupervisor}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-50"
                   value={formData.locationId}
                   onChange={handleLocationChange}
@@ -162,7 +167,8 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
               <div className="relative">
                 <select
                   required
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer"
+                  disabled={isSupervisor}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   value={formData.supervisorId}
                   onChange={e => setFormData({...formData, supervisorId: e.target.value})}
                 >
