@@ -182,10 +182,8 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (viewState === 'app') {
-      loadAllData();
-    }
-  }, [viewState, loadAllData]);
+    loadAllData();
+  }, [loadAllData]);
 
   // --- COMPUTED VALUES ---
   const departmentsWithAssets = useMemo(() => {
@@ -1651,6 +1649,11 @@ const App: React.FC = () => {
   };
 
   if (viewState === 'landing') {
+    const totalAssets = departmentsWithAssets.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+    const completedAudits = schedules.filter(s => s.status === 'Completed').length;
+    const totalAuditsCount = schedules.length;
+    const complianceProgress = totalAuditsCount > 0 ? Math.round((completedAudits / totalAuditsCount) * 100) : 0;
+
     return (
       <LandingPage
         onEnter={async () => {
@@ -1661,6 +1664,9 @@ const App: React.FC = () => {
           }
         }}
         onShowKnowledgeBase={() => setViewState('docs')}
+        totalAssets={totalAssets > 0 ? totalAssets : undefined}
+        totalPhases={auditPhases.length > 0 ? auditPhases.length : undefined}
+        complianceProgress={complianceProgress > 0 ? complianceProgress : undefined}
       />
     );
   }

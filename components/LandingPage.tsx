@@ -17,9 +17,18 @@ import {
 interface LandingPageProps {
   onEnter: () => void;
   onShowKnowledgeBase: () => void;
+  totalAssets?: number;
+  totalPhases?: number;
+  complianceProgress?: number;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, onShowKnowledgeBase }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ 
+  onEnter, 
+  onShowKnowledgeBase,
+  totalAssets = 18302,
+  totalPhases = 3,
+  complianceProgress = 84
+}) => {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
@@ -139,20 +148,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, onShowKnowled
                   <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
                     <div className="flex justify-between items-end mb-2">
                       <span className="text-xs font-bold">Overall Compliance Progress</span>
-                      <span className="text-[10px] font-mono text-emerald-400">84%</span>
+                      <span className="text-[10px] font-mono text-emerald-400">{complianceProgress}%</span>
                     </div>
                     <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500 rounded-full w-[84%]"></div>
+                      <div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{ width: `${complianceProgress}%` }}></div>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
                       <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Total Assets</p>
-                      <p className="text-2xl font-black">18,302</p>
+                      <p className="text-2xl font-black">{totalAssets.toLocaleString()}</p>
                     </div>
                     <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
                       <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Active Phases</p>
-                      <p className="text-2xl font-black text-amber-500">03</p>
+                      <p className="text-2xl font-black text-amber-500">{String(totalPhases).padStart(2, '0')}</p>
                     </div>
                   </div>
                 </div>
