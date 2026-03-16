@@ -596,9 +596,9 @@ const App: React.FC = () => {
 
       // Map supervisor names to their IDs for the audits and locations
       const getSupervisorId = (name: string) => {
-        if (!name || name === 'To be filled') return 'To be filled';
+        if (!name || name === 'To be filled') return '';
         const user = [...users, ...newUsersCreated].find(u => u.name.toLowerCase() === name.toLowerCase());
-        return user ? user.id : name; // Fallback to name if something goes wrong
+        return user ? user.id : ''; 
       };
 
       // Update audits with actual user IDs
@@ -1334,7 +1334,7 @@ const App: React.FC = () => {
             await gateway.addAudit({
               departmentId: dept.id,
               locationId: firstLoc.id,
-              supervisorId: firstLoc.supervisorId || 'System',
+              supervisorId: firstLoc.supervisorId || '',
               phaseId: phaseId,
               status: 'Pending',
               auditor1Id: null,
