@@ -326,7 +326,67 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =============================================================
--- 10. AUTH TRIGGER
+-- 10. AUTH DOMAIN WHITELIST (Advanced Hook Support)
+--     Used by the "Before User Created" Auth Hook for strict blocking.
+-- =============================================================
+CREATE TABLE IF NOT EXISTS public.allowed_domains (
+  domain TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Initialize with the institutional domain
+INSERT INTO public.allowed_domains (domain) 
+VALUES ('poliku.edu.my')
+ON CONFLICT (domain) DO NOTHING;
+
+-- Create the Auth Hook function for the "Before User Created" event
+CREATE OR REPLACE FUNCTION public.check_email_domain(event jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  email TEXT;
+  domain_part TEXT;
+  is_allowed BOOLEAN;
+  master_admin TEXT := 'wilsonintai76@gmail.com';
+BEGIN
+  -- 1. Extract email from the event payload
+  email := event->'user'->>'email';
+  domain_part := split_part(email, '@', 2);
+
+  -- 2. Master Admin bypass
+  IF LOWER(email) = LOWER(master_admin) THEN
+    RETURN '{}'::jsonb;
+  END IF;
+
+  -- 3. Check if domain exists in our allow list
+  SELECT EXISTS (
+    SELECT 1 FROM public.allowed_domains 
+    WHERE LOWER(domain) = LOWER(domain_part)
+  ) INTO is_allowed;
+
+  IF NOT is_allowed THEN
+    -- Return an error object to reject signup (This shows up in the frontend)
+    RETURN jsonb_build_object(
+      'error', jsonb_build_object(
+        'message', 'Access restricted. @' || domain_part || ' is not an authorized institutional domain.',
+        'http_code', 403
+      )
+    );
+  END IF;
+
+  -- 4. Return empty object to allow signup
+  RETURN '{}'::jsonb;
+END;
+$$;
+
+-- Grant permissions to the auth admin role for hook execution
+GRANT EXECUTE ON FUNCTION public.check_email_domain TO supabase_auth_admin;
+REVOKE EXECUTE ON FUNCTION public.check_email_domain FROM public, anon, authenticated;
+
+-- =============================================================
+-- 11. AUTH PROFILE TRIGGER
 --     Automatically creates a profile in public.users when a 
 --     new user signs up via Supabase Auth.
 -- =============================================================

@@ -412,7 +412,24 @@ const App: React.FC = () => {
     };
 
     const initSession = async () => {
-      if (!supabase) return;
+      // 1. Check for errors in URL (e.g. from Auth Hooks or Domain Blocking)
+      const hash = window.location.hash;
+      if (hash && (hash.includes('error=') || hash.includes('error_description='))) {
+        const params = new URLSearchParams(hash.replace('#', '?'));
+        const errorMsg = params.get('error_description') || params.get('error') || 'Authentication failed';
+        
+        // Clean the URL to avoid repeated alerts on refresh
+        window.history.replaceState(null, '', window.location.pathname);
+        
+        customAlert(decodeURIComponent(errorMsg.replace(/\+/g, ' ')));
+        setIsInitialLoading(false);
+        return;
+      }
+
+      if (!supabase) {
+        setIsInitialLoading(false);
+        return;
+      }
 
       // Check for Supabase session
       const { data: { session } } = await supabase.auth.getSession();
@@ -449,6 +466,7 @@ const App: React.FC = () => {
         // Fallback to local storage for non-auth users or previous sessions
         fallbackToLocalSession();
       }
+      setIsInitialLoading(false);
     };
 
     initSession();
