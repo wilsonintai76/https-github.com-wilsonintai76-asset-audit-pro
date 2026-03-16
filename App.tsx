@@ -1398,11 +1398,43 @@ const App: React.FC = () => {
 
   const handleUpdateKPITier = async (id: string, updates: Partial<KPITier>) => {
     try {
-      await gateway.updateKPITier(id, updates);
+      const currentTiers = [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets);
+      const tierIndex = currentTiers.findIndex(t => t.id === id);
+      
+      if (tierIndex === -1) return;
+
+      // Prepare updates for the specific tier
+      const updatedTiers = [...currentTiers];
+      updatedTiers[tierIndex] = { ...updatedTiers[tierIndex], ...updates };
+
+      // Cascading logic: Adjust subsequent tiers
+      for (let i = tierIndex; i < updatedTiers.length - 1; i++) {
+        const currentTier = updatedTiers[i];
+        const nextTier = updatedTiers[i + 1];
+        
+        // Next tier MUST start at current max + 1
+        const newNextMin = currentTier.maxAssets + 1;
+        if (nextTier.minAssets !== newNextMin) {
+          updatedTiers[i + 1] = { ...nextTier, minAssets: newNextMin };
+          // Ensure next max is at least next min
+          if (updatedTiers[i+1].maxAssets < newNextMin) {
+             updatedTiers[i+1].maxAssets = newNextMin + 1;
+          }
+        }
+      }
+
+      // Chain Save: We need to save all changed tiers
+      for (const tier of updatedTiers) {
+        const original = currentTiers.find(t => t.id === tier.id);
+        if (JSON.stringify(original) !== JSON.stringify(tier)) {
+          await gateway.updateKPITier(tier.id, tier);
+        }
+      }
+
       setKpiTiers(await gateway.getKPITiers());
-      showToast('KPI Tier updated successfully');
+      showToast('KPI Tiers synchronized');
     } catch (e) {
-      showError(e, 'KPI Tier Update Failed');
+      showError(e, 'KPI Logic Error');
     }
   };
 

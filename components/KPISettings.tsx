@@ -20,18 +20,21 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
   });
 
   const sortedPhases = [...phases].sort((a,b) => a.startDate.localeCompare(b.startDate));
-  const sortedTiers = [...tiers].sort((a, b) => a.minAssets - b.minAssets);
+  const sortedTiers = [...tiers].sort((a, b) => {
+    if (a.minAssets !== b.minAssets) return a.minAssets - b.minAssets;
+    return a.maxAssets - b.maxAssets;
+  });
 
   const startEdit = (tier: KPITier) => {
     setEditingId(tier.id);
     
-    // Find previous tier to determine minAssets
+    // Calculate effective minAssets from the preceding tier in the sorted list
     const tierIndex = sortedTiers.findIndex(t => t.id === tier.id);
     const calculatedMin = tierIndex > 0 ? sortedTiers[tierIndex - 1].maxAssets + 1 : 0;
 
     setFormData({
       name: tier.name || '',
-      minAssets: calculatedMin || 0,
+      minAssets: calculatedMin, // Force continuity
       maxAssets: tier.maxAssets || 0,
       targets: { ...tier.targets }
     });
