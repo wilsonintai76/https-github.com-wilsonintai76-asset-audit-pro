@@ -101,7 +101,7 @@ CREATE TABLE users (
                          CONSTRAINT chk_user_status CHECK (status IN ('Active','Inactive','Suspended','Pending')),
   is_verified          BOOLEAN NOT NULL DEFAULT false,
   CONSTRAINT chk_department_required CHECK (
-    ('Admin' = ANY(roles)) OR (status = 'Pending') OR (department_id IS NOT NULL)
+    ('Admin' = ANY(roles)) OR (status = 'Pending') OR (department_id IS NOT NULL) OR (is_verified = false)
   ),
   dashboard_config     JSONB   NOT NULL DEFAULT '{
     "showStats": true,
@@ -224,7 +224,7 @@ CREATE TABLE department_mappings (
 CREATE TABLE system_activities (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type        TEXT NOT NULL,
-  user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+  user_id     UUID REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
   audit_id    UUID REFERENCES audits(id) ON DELETE CASCADE,
   message     TEXT NOT NULL,
   metadata    JSONB DEFAULT '{}',
@@ -334,18 +334,19 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-    -- 1. If email already exists in public.users, update its ID to match the new auth user
-    -- This handles pre-seeded users (like the Super Admin)
-    IF EXISTS (SELECT 1 FROM public.users WHERE email = new.email) THEN
+    -- 1. Case-insensitive email check to prevent duplicate key errors
+    -- We match using LOWER() and update existing records to avoid unique constraint violations
+    IF EXISTS (SELECT 1 FROM public.users WHERE LOWER(email) = LOWER(new.email)) THEN
         UPDATE public.users 
         SET id = new.id,
+            email = LOWER(new.email),
             name = COALESCE(new.raw_user_meta_data->>'name', name)
-        WHERE email = new.email;
+        WHERE LOWER(email) = LOWER(new.email);
     ELSE
-        -- 2. Check if ID already exists (unlikely but for safety)
+        -- 2. Check if ID already exists
         IF EXISTS (SELECT 1 FROM public.users WHERE id = new.id) THEN
             UPDATE public.users
-            SET email = new.email,
+            SET email = LOWER(new.email),
                 name = COALESCE(new.raw_user_meta_data->>'name', name)
             WHERE id = new.id;
         ELSE
@@ -360,7 +361,7 @@ BEGIN
             )
             VALUES (
                 new.id,
-                new.email,
+                LOWER(new.email),
                 COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
                 ARRAY['Guest']::TEXT[],
                 'Pending',
