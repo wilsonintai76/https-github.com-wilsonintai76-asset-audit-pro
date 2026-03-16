@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { Award, Stamp, Calendar, CalendarCheck } from 'lucide-react';
+import { BRANDING } from '../constants';
 
 interface IssueCertificateModalProps {
   user: User;
@@ -33,7 +34,7 @@ export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ us
           <div className="relative z-10 text-center">
             <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-xl shadow-white/10 overflow-hidden">
               <img 
-                src="https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/Sidebar%20Icon.png" 
+                src={BRANDING.logoSquare} 
                 alt="Logo" 
                 className="w-full h-full object-cover" 
               />

@@ -16,7 +16,8 @@ import {
   Trophy,
   History
 } from 'lucide-react';
-import { AuditPhase, SystemActivity } from '../types';
+import { AuditPhase, SystemActivity, UserRole, AppView } from '../types';
+import { BRANDING } from '../constants';
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -128,7 +129,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="h-10 px-4 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-xl shadow-slate-900/20 overflow-hidden">
                <img 
-                 src="https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/A%20horizontal%20logo.png" 
+                 src={BRANDING.logoHorizontal} 
                  alt="Institutional Logo" 
                  className="h-6 w-auto object-contain brightness-0 invert" 
                />
@@ -377,7 +378,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="max-w-7xl mx-auto px-6 text-center">
             <div className="h-8 px-3 bg-slate-900 rounded-lg flex items-center justify-center text-white">
               <img 
-                src="https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/A%20horizontal%20logo.png" 
+                src={BRANDING.logoHorizontal} 
                 alt="Institutional Logo" 
                 className="h-4 w-auto object-contain brightness-0 invert" 
               />
