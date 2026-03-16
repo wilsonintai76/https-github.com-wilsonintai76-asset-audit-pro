@@ -370,7 +370,7 @@ BEGIN
     -- Return an error object to reject signup (This shows up in the frontend)
     RETURN jsonb_build_object(
       'error', jsonb_build_object(
-        'message', 'Access restricted. @' || domain_part || ' is not an authorized institutional domain.',
+        'message', 'Access restricted. Your email (' || email || ') does not belong to the @poliku.edu.my domain.',
         'http_code', 403
       )
     );
