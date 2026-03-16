@@ -47,6 +47,7 @@ const App: React.FC = () => {
   const [departmentMappings, setDepartmentMappings] = useState<DepartmentMapping[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activities, setActivities] = useState<SystemActivity[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // UI State
   const [selectedDept, setSelectedDept] = useState<string>('All');
@@ -178,6 +179,8 @@ const App: React.FC = () => {
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
       setConnectionErrorMessage("Failed to load application data. Please refresh.");
+    } finally {
+      setIsInitialLoading(false);
     }
   }, []);
 
@@ -1664,9 +1667,9 @@ const App: React.FC = () => {
           }
         }}
         onShowKnowledgeBase={() => setViewState('docs')}
-        totalAssets={totalAssets > 0 ? totalAssets : undefined}
-        totalPhases={auditPhases.length > 0 ? auditPhases.length : undefined}
-        complianceProgress={complianceProgress > 0 ? complianceProgress : undefined}
+        totalAssets={!isInitialLoading ? totalAssets : undefined}
+        totalPhases={!isInitialLoading ? auditPhases.length : undefined}
+        complianceProgress={!isInitialLoading ? complianceProgress : undefined}
       />
     );
   }
