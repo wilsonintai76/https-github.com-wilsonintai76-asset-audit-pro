@@ -243,7 +243,8 @@ class DataGateway {
       return (data || []).map((d: any) => ({
         ...d,
         headOfDeptId: d.head_of_dept_id,
-        auditGroup: d.audit_group
+        auditGroup: d.audit_group,
+        totalAssets: d.total_assets
       })) as Department[];
     }
     return [];
@@ -253,9 +254,12 @@ class DataGateway {
     if (supabase) {
       const payload: any = { ...dept };
       if (dept.headOfDeptId !== undefined) { payload.head_of_dept_id = dept.headOfDeptId; }
-      delete payload.headOfDeptId;
       if (dept.auditGroup !== undefined) { payload.audit_group = dept.auditGroup; }
+      if (dept.totalAssets !== undefined) { payload.total_assets = dept.totalAssets; }
+      
+      delete payload.headOfDeptId;
       delete payload.auditGroup;
+      delete payload.totalAssets;
 
       const { data, error } = await supabase.from('departments').insert([payload]).select().single();
       if (error) throw error;
@@ -264,7 +268,8 @@ class DataGateway {
       return {
         ...result,
         headOfDeptId: result.head_of_dept_id,
-        auditGroup: result.audit_group
+        auditGroup: result.audit_group,
+        totalAssets: result.total_assets
       } as Department;
     }
     throw new Error("Supabase client not initialized");
@@ -274,9 +279,12 @@ class DataGateway {
     if (supabase) {
       const payload: any = { ...updates };
       if (updates.headOfDeptId !== undefined) { payload.head_of_dept_id = updates.headOfDeptId; }
-      delete payload.headOfDeptId;
       if (updates.auditGroup !== undefined) { payload.audit_group = updates.auditGroup; }
+      if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; }
+      
+      delete payload.headOfDeptId;
       delete payload.auditGroup;
+      delete payload.totalAssets;
 
       const { error } = await supabase.from('departments').update(payload).eq('id', id);
       if (error) throw error;
@@ -313,10 +321,15 @@ class DataGateway {
   async addLocation(loc: Omit<Location, 'id'>): Promise<Location> {
     if (supabase) {
       const payload: any = { ...loc };
-      if (loc.departmentId !== undefined) { payload.department_id = loc.departmentId; delete payload.departmentId; }
-      if (loc.supervisorId !== undefined) { payload.supervisor_id = loc.supervisorId; delete payload.supervisorId; }
-      if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; delete payload.totalAssets; }
-      if (loc.isActive !== undefined) { payload.is_active = loc.isActive; delete payload.isActive; }
+      payload.department_id = loc.departmentId && loc.departmentId !== "" ? loc.departmentId : null;
+      payload.supervisor_id = loc.supervisorId && loc.supervisorId !== "" ? loc.supervisorId : null;
+      if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; }
+      if (loc.isActive !== undefined) { payload.is_active = loc.isActive; }
+
+      delete payload.departmentId;
+      delete payload.supervisorId;
+      delete payload.totalAssets;
+      delete payload.isActive;
 
       const { data, error } = await supabase.from('locations').insert([payload]).select().single();
       if (error) throw error;
@@ -337,10 +350,15 @@ class DataGateway {
     if (supabase) {
       const payloads = locations.map(loc => {
         const payload: any = { ...loc };
-        if (loc.departmentId !== undefined) { payload.department_id = loc.departmentId; delete payload.departmentId; }
-        if (loc.supervisorId !== undefined) { payload.supervisor_id = loc.supervisorId; delete payload.supervisorId; }
-        if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; delete payload.totalAssets; }
-        if (loc.isActive !== undefined) { payload.is_active = loc.isActive; delete payload.isActive; }
+        payload.department_id = loc.departmentId && loc.departmentId !== "" ? loc.departmentId : null;
+        payload.supervisor_id = loc.supervisorId && loc.supervisorId !== "" ? loc.supervisorId : null;
+        if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; }
+        if (loc.isActive !== undefined) { payload.is_active = loc.isActive; }
+
+        delete payload.departmentId;
+        delete payload.supervisorId;
+        delete payload.totalAssets;
+        delete payload.isActive;
         return payload;
       });
 
@@ -360,10 +378,19 @@ class DataGateway {
   async updateLocation(id: string, updates: Partial<Location>) {
     if (supabase) {
       const payload: any = { ...updates };
-      if (updates.departmentId !== undefined) { payload.department_id = updates.departmentId; delete payload.departmentId; }
-      if (updates.supervisorId !== undefined) { payload.supervisor_id = updates.supervisorId; delete payload.supervisorId; }
-      if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; delete payload.totalAssets; }
-      if (updates.isActive !== undefined) { payload.is_active = updates.isActive; delete payload.isActive; }
+      if (updates.departmentId !== undefined) { 
+        payload.department_id = updates.departmentId && updates.departmentId !== "" ? updates.departmentId : null; 
+      }
+      if (updates.supervisorId !== undefined) { 
+        payload.supervisor_id = updates.supervisorId && updates.supervisorId !== "" ? updates.supervisorId : null; 
+      }
+      if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; }
+      if (updates.isActive !== undefined) { payload.is_active = updates.isActive; }
+
+      delete payload.departmentId;
+      delete payload.supervisorId;
+      delete payload.totalAssets;
+      delete payload.isActive;
 
       const { error } = await supabase.from('locations').update(payload).eq('id', id);
       if (error) throw error;
