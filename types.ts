@@ -58,6 +58,7 @@ export interface Location {
   supervisorId: string;
   contact: string;
   totalAssets?: number;
+  isActive?: boolean;
 }
 
 export interface DashboardConfig {
@@ -117,6 +118,6 @@ export interface SystemActivity {
   userId: string | null;
   auditId?: string;
   message: string;
-  timestamp: string;
+  timestamp?: string;
   metadata?: Record<string, any>;
 }

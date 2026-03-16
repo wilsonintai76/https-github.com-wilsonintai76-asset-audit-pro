@@ -70,7 +70,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
     let base = (isCoordinator && !isAdmin) ? locations.filter(l => l.departmentId === userDeptId) : locations;
     if (selectedDeptFilter !== 'All') base = base.filter(l => l.departmentId === selectedDeptFilter);
     if (selectedBlockFilter !== 'All') base = base.filter(l => l.building === selectedBlockFilter);
-    return Array.from(new Set(base.map(l => l.level).filter(Boolean))).sort((a, b) => {
+    return Array.from(new Set(base.map(l => l.level).filter(Boolean))).sort((a: any, b: any) => {
       const indexA = LEVELS.indexOf(a || '');
       const indexB = LEVELS.indexOf(b || '');
       if (indexA !== -1 && indexB !== -1) return indexA - indexB;

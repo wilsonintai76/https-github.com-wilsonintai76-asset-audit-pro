@@ -1,6 +1,8 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { gateway } from './services/dataGateway';
+import { supabase } from './services/supabase';
+import { authService } from './services/auth';
 import { ItemNotFoundError } from './services/localDB';
 import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, DepartmentMapping, SystemActivity } from './types';
 import { AuditTable } from './components/AuditTable';
@@ -9,7 +11,6 @@ import { NotificationCenter } from './components/NotificationCenter';
 import { TeamManagement } from './components/TeamManagement';
 import { OverviewDashboard } from './components/OverviewDashboard';
 import { AuditorDashboard } from './components/AuditorDashboard';
-import { LoginPage } from './components/LoginPage';
 import { SystemSettings } from './components/SystemSettings';
 import { DepartmentManagement } from './components/DepartmentManagement';
 import { LocationManagement } from './components/LocationManagement';
@@ -26,7 +27,7 @@ const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   showDeptDistribution: true
 };
 
-type ViewState = 'landing' | 'login' | 'app' | 'docs';
+type ViewState = 'landing' | 'app' | 'docs';
 
 const App: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>('landing');
@@ -246,6 +247,9 @@ const App: React.FC = () => {
     } else if (!isAdmin && isCertified) {
       setViewState('app');
       setActiveView('auditor-dashboard');
+    } else if (!isAdmin && !finalUser.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+      setViewState('app');
+      setActiveView('profile');
     } else {
       setViewState('app');
       setActiveView('overview');
@@ -317,33 +321,104 @@ const App: React.FC = () => {
     setIsLoggingIn(false);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('audit_pro_session');
+  const handleLogout = async () => {
+    await authService.logout();
     setCurrentUser(null);
     setViewState('landing');
   };
 
   useEffect(() => {
-    const savedSession = localStorage.getItem('audit_pro_session');
-    if (savedSession) {
-      const user = JSON.parse(savedSession);
-      // Re-apply verification check on session load
-      if (user.isVerified === false) {
-        user.roles = ['Guest'];
+    const fallbackToLocalSession = () => {
+      const savedSession = localStorage.getItem('audit_pro_session');
+      if (savedSession) {
+        try {
+          const user = JSON.parse(savedSession);
+          if (user.email?.toLowerCase() === 'wilsonintai76@gmail.com') {
+            user.roles = ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
+            user.status = 'Active';
+            user.isVerified = true;
+            localStorage.setItem('audit_pro_session', JSON.stringify(user));
+          }
+          setCurrentUser(user);
+          setViewState('app');
+          const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
+          const isAdmin = user.roles.includes('Admin');
+          if (user.status === 'Pending') {
+            setActiveView('profile');
+          } else if (!isAdmin && isCertified) {
+            setActiveView('auditor-dashboard');
+          } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+            setActiveView('profile');
+          } else {
+            setActiveView('overview');
+          }
+        } catch (e) {
+          localStorage.removeItem('audit_pro_session');
+        }
       }
-      setCurrentUser(user);
+    };
 
-      const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
-      const isAdmin = user.roles.includes('Admin');
+    const initSession = async () => {
+      if (!supabase) return;
 
-      if (user.status === 'Pending') {
-        setActiveView('profile');
-      } else if (!isAdmin && isCertified && activeView === 'overview') {
-        setActiveView('auditor-dashboard');
+      // Check for Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        try {
+          const user = await authService.getCurrentUser();
+          if (user) {
+            setCurrentUser(user);
+            setViewState('app');
+            
+            if (user.status === 'Pending') {
+              setActiveView('profile');
+            } else {
+              const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
+              const isAdmin = user.roles.includes('Admin');
+              if (!isAdmin && isCertified) {
+                setActiveView('auditor-dashboard');
+              } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+                setActiveView('profile');
+              } else {
+                setActiveView('overview');
+              }
+            }
+          } else {
+            console.warn("getCurrentUser returned null despite having a session. Falling back to local storage.");
+            fallbackToLocalSession();
+          }
+        } catch (err) {
+          console.error("Failed to load user profile:", err);
+          fallbackToLocalSession();
+        }
+      } else {
+        // Fallback to local storage for non-auth users or previous sessions
+        fallbackToLocalSession();
       }
+    };
 
-      setViewState(prev => prev === 'docs' ? 'docs' : 'app');
-    }
+    initSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase?.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const user = await authService.getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          setViewState('app');
+        } else {
+          fallbackToLocalSession();
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        setViewState('landing');
+      }
+    }) || { data: { subscription: null } };
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
   // --- ACTION HANDLERS ---
@@ -814,9 +889,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleBulkActivateStaff = async (entries: { name: string; staffId: string; email: string; department?: string; designation?: string; role?: string; pin?: string }[]) => {
+  const handleBulkActivateStaff = async (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => {
     try {
-      const userIdToObj = new Map<string, typeof users[0]>(users.map(u => [u.id.toUpperCase().trim(), u]));
       const userNameToObj = new Map<string, typeof users[0]>(users.map(u => [u.name.toUpperCase().trim(), u]));
       const deptNameToId = new Map<string, string>(departments.map(d => [d.name.toUpperCase().trim(), d.id]));
       let createdCount = 0;
@@ -825,36 +899,26 @@ const App: React.FC = () => {
         const deptId = entry.department ? (deptNameToId.get(entry.department.toUpperCase().trim()) ?? undefined) : undefined;
         const resolvedDesignation = (entry.designation as User['designation']) || undefined;
         const resolvedRoles: User['roles'] = entry.role ? [entry.role as any] : ['Staff'];
-        // Match by Staff ID first, then by name
-        const existing = (entry.staffId ? userIdToObj.get(entry.staffId.toUpperCase().trim()) : undefined)
-          ?? (entry.name ? userNameToObj.get(entry.name.toUpperCase().trim()) : undefined);
+        // Match by name
+        const existing = entry.name ? userNameToObj.get(entry.name.toUpperCase().trim()) : undefined;
         if (existing) {
           const updates: Partial<User> = { status: 'Active', isVerified: true };
           if (entry.email) updates.email = entry.email;
-          if (entry.pin) updates.pin = entry.pin;
           if (deptId) updates.departmentId = deptId;
           if (resolvedDesignation) updates.designation = resolvedDesignation;
           if (entry.role) updates.roles = resolvedRoles;
           await gateway.updateUser(existing.id, updates);
-          // If a new staff ID is provided and differs, re-create with new ID
-          if (entry.staffId && entry.staffId !== existing.id) {
-            const updatedUser = { ...existing, ...updates, id: entry.staffId };
-            await gateway.addUser(updatedUser);
-            await gateway.deleteUser(existing.id);
-          }
           updatedCount++;
         } else {
           // Create new user
           const newUser: User = {
-            id: entry.staffId || `S-${Date.now()}`,
+            id: crypto.randomUUID(),
             name: entry.name,
-            email: entry.email || `${(entry.staffId || entry.name.replace(/\s+/g, '').toLowerCase())}@asset-audit.pro`,
+            email: entry.email || `${entry.name.replace(/\s+/g, '').toLowerCase()}@asset-audit.pro`,
             roles: resolvedRoles,
             designation: resolvedDesignation || 'Supervisor',
             status: 'Active',
             isVerified: true,
-            mustChangePIN: true,
-            pin: (entry.staffId || '0000').slice(-4),
             departmentId: deptId,
           };
           await gateway.addUser(newUser);
@@ -965,8 +1029,6 @@ const App: React.FC = () => {
             designation: 'Head Of Department',
             status: 'Active',
             isVerified: true,
-            mustChangePIN: true,
-            pin: tempId
           };
           await gateway.addUser(tempUser);
           finalHeadId = tempStaffId;
@@ -1022,8 +1084,6 @@ const App: React.FC = () => {
               designation: 'Head Of Department',
               status: 'Active',
               isVerified: true,
-              mustChangePIN: true,
-              pin: tempId
             };
             await gateway.addUser(tempUser);
             currentUsers.push(tempUser);
@@ -1381,7 +1441,7 @@ const App: React.FC = () => {
 
   const handleUpsertLocations = async (newLocs: Omit<Location, 'id'>[]) => {
     try {
-      const existingMap = new Map(locations.map(l => [`${l.name.toUpperCase()}|${l.departmentId}`, l]));
+      const existingMap = new Map<string, Location>(locations.map(l => [`${l.name.toUpperCase()}|${l.departmentId}`, l]));
       const toAdd: Omit<Location, 'id'>[] = [];
       const toUpdate: { id: string; updates: Partial<Location> }[] = [];
       for (const loc of newLocs) {
@@ -1549,7 +1609,13 @@ const App: React.FC = () => {
   if (viewState === 'landing') {
     return (
       <LandingPage
-        onEnter={() => setViewState(currentUser ? 'app' : 'login')}
+        onEnter={async () => {
+          if (currentUser) {
+            setViewState('app');
+          } else {
+            await authService.loginWithGoogle();
+          }
+        }}
         onShowKnowledgeBase={() => setViewState('docs')}
       />
     );
@@ -1580,19 +1646,6 @@ const App: React.FC = () => {
           <KnowledgeBase />
         </div>
       </div>
-    );
-  }
-
-  if (viewState === 'login') {
-    return (
-      <LoginPage
-        onGoogleLogin={() => { }}
-        onDemoLogin={handleMockLogin}
-        isLoggingIn={isLoggingIn}
-        error={connectionErrorMessage}
-        onBack={() => setViewState('landing')}
-        onLoginSuccess={handleLoginSuccess}
-      />
     );
   }
 

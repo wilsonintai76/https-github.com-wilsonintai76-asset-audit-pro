@@ -33,9 +33,9 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
   useEffect(() => {
     if (initialData) {
       setFormData({
-        name: initialData.name,
+        name: initialData.name || '',
         abbr: initialData.abbr || '',
-        headOfDeptId: initialData.headOfDeptId,
+        headOfDeptId: initialData.headOfDeptId || null,
         description: initialData.description || '',
         totalAssets: initialData.totalAssets || 0
       });

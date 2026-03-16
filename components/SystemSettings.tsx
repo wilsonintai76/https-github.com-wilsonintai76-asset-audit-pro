@@ -58,7 +58,7 @@ interface SystemSettingsProps {
   isSystemLocked: boolean;
   onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
   onBulkAddDepts: (depts: Omit<Department, 'id'>[]) => void;
-  onBulkActivateStaff: (entries: { name: string; staffId: string; email: string; department?: string; designation?: string; role?: string; pin?: string }[]) => void;
+  onBulkActivateStaff: (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => void;
   maxAssetsPerDay: number;
   onUpdateMaxAssetsPerDay: (val: number) => void;
   onRebalanceSchedule: () => Promise<void>;
@@ -450,21 +450,19 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const entries: { name: string; staffId: string; email: string; department?: string; designation?: string; role?: string; pin?: string }[] = [];
+        const entries: { name: string; email: string; department?: string; designation?: string; role?: string }[] = [];
         results.data.forEach((row: any) => {
           const name = (row['Name'] || row['name'] || row['NAME'] || '').trim();
-          const staffId = (row['Staff ID'] || row['StaffID'] || row['staff_id'] || row['STAFF ID'] || '').trim();
           const email = (row['Email'] || row['email'] || row['EMAIL'] || '').trim();
           const department = (row['department'] || row['Department'] || row['DEPARTMENT'] || '').trim();
           const designation = (row['Designation'] || row['designation'] || row['DESIGNATION'] || '').trim();
           const role = (row['Role'] || row['role'] || row['ROLE'] || '').trim();
-          const pin = (row['PIN'] || row['pin'] || '').trim();
-          if (name || staffId) entries.push({ name, staffId, email, department: department || undefined, designation: designation || undefined, role: role || undefined, pin: pin || undefined });
+          if (name || email) entries.push({ name, email, department: department || undefined, designation: designation || undefined, role: role || undefined });
         });
         if (entries.length > 0) {
           onBulkActivateStaff(entries);
         } else {
-          alert("No valid entries found. Ensure 'Staff ID' and 'Name' columns exist.");
+          alert("No valid entries found. Ensure 'Name' and 'Email' columns exist.");
         }
       },
       error: () => alert('Failed to parse CSV.')
@@ -473,8 +471,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   };
 
   const handleDownloadStaffTemplate = () => {
-    const headers = ['Staff ID', 'Name', 'department', 'Designation', 'Role'];
-    const sample = ['1001', 'SHAHRIZAL BIN SHABUDDIN', 'JABATAN KEJURUTERAAN AWAM', 'Head Of Department', 'Staff'];
+    const headers = ['Name', 'Email', 'department', 'Designation', 'Role'];
+    const sample = ['SHAHRIZAL BIN SHABUDDIN', 'shahrizal@example.com', 'JABATAN KEJURUTERAAN AWAM', 'Head Of Department', 'Staff'];
     const csvContent = [headers.join(','), sample.join(',')].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');

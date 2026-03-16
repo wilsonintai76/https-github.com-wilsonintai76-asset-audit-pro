@@ -3,7 +3,6 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import Papa from 'papaparse';
 import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase } from '../types';
 import { NewAuditModal } from './NewAuditModal';
-import { EditAuditModal } from './EditAuditModal';
 import { AuditReportModal } from './AuditReportModal';
 import { 
   ShieldOff, 
@@ -22,11 +21,9 @@ import {
   RotateCcw, 
   FileText, 
   Search,
-  Filter,
-  Pencil
+  Filter
 } from 'lucide-react';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
-import { WorkflowTracker } from './WorkflowTracker';
 
 interface AuditTableProps {
   schedules: AuditSchedule[];
@@ -62,8 +59,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   maxAssetsPerDay
 }) => {
   const [reportAudit, setReportAudit] = useState<AuditSchedule | null>(null);
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [editingAudit, setEditingAudit] = useState<AuditSchedule | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('All');
   const [selectedLevel, setSelectedLevel] = useState('All');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -144,17 +139,15 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     const myEntity = getEntityName(currentUser?.departmentId || '');
     const targetEntity = getEntityName(targetDeptId);
 
-    // Check for an explicit cross-audit permission (including self-audit: auditorDept === targetDept)
-    const hasPermission = crossAuditPermissions.some(p =>
-      p.auditorDept === myEntity &&
-      p.targetDept === targetEntity &&
+    if (myEntity === targetEntity && !isAdmin) return false;
+
+    const hasPermission = crossAuditPermissions.some(p => 
+      p.auditorDept === myEntity && 
+      p.targetDept === targetEntity && 
       p.isActive
     );
-
-    if (isAdmin) return true;
-    // Block same-entity unless there is an explicit self-audit permission
-    if (myEntity === targetEntity) return hasPermission;
-    return hasPermission;
+    
+    return isAdmin || hasPermission;
   };
 
   const getUserContact = (userId: string) => {
@@ -441,14 +434,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
          {canAddAudit && (
           <div className="flex items-center gap-2">
             <button 
-              onClick={() => setShowNewModal(true)}
-              disabled={!hasPhases}
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all border ${!hasPhases ? 'bg-slate-100 text-slate-300 border-slate-200' : 'bg-white text-blue-500 border-blue-200 hover:bg-blue-50 hover:border-blue-300 shadow-sm shadow-blue-500/10'}`}
-              title="Add New Audit"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-            <button 
               onClick={() => fileInputRef.current?.click()}
               disabled={!hasPhases}
               className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all border ${!hasPhases ? 'bg-slate-100 text-slate-300 border-slate-200' : 'bg-white text-slate-500 border-slate-200 hover:text-emerald-500 hover:border-emerald-200'}`}
@@ -467,7 +452,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
               <tr>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48 sticky left-0 bg-slate-50 z-30 border-r border-slate-100">Date</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64 sticky left-48 bg-slate-50 z-30 border-r border-slate-100">Location</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Supervisor Name</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Site Supervisor</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Auditors</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-32 text-center">Status</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-16 text-center"></th>
@@ -490,11 +475,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                 
                 const isPast = audit.date && audit.date < todayStr;
                 const userCanAudit = canAuditDepartment(audit.departmentId);
-                // Self-audit: the supervisor of this specific location cannot audit it
-                const myEntity = getEntityName(currentUser?.departmentId || '');
-                const targetEntity = getEntityName(audit.departmentId);
-                const isSelfAudit = myEntity === targetEntity;
-                const isSupervisorConflict = isSelfAudit && currentUser?.id === audit.supervisorId;
                 const isDateValid = isDateInValidPhase(audit.date, audit.phaseId);
                 const locationLevel = loc?.level;
 
@@ -550,9 +530,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             {locationLevel}
                           </div>
                         )}
-                        <div className="mt-2">
-                           <WorkflowTracker audit={audit} />
-                        </div>
                         <span className="inline-flex w-fit px-2.5 py-1 bg-slate-100 text-slate-600 text-[9px] font-black uppercase rounded-lg border border-slate-200 mt-1 tracking-widest">
                           {allDepartments.find(d => d.id === audit.departmentId)?.name || audit.departmentId}
                         </span>
@@ -588,7 +565,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             canManageAssignments={canManageAssignments && !isLocked}
                             canSelfAssignSelf={canSelfAssignSelf && !isLocked}
                             userCanAudit={userCanAudit}
-                            isSupervisorConflict={isSupervisorConflict}
                             isCurrentUserAssigned={isCurrentUserAssigned}
                             isPast={isPast}
                             isDateValid={isDateValid}
@@ -621,15 +597,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
                     <td className="px-8 py-6 align-top text-center">
                         <div className="flex items-center justify-center gap-2">
-                          {(isAdmin || isSupervisor) && !isLocked && (
-                            <button
-                              onClick={() => setEditingAudit(audit)}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors border border-slate-100 hover:border-amber-100 shadow-sm"
-                              title="Edit Audit Details"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          )}
                           {audit.status === 'Completed' && (
                               <button
                                   onClick={() => setReportAudit(audit)}
@@ -666,31 +633,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         <AuditReportModal 
             audit={reportAudit}
             onClose={() => setReportAudit(null)}
-        />
-      )}
-
-      {showNewModal && (
-        <NewAuditModal
-          onClose={() => setShowNewModal(false)}
-          onAdd={onAddAudit}
-          departments={allDepartments}
-          locations={allLocations}
-          auditPhases={auditPhases}
-          existingSchedules={schedules}
-          users={users}
-        />
-      )}
-
-      {editingAudit && (
-        <EditAuditModal
-          audit={editingAudit}
-          onClose={() => setEditingAudit(null)}
-          onUpdate={onUpdateAudit}
-          departments={allDepartments}
-          locations={allLocations}
-          auditPhases={auditPhases}
-          users={users}
-          isSupervisor={isSupervisor && !isAdmin}
         />
       )}
     </div>

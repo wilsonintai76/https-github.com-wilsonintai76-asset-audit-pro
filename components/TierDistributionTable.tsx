@@ -8,95 +8,45 @@ interface TierDistributionTableProps {
   kpiTiers: KPITier[];
   phases: AuditPhase[];
   schedules: AuditSchedule[];
-  maxAssetsPerDay: number;
 }
 
 export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({ 
   departments, 
   kpiTiers, 
   phases,
-  schedules,
-  maxAssetsPerDay
+  schedules 
 }) => {
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate)), [phases]);
   const sortedTiers = useMemo(() => [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets), [kpiTiers]);
 
-  // Count Mon–Fri days in a date range (inclusive)
-  const getWorkingDays = (startDate: string, endDate: string): number => {
-    if (!startDate || !endDate) return 0;
-    let count = 0;
-    const cur = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    while (cur <= end) {
-      const d = cur.getDay();
-      if (d !== 0 && d !== 6) count++;
-      cur.setDate(cur.getDate() + 1);
-    }
-    return count;
-  };
-
-  // Pre-compute working days per phase (shared across all rows)
-  const phaseWorkingDays = useMemo(() =>
-    Object.fromEntries(sortedPhases.map(p => [p.id, getWorkingDays(p.startDate, p.endDate)])),
-    [sortedPhases]
-  );
-
   const tableData = useMemo(() => {
     return departments.map(dept => {
-      const assetCount = dept.totalAssets || 0;
-      const hasAssets = assetCount > 0;
-      const tier = sortedTiers.find(t => assetCount >= t.minAssets && assetCount <= t.maxAssets);
+      const tier = sortedTiers.find(t => (dept.totalAssets || 0) >= t.minAssets && (dept.totalAssets || 0) <= t.maxAssets);
       const deptAudits = schedules.filter(s => s.departmentId === dept.id);
-
-      // Days one team needs to cover all assets in a single visit
-      const auditDaysPerVisit = hasAssets && maxAssetsPerDay > 0
-        ? Math.ceil(assetCount / maxAssetsPerDay)
-        : 0;
-
+      
       const phaseStatus = sortedPhases.map(phase => {
-        const targetVisits = hasAssets && tier ? (tier.targets[phase.id] || 0) : 0;
-        const isRequired = targetVisits > 0;
         const hasAudit = deptAudits.some(a => a.phaseId === phase.id);
+        const isRequired = tier ? (tier.targets[phase.id] || 0) > 0 : false;
         const isCompleted = deptAudits.some(a => a.phaseId === phase.id && a.status === 'Completed');
-        const wd = phaseWorkingDays[phase.id] || 0;
-        // How many concurrent teams are needed to finish all visits within this phase window?
-        const teamsNeeded = isRequired && wd > 0
-          ? Math.ceil((targetVisits * auditDaysPerVisit) / wd)
-          : 0;
-        return { phaseId: phase.id, hasAudit, isRequired, isCompleted, targetVisits, teamsNeeded };
+        
+        return {
+          phaseId: phase.id,
+          hasAudit,
+          isRequired,
+          isCompleted
+        };
       });
 
-      // Peak concurrent teams × 2 auditors per team
-      const maxTeams = hasAssets
-        ? Math.max(1, ...phaseStatus.map(p => p.teamsNeeded))
-        : 0;
-      const minAuditorsNeeded = hasAssets && maxAssetsPerDay > 0 ? maxTeams * 2 : null;
-
-      // Per-phase breakdown for tooltip
-      const phaseBreakdown = phaseStatus
-        .filter(p => p.isRequired)
-        .map(ps => {
-          const ph = sortedPhases.find(p => p.id === ps.phaseId);
-          const wd = phaseWorkingDays[ps.phaseId] || 0;
-          return `${ph?.name}: ${ps.targetVisits} visit(s) × ${auditDaysPerVisit}d = ${ps.targetVisits * auditDaysPerVisit}d total / ${wd} workdays → ${ps.teamsNeeded} team(s)`;
-        })
-        .join('\n');
-
       const isFullyScheduled = phaseStatus.every(p => !p.isRequired || p.hasAudit);
-
+      
       return {
         ...dept,
-        hasAssets,
         tierName: tier?.name || 'Unassigned',
         phaseStatus,
-        isFullyScheduled,
-        minAuditorsNeeded,
-        maxTeams,
-        auditDaysPerVisit,
-        phaseBreakdown
+        isFullyScheduled
       };
     }).sort((a, b) => (b.totalAssets || 0) - (a.totalAssets || 0));
-  }, [departments, sortedTiers, sortedPhases, schedules, maxAssetsPerDay, phaseWorkingDays]);
+  }, [departments, sortedTiers, sortedPhases, schedules]);
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -123,7 +73,6 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
             <tr>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assets / Tier</th>
-              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Min Auditors</th>
               {sortedPhases.map(phase => (
                 <th key={phase.id} className="px-4 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
                   {phase.name}
@@ -148,35 +97,17 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                     {row.tierName}
                   </div>
                 </td>
-                <td className="px-6 py-4 text-center">
-                  {row.minAuditorsNeeded !== null ? (
-                    <div
-                      className="inline-flex flex-col items-center cursor-help"
-                      title={row.phaseBreakdown || 'No phase targets configured'}
-                    >
-                      <span className="text-base font-black text-slate-900">{row.minAuditorsNeeded}</span>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">auditors</span>
-                      <span className="text-[8px] text-indigo-400 font-bold mt-0.5">{row.maxTeams} team(s) × 2</span>
-                      <span className="text-[8px] text-slate-300 font-medium">{row.auditDaysPerVisit}d/visit</span>
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-slate-300 font-bold">—</span>
-                  )}
-                </td>
                 {row.phaseStatus.map((ps, idx) => (
                   <td key={idx} className="px-4 py-4 text-center">
                     {ps.isRequired ? (
-                      <div className="flex flex-col items-center gap-1">
-                        <div className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border-2 transition-all ${
-                          ps.isCompleted 
-                            ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
-                            : ps.hasAudit 
-                            ? 'bg-blue-50 border-blue-200 text-blue-600' 
-                            : 'bg-rose-50 border-rose-100 text-rose-400 border-dashed'
-                        }`}>
-                          {ps.isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
-                        </div>
-                        <span className="text-[8px] font-black text-amber-500 uppercase">{ps.targetVisits}×</span>
+                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border-2 transition-all ${
+                        ps.isCompleted 
+                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
+                          : ps.hasAudit 
+                          ? 'bg-blue-50 border-blue-200 text-blue-600' 
+                          : 'bg-rose-50 border-rose-100 text-rose-400 border-dashed'
+                      }`}>
+                        {ps.isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
                       </div>
                     ) : (
                       <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 mx-auto opacity-30"></div>
@@ -184,11 +115,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                   </td>
                 ))}
                 <td className="px-6 py-4 text-right">
-                  {!row.hasAssets ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
-                      <Boxes className="w-3 h-3" /> No Assets
-                    </span>
-                  ) : row.isFullyScheduled ? (
+                  {row.isFullyScheduled ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 uppercase">
                       <CheckCircle2 className="w-3 h-3" /> Ready
                     </span>

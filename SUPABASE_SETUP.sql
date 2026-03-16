@@ -68,7 +68,7 @@ CREATE TABLE departments (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            TEXT NOT NULL,
   abbr            TEXT NOT NULL,
-  head_of_dept_id TEXT,          -- FK to users(id) added via ALTER TABLE below
+  head_of_dept_id UUID,          -- FK to users(id) added via ALTER TABLE below
   description     TEXT,
   audit_group     TEXT,
   total_assets    INTEGER DEFAULT 0
@@ -80,11 +80,10 @@ CREATE TABLE departments (
 --    roles is a validated TEXT array (fixed enum values).
 -- =============================================================
 CREATE TABLE users (
-  id                   TEXT PRIMARY KEY,
+  id                   UUID PRIMARY KEY, -- Linked to auth.users.id
   name                 TEXT NOT NULL,
   email                TEXT NOT NULL UNIQUE,
-  pin                  TEXT         DEFAULT '1234',
-  roles                TEXT[]       NOT NULL DEFAULT '{}'
+  roles                TEXT[]       NOT NULL DEFAULT '{Guest}'
                          CONSTRAINT chk_roles CHECK (
                            roles <@ ARRAY['Admin','Coordinator','Supervisor','Auditor','Staff','Guest']::TEXT[]
                          ),
@@ -98,10 +97,12 @@ CREATE TABLE users (
   designation          TEXT         CONSTRAINT chk_user_designation CHECK (
                            designation IS NULL OR designation IN ('Head Of Department','Coordinator','Supervisor','Staff')
                          ),
-  status               TEXT NOT NULL DEFAULT 'Active'
+  status               TEXT NOT NULL DEFAULT 'Pending'
                          CONSTRAINT chk_user_status CHECK (status IN ('Active','Inactive','Suspended','Pending')),
   is_verified          BOOLEAN NOT NULL DEFAULT false,
-  must_change_pin      BOOLEAN NOT NULL DEFAULT false,
+  CONSTRAINT chk_department_required CHECK (
+    ('Admin' = ANY(roles)) OR (status = 'Pending') OR (department_id IS NOT NULL)
+  ),
   dashboard_config     JSONB   NOT NULL DEFAULT '{
     "showStats": true,
     "showTrends": true,
@@ -141,7 +142,7 @@ CREATE TABLE locations (
   building      TEXT,
   level         TEXT,
   description   TEXT,
-  supervisor_id TEXT
+  supervisor_id UUID
                   REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
   contact       TEXT,
   total_assets  INTEGER NOT NULL DEFAULT 0 CONSTRAINT chk_total_assets CHECK (total_assets >= 0)
@@ -160,11 +161,11 @@ CREATE TABLE audits (
                   REFERENCES departments(id) ON DELETE RESTRICT ON UPDATE CASCADE,
   location_id   UUID NOT NULL
                   REFERENCES locations(id)   ON DELETE RESTRICT ON UPDATE CASCADE,
-  supervisor_id TEXT
+  supervisor_id UUID
                   REFERENCES users(id)       ON DELETE SET NULL ON UPDATE CASCADE,
-  auditor1_id   TEXT
+  auditor1_id   UUID
                   REFERENCES users(id)       ON DELETE SET NULL ON UPDATE CASCADE,
-  auditor2_id   TEXT
+  auditor2_id   UUID
                   REFERENCES users(id)       ON DELETE SET NULL ON UPDATE CASCADE,
   date          DATE,         -- nullable: supervisor sets the date after location is created
   status        TEXT NOT NULL DEFAULT 'Pending'
@@ -223,7 +224,7 @@ CREATE TABLE department_mappings (
 CREATE TABLE system_activities (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type        TEXT NOT NULL,
-  user_id     TEXT REFERENCES users(id) ON DELETE SET NULL,
+  user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
   audit_id    UUID REFERENCES audits(id) ON DELETE CASCADE,
   message     TEXT NOT NULL,
   metadata    JSONB DEFAULT '{}',
@@ -297,7 +298,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- 4. Clear All Departments and all associated data
-CREATE OR REPLACE FUNCTION clear_all_departments(keep_user_id TEXT DEFAULT NULL)
+CREATE OR REPLACE FUNCTION clear_all_departments(keep_user_id UUID DEFAULT NULL)
 RETURNS VOID AS $$
 BEGIN
   -- 1. Remove all transactional data
@@ -325,62 +326,66 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- =============================================================
--- SEED DATA – System Infrastructure & Admin
+-- 10. AUTH TRIGGER
+--     Automatically creates a profile in public.users when a 
+--     new user signs up via Supabase Auth.
 -- =============================================================
 
--- 1. Create a dedicated System Department for Admins
-INSERT INTO departments (
-  id,
-  name,
-  abbr,
-  description,
-  audit_group
-) VALUES (
-  '00000000-0000-0000-0000-000000000000',
-  'SYSTEM MANAGEMENT',
-  'SYSTEM',
-  'Dedicated department for application administrators and system management.',
-  'Group A'
-) ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  abbr = EXCLUDED.abbr;
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+    -- 1. If email already exists in public.users, update its ID to match the new auth user
+    -- This handles pre-seeded users (like the Super Admin)
+    IF EXISTS (SELECT 1 FROM public.users WHERE email = new.email) THEN
+        UPDATE public.users 
+        SET id = new.id,
+            name = COALESCE(new.raw_user_meta_data->>'name', name)
+        WHERE email = new.email;
+    ELSE
+        -- 2. Check if ID already exists (unlikely but for safety)
+        IF EXISTS (SELECT 1 FROM public.users WHERE id = new.id) THEN
+            UPDATE public.users
+            SET email = new.email,
+                name = COALESCE(new.raw_user_meta_data->>'name', name)
+            WHERE id = new.id;
+        ELSE
+            -- 3. Insert new record
+            INSERT INTO public.users (
+                id,
+                email,
+                name,
+                roles,
+                status,
+                is_verified
+            )
+            VALUES (
+                new.id,
+                new.email,
+                COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+                ARRAY['Guest']::TEXT[],
+                'Pending',
+                false
+            );
+        END IF;
+    END IF;
+    RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 2. Create the SuperAdmin User
-INSERT INTO users (
-  id,
-  name,
-  email,
-  pin,
-  roles,
-  status,
-  is_verified,
-  designation,
-  department_id,
-  dashboard_config
-) VALUES (
-  '0000',
-  'SuperAdmin',
-  'admin@asset-audit.pro',
-  '9999',
-  ARRAY['Admin'],
-  'Active',
-  true,
-  'Head Of Department',
-  '00000000-0000-0000-0000-000000000000',
-  '{"showStats":true,"showTrends":true,"showUpcoming":true,"showCertification":true,"showDeptDistribution":true}'
-)
-ON CONFLICT (id) DO UPDATE SET
-  name        = EXCLUDED.name,
-  email       = EXCLUDED.email,
-  roles       = EXCLUDED.roles,
-  pin         = EXCLUDED.pin,
-  status      = EXCLUDED.status,
-  designation = EXCLUDED.designation,
-  department_id = EXCLUDED.department_id,
-  is_verified = EXCLUDED.is_verified;
+-- Trigger to call the function on auth.users insert
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 3. Link Department Head
-UPDATE departments 
-SET head_of_dept_id = '0000'
-WHERE id = '00000000-0000-0000-0000-000000000000';
+-- =============================================================
+-- FIX PERMISSIONS FOR SUPABASE CLIENT ACCESS
+-- =============================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
 

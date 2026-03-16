@@ -1,11 +1,11 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, SystemActivity } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
 import { TierDistributionTable } from './TierDistributionTable';
-import { Sliders, GraduationCap, Filter, ChevronDown, Calendar, Plus, Zap } from 'lucide-react';
+import { Sliders, GraduationCap, Filter, ChevronDown } from 'lucide-react';
 
 interface OverviewDashboardProps {
   schedules: AuditSchedule[];
@@ -16,8 +16,6 @@ interface OverviewDashboardProps {
   departments?: Department[];
   locations?: Location[];
   currentUser: User;
-  activities?: SystemActivity[];
-  maxAssetsPerDay?: number;
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
@@ -28,9 +26,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   kpiTiers = [],
   departments = [],
   locations = [],
-  currentUser,
-  activities = [],
-  maxAssetsPerDay = 500
+  currentUser
 }) => {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState('All');
@@ -50,6 +46,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   // Filter Logic
   const filteredLocations = useMemo(() => {
     return locations.filter(l => {
+      if (!l.isActive) return false; // Filter out inactive locations
       const dept = departments.find(d => d.id === l.departmentId);
       if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
       if (selectedBlock !== 'All' && l.building !== selectedBlock) return false;
@@ -61,6 +58,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   const filteredSchedules = useMemo(() => {
     return schedules.filter(s => {
       const loc = locations.find(l => l.id === s.locationId);
+      if (loc && !loc.isActive) return false; // Filter out audits for inactive locations
       const dept = departments.find(d => d.id === s.departmentId);
       
       if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
@@ -200,7 +198,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           </div>
       </div>
 
-      {config.showStats && <StatsCards schedules={filteredSchedules} departments={departments} />}
+      {config.showStats && <StatsCards schedules={filteredSchedules} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
@@ -221,7 +219,6 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               kpiTiers={kpiTiers}
               phases={phases}
               schedules={schedules}
-              maxAssetsPerDay={maxAssetsPerDay}
             />
           )}
 
@@ -310,39 +307,6 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               </div>
             </div>
           )}
-
-          {/* Activity Feed */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-900 mb-4 tracking-tight">Recent Activity Feed</h3>
-            <div className="space-y-6 relative before:absolute before:inset-0 before:left-[19px] before:w-[2px] before:bg-slate-100 before:pointer-events-none">
-              {activities.slice(0, 5).map((act) => (
-                <div key={act.id} className="relative flex gap-4 animate-in fade-in slide-in-from-left-2 transition-all">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10 shadow-sm border ${
-                    act.type === 'SCHEDULE_DATE' ? 'bg-blue-50 border-blue-100 text-blue-600' :
-                    act.type === 'AUDITOR_ASSIGNED' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' :
-                    act.type === 'LOCATION_CREATED' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                    'bg-slate-50 border-slate-100 text-slate-600'
-                  }`}>
-                    {act.type === 'SCHEDULE_DATE' ? <Calendar className="w-4 h-4" /> :
-                     act.type === 'AUDITOR_ASSIGNED' ? <GraduationCap className="w-4 h-4" /> :
-                     act.type === 'LOCATION_CREATED' ? <Plus className="w-4 h-4" /> :
-                     <Zap className="w-4 h-4" />}
-                  </div>
-                  <div className="pt-1">
-                    <p className="text-sm font-bold text-slate-900 leading-snug">{act.message}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                      {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(act.timestamp).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {activities.length === 0 && (
-                <div className="bg-slate-50 rounded-2xl p-6 text-center border-2 border-dashed border-slate-200">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">No Recent Activity</p>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 

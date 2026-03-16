@@ -1,13 +1,13 @@
 
 import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, DepartmentMapping, SystemActivity } from '../types';
 import { supabase } from './supabase';
-import { localDB } from './localDB';
+import { localDB } from './localDB'; 
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
 
 class DataGateway {
   private isDemoMode: boolean = false;
-
-  constructor() { }
+  
+  constructor() {}
 
   private generateId(): string {
     return crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`;
@@ -54,19 +54,19 @@ class DataGateway {
       if (payload.date === "") payload.date = null;
       const { data, error } = await supabase.from('audits').insert([payload]).select().single();
       if (error) throw error;
-      return {
-        ...data,
+      return { 
+        ...data, 
         departmentId: data.department_id,
         locationId: data.location_id,
         supervisorId: data.supervisor_id,
         auditor1Id: data.auditor1_id,
         auditor2Id: data.auditor2_id,
-        phaseId: data.phase_id
+        phaseId: data.phase_id 
       } as AuditSchedule;
     }
     throw new Error("Supabase client not initialized");
   }
-
+  
   async bulkAddAudits(audits: Omit<AuditSchedule, 'id'>[]): Promise<AuditSchedule[]> {
     if (supabase) {
       const payloads = audits.map(a => {
@@ -145,13 +145,10 @@ class DataGateway {
         departmentId: u.department_id,
         contactNumber: u.contact_number,
         isVerified: u.is_verified,
-        mustChangePIN: u.must_change_pin,
         lastActive: u.last_active,
         certificationIssued: u.certification_issued,
         certificationExpiry: u.certification_expiry,
         dashboardConfig: u.dashboard_config,
-        status: u.status,
-        designation: u.designation
       })) as User[];
     }
     return [];
@@ -163,22 +160,20 @@ class DataGateway {
       if (user.departmentId !== undefined) { payload.department_id = user.departmentId; delete payload.departmentId; }
       if (user.contactNumber !== undefined) { payload.contact_number = user.contactNumber; delete payload.contactNumber; }
       if (user.isVerified !== undefined) { payload.is_verified = user.isVerified; delete payload.isVerified; }
-      if (user.mustChangePIN !== undefined) { payload.must_change_pin = user.mustChangePIN; delete payload.mustChangePIN; }
       if (user.lastActive !== undefined) { payload.last_active = user.lastActive; delete payload.lastActive; }
       if (user.certificationIssued !== undefined) { payload.certification_issued = user.certificationIssued; delete payload.certificationIssued; }
       if (user.certificationExpiry !== undefined) { payload.certification_expiry = user.certificationExpiry; delete payload.certificationExpiry; }
       if (user.dashboardConfig !== undefined) { payload.dashboard_config = user.dashboardConfig; delete payload.dashboardConfig; }
-
+      
       const { data, error } = await supabase.from('users').upsert([payload]).select().single();
       if (error) throw error;
-
+      
       const result = data as any;
       return {
         ...result,
         departmentId: result.department_id,
         contactNumber: result.contact_number,
         isVerified: result.is_verified,
-        mustChangePIN: result.must_change_pin,
         lastActive: result.last_active,
         certificationIssued: result.certification_issued,
         certificationExpiry: result.certification_expiry,
@@ -192,7 +187,7 @@ class DataGateway {
     if (supabase) {
       const { data, error } = await supabase.from('users').update({ is_verified: true, status: 'Active' }).eq('id', id).select().single();
       if (error) throw error;
-
+      
       const result = data as any;
       return {
         ...result,
@@ -202,9 +197,7 @@ class DataGateway {
         lastActive: result.last_active,
         certificationIssued: result.certification_issued,
         certificationExpiry: result.certification_expiry,
-        dashboardConfig: result.dashboard_config,
-        status: result.status,
-        designation: result.designation
+        dashboardConfig: result.dashboard_config
       } as User;
     }
     throw new Error("Supabase client not initialized");
@@ -216,7 +209,6 @@ class DataGateway {
       if (updates.departmentId !== undefined) { payload.department_id = updates.departmentId; delete payload.departmentId; }
       if (updates.contactNumber !== undefined) { payload.contact_number = updates.contactNumber; delete payload.contactNumber; }
       if (updates.isVerified !== undefined) { payload.is_verified = updates.isVerified; delete payload.isVerified; }
-      if (updates.mustChangePIN !== undefined) { payload.must_change_pin = updates.mustChangePIN; delete payload.mustChangePIN; }
       if (updates.lastActive !== undefined) { payload.last_active = updates.lastActive; delete payload.lastActive; }
       if (updates.certificationIssued !== undefined) { payload.certification_issued = updates.certificationIssued; delete payload.certificationIssued; }
       if (updates.certificationExpiry !== undefined) { payload.certification_expiry = updates.certificationExpiry; delete payload.certificationExpiry; }
@@ -239,20 +231,19 @@ class DataGateway {
   }
 
   async enableDemoMode() {
-    // Demo mode disabled - strictly using Supabase
-    console.warn("Demo mode is disabled. Using Supabase backend.");
+      // Demo mode disabled - strictly using Supabase
+      console.warn("Demo mode is disabled. Using Supabase backend.");
   }
 
   // --- DEPARTMENTS ---
   async getDepartments(): Promise<Department[]> {
     if (supabase) {
-      const { data, error } = await supabase.from('departments').select('*, head:users!fk_dept_head(name)');
+      const { data, error } = await supabase.from('departments').select('*');
       if (error) throw error;
       return (data || []).map((d: any) => ({
         ...d,
         headOfDeptId: d.head_of_dept_id,
-        auditGroup: d.audit_group,
-        headName: d.head?.name ?? null
+        auditGroup: d.audit_group
       })) as Department[];
     }
     return [];
@@ -262,16 +253,19 @@ class DataGateway {
     if (supabase) {
       const payload: any = { ...dept };
       if (dept.headOfDeptId !== undefined) { payload.head_of_dept_id = dept.headOfDeptId; }
-      if (dept.auditGroup !== undefined) { payload.audit_group = dept.auditGroup; }
-      if (dept.totalAssets !== undefined) { payload.total_assets = dept.totalAssets; }
-
       delete payload.headOfDeptId;
+      if (dept.auditGroup !== undefined) { payload.audit_group = dept.auditGroup; }
       delete payload.auditGroup;
-      delete payload.totalAssets;
 
       const { data, error } = await supabase.from('departments').insert([payload]).select().single();
       if (error) throw error;
-      return { ...data, headOfDeptId: data.head_of_dept_id, auditGroup: data.audit_group } as Department;
+      
+      const result = data as any;
+      return {
+        ...result,
+        headOfDeptId: result.head_of_dept_id,
+        auditGroup: result.audit_group
+      } as Department;
     }
     throw new Error("Supabase client not initialized");
   }
@@ -280,12 +274,9 @@ class DataGateway {
     if (supabase) {
       const payload: any = { ...updates };
       if (updates.headOfDeptId !== undefined) { payload.head_of_dept_id = updates.headOfDeptId; }
-      if (updates.auditGroup !== undefined) { payload.audit_group = updates.auditGroup; }
-      if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; }
-
       delete payload.headOfDeptId;
+      if (updates.auditGroup !== undefined) { payload.audit_group = updates.auditGroup; }
       delete payload.auditGroup;
-      delete payload.totalAssets;
 
       const { error } = await supabase.from('departments').update(payload).eq('id', id);
       if (error) throw error;
@@ -312,7 +303,8 @@ class DataGateway {
         ...l,
         departmentId: l.department_id,
         supervisorId: l.supervisor_id,
-        totalAssets: l.total_assets
+        totalAssets: l.total_assets,
+        isActive: l.is_active ?? true
       })) as Location[];
     }
     return [];
@@ -324,16 +316,18 @@ class DataGateway {
       if (loc.departmentId !== undefined) { payload.department_id = loc.departmentId; delete payload.departmentId; }
       if (loc.supervisorId !== undefined) { payload.supervisor_id = loc.supervisorId; delete payload.supervisorId; }
       if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; delete payload.totalAssets; }
+      if (loc.isActive !== undefined) { payload.is_active = loc.isActive; delete payload.isActive; }
 
       const { data, error } = await supabase.from('locations').insert([payload]).select().single();
       if (error) throw error;
-
+      
       const result = data as any;
       return {
         ...result,
         departmentId: result.department_id,
         supervisorId: result.supervisor_id,
-        totalAssets: result.total_assets
+        totalAssets: result.total_assets,
+        isActive: result.is_active
       } as Location;
     }
     throw new Error("Supabase client not initialized");
@@ -346,6 +340,7 @@ class DataGateway {
         if (loc.departmentId !== undefined) { payload.department_id = loc.departmentId; delete payload.departmentId; }
         if (loc.supervisorId !== undefined) { payload.supervisor_id = loc.supervisorId; delete payload.supervisorId; }
         if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; delete payload.totalAssets; }
+        if (loc.isActive !== undefined) { payload.is_active = loc.isActive; delete payload.isActive; }
         return payload;
       });
 
@@ -355,7 +350,8 @@ class DataGateway {
         ...l,
         departmentId: l.department_id,
         supervisorId: l.supervisor_id,
-        totalAssets: l.total_assets
+        totalAssets: l.total_assets,
+        isActive: l.is_active
       })) as Location[];
     }
     throw new Error("Supabase client not initialized");
@@ -367,6 +363,7 @@ class DataGateway {
       if (updates.departmentId !== undefined) { payload.department_id = updates.departmentId; delete payload.departmentId; }
       if (updates.supervisorId !== undefined) { payload.supervisor_id = updates.supervisorId; delete payload.supervisorId; }
       if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; delete payload.totalAssets; }
+      if (updates.isActive !== undefined) { payload.is_active = updates.isActive; delete payload.isActive; }
 
       const { error } = await supabase.from('locations').update(payload).eq('id', id);
       if (error) throw error;
@@ -416,6 +413,84 @@ class DataGateway {
       const { error } = await supabase.rpc('clear_all_departments', { keep_user_id: currentUserId });
       if (error) throw error;
       return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  // --- DEPARTMENT MAPPINGS ---
+  async getDepartmentMappings(): Promise<DepartmentMapping[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('department_mappings').select('*');
+      if (error) throw error;
+      return (data || []).map((m: any) => ({
+        ...m,
+        sourceName: m.source_name,
+        targetDepartmentId: m.target_department_id
+      })) as DepartmentMapping[];
+    }
+    return [];
+  }
+
+  async addDepartmentMapping(mapping: Omit<DepartmentMapping, 'id'>): Promise<DepartmentMapping> {
+    if (supabase) {
+      const { data, error } = await supabase.from('department_mappings').insert({
+        source_name: mapping.sourceName,
+        target_department_id: mapping.targetDepartmentId
+      }).select().single();
+      if (error) throw error;
+      
+      const result = data as any;
+      return {
+        ...result,
+        sourceName: result.source_name,
+        targetDepartmentId: result.target_department_id
+      } as DepartmentMapping;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async deleteDepartmentMapping(id: string): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('department_mappings').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  // --- ACTIVITIES ---
+  async getActivities(): Promise<SystemActivity[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('system_activities').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).map((a: any) => ({
+        ...a,
+        userId: a.user_id,
+        auditId: a.audit_id,
+        timestamp: a.created_at
+      })) as SystemActivity[];
+    }
+    return [];
+  }
+
+  async addActivity(activity: Omit<SystemActivity, 'id'>): Promise<SystemActivity> {
+    if (supabase) {
+      const { data, error } = await supabase.from('system_activities').insert({
+        type: activity.type,
+        user_id: activity.userId,
+        audit_id: activity.auditId,
+        message: activity.message,
+        metadata: activity.metadata
+      }).select().single();
+      if (error) throw error;
+      
+      const result = data as any;
+      return {
+        ...result,
+        userId: result.user_id,
+        auditId: result.audit_id,
+        timestamp: result.created_at
+      } as SystemActivity;
     }
     throw new Error("Supabase client not initialized");
   }
@@ -489,15 +564,19 @@ class DataGateway {
     return [];
   }
 
-  async addAuditPhase(phase: Omit<AuditPhase, 'id'>) {
+  async addAuditPhase(phase: Omit<AuditPhase, 'id'>): Promise<AuditPhase> {
     if (supabase) {
       const payload: any = { ...phase };
       if (phase.startDate) { payload.start_date = phase.startDate; delete payload.startDate; }
       if (phase.endDate) { payload.end_date = phase.endDate; delete payload.endDate; }
 
-      const { error } = await supabase.from('audit_phases').insert([payload]);
+      const { data, error } = await supabase.from('audit_phases').insert([payload]).select().single();
       if (error) throw error;
-      return;
+      return {
+        ...data,
+        startDate: data.start_date,
+        endDate: data.end_date,
+      } as AuditPhase;
     }
     throw new Error("Supabase client not initialized");
   }
@@ -567,73 +646,6 @@ class DataGateway {
   async deleteKPITier(id: string) {
     if (supabase) {
       const { error } = await supabase.from('kpi_tiers').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    throw new Error("Supabase client not initialized");
-  }
-
-  // --- DEPARTMENT MAPPINGS ---
-  async getDepartmentMappings(): Promise<DepartmentMapping[]> {
-    if (supabase) {
-      const { data, error } = await supabase.from('department_mappings').select('*');
-      if (error) throw error;
-      return (data || []).map((m: any) => ({
-        id: m.id,
-        sourceName: m.source_name,
-        targetDepartmentId: m.target_department_id,
-      })) as DepartmentMapping[];
-    }
-    return [];
-  }
-
-  async addDepartmentMapping(mapping: Omit<DepartmentMapping, 'id'>) {
-    if (supabase) {
-      const payload: any = {
-        source_name: mapping.sourceName,
-        target_department_id: mapping.targetDepartmentId,
-      };
-      const { error } = await supabase.from('department_mappings').insert([payload]);
-      if (error) throw error;
-      return;
-    }
-    throw new Error("Supabase client not initialized");
-  }
-
-  async deleteDepartmentMapping(id: string) {
-    if (supabase) {
-      const { error } = await supabase.from('department_mappings').delete().eq('id', id);
-      if (error) throw error;
-      return;
-    }
-    throw new Error("Supabase client not initialized");
-  }
-
-  // --- SYSTEM ACTIVITIES ---
-  async getActivities(): Promise<SystemActivity[]> {
-    if (supabase) {
-      const { data, error } = await supabase.from('system_activities').select('*').order('created_at', { ascending: false }).limit(50);
-      if (error) throw error;
-      return (data || []).map((a: any) => ({
-        ...a,
-        userId: a.user_id,
-        auditId: a.audit_id,
-        timestamp: a.created_at
-      })) as SystemActivity[];
-    }
-    return [];
-  }
-
-  async addActivity(activity: Omit<SystemActivity, 'id' | 'timestamp'>) {
-    if (supabase) {
-      const payload: any = {
-        type: activity.type,
-        user_id: activity.userId,
-        audit_id: activity.auditId,
-        message: activity.message,
-        metadata: activity.metadata
-      };
-      const { error } = await supabase.from('system_activities').insert([payload]);
       if (error) throw error;
       return;
     }

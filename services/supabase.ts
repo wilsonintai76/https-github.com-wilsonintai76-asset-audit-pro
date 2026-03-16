@@ -6,6 +6,8 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.en
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials missing. Application will fallback to local IndexedDB.');
+} else {
+  console.log('Supabase initialized with URL:', supabaseUrl);
 }
 
 export const supabase = (supabaseUrl && supabaseAnonKey) 

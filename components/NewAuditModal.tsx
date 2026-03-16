@@ -1,10 +1,11 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { AuditSchedule, Department, Location, AuditPhase, User } from '../types';
 import { X, CalendarDays, ChevronDown, CalendarPlus } from 'lucide-react';
 
 interface NewAuditModalProps {
   onClose: () => void;
-  onAdd: (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1Id' | 'auditor2Id'>) => void;
+  onAdd: (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1' | 'auditor2'>) => void;
   departments: Department[];
   locations: Location[];
   auditPhases: AuditPhase[];
@@ -197,28 +198,9 @@ export const NewAuditModal: React.FC<NewAuditModalProps> = ({ onClose, onAdd, de
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Supervisor Name</label>
-              <div className="relative">
-                <select
-                  required
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer"
-                  value={formData.supervisorId}
-                  onChange={e => setFormData({...formData, supervisorId: e.target.value})}
-                >
-                  <option value="">Select Supervisor</option>
-                  {users
-                    .filter(u => {
-                      const hasRole = u.roles.includes('Supervisor') || u.roles.includes('Admin') || u.roles.includes('Coordinator');
-                      const matchesDept = !formData.departmentId || u.departmentId === formData.departmentId;
-                      return hasRole && matchesDept;
-                    })
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))
-                  }
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Site Supervisor</label>
+              <div className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-600">
+                {formData.supervisorId ? (users.find(u => u.id === formData.supervisorId)?.name || formData.supervisorId) : 'Select location to see supervisor'}
               </div>
             </div>
             

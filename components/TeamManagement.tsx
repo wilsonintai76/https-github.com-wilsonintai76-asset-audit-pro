@@ -31,14 +31,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
-    staffId: '',
     name: '',
     email: '',
     departmentId: '',
     role: 'Staff' as UserRole,
     designation: '' as string,
-    contactNumber: '',
-    pin: ''
+    contactNumber: ''
   });
 
   const isAdmin = currentUserRoles.includes('Admin');
@@ -109,11 +107,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       complete: (results) => {
         const newUsers: User[] = [];
         results.data.forEach((row: any) => {
-          const id = row['StaffId'] || row['id'] || row['ID'];
+          const id = row['StaffId'] || row['id'] || row['ID'] || crypto.randomUUID();
           const name = row['Name'] || row['name'];
           const email = row['Email'] || row['email'];
           
-          if (name && email && id) {
+          if (name && email) {
             newUsers.push({
               id,
               name, email,
@@ -135,46 +133,22 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     e.preventDefault();
     const assignedRoles = determineRoles(formData.role);
 
-    if (formData.pin && !/^\d{4}$/.test(formData.pin)) {
-      alert("PIN must be exactly 4 digits.");
-      return;
-    }
-
     if (editingId) {
       // Editing existing user
       const updates: any = { ...formData, roles: assignedRoles };
-      delete updates.staffId; // Not a column in users table (it's 'id')
       delete updates.role;    // Not a column in users table (it's 'roles')
-      if (!formData.pin) delete updates.pin; // Don't overwrite with empty string if unchanged
       
-      // If the user is changing a temporary ID to a real one
-      if (editingId.startsWith('T-') && formData.staffId !== editingId) {
-        if (!/^\d{4}$/.test(formData.staffId)) {
-          alert("New Staff ID must be exactly 4 digits.");
-          return;
-        }
-        // We need to pass the new ID to the update function
-        updates.id = formData.staffId;
-      }
-
       onUpdateMember(editingId, updates);
       setEditingId(null);
     } else {
-      // Adding new user - Validate 4 digit ID or T-xxxx
-      if (!/^\d{4}$/.test(formData.staffId) && !/^T-\d{4}$/.test(formData.staffId)) {
-        alert("Staff ID must be exactly 4 digits (or T-xxxx for temporary).");
-        return;
-      }
-
       onAddMember({ 
-        id: formData.staffId,
+        id: crypto.randomUUID(), // This will be overwritten by Supabase if registering, but for local state it needs an ID
         name: formData.name,
         email: formData.email,
         departmentId: formData.departmentId,
         designation: formData.designation as any,
         roles: assignedRoles,
         contactNumber: formData.contactNumber,
-        pin: formData.pin || '1234', // Default PIN if not provided
         status: 'Active', 
         lastActive: 'Just now',
         isVerified: true
@@ -184,7 +158,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   };
 
   const resetForm = () => {
-    setFormData({ staffId: '', name: '', email: '', departmentId: '', role: 'Staff', designation: '', contactNumber: '', pin: '' });
+    setFormData({ name: '', email: '', departmentId: '', role: 'Staff', designation: '', contactNumber: '' });
     setIsFormOpen(false);
     setEditingId(null);
   };
@@ -210,14 +184,12 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   const startEdit = (user: User) => {
     setEditingId(user.id);
     setFormData({
-      staffId: user.id, // Display ID but it will be disabled
-      name: user.name,
-      email: user.email,
+      name: user.name || '',
+      email: user.email || '',
       departmentId: user.departmentId || '',
       role: getHighestRole(user),
       designation: user.designation || '',
-      contactNumber: user.contactNumber || '',
-      pin: '' // Leave blank so we don't show existing PIN, only update if typed
+      contactNumber: user.contactNumber || ''
     });
     setIsFormOpen(true);
   };
@@ -294,28 +266,24 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                           <div className="min-w-0">
                               <p className="font-bold text-slate-900 text-sm truncate">{user.name}</p>
                               <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{user.id}</span>
                                   <span className="text-[9px] text-slate-500 truncate">{user.designation} • {departments.find(d => d.id === user.departmentId)?.name || user.departmentId}</span>
                               </div>
                           </div>
                           <div className="flex gap-2">
-                              {user.id.startsWith('T-') ? (
-                                <button 
-                                    onClick={() => startEdit(user)}
-                                    className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-all active:scale-95"
-                                    title="Edit & Verify"
-                                >
-                                    <Pencil className="w-4 h-4" />
-                                </button>
-                              ) : (
-                                <button 
-                                    onClick={() => handleVerify(user)}
-                                    className="w-8 h-8 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
-                                    title="Verify User"
-                                >
-                                    <Check className="w-4 h-4" />
-                                </button>
-                              )}
+                              <button 
+                                  onClick={() => startEdit(user)}
+                                  className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-all active:scale-95"
+                                  title="Edit & Verify"
+                              >
+                                  <Pencil className="w-4 h-4" />
+                              </button>
+                              <button 
+                                  onClick={() => handleVerify(user)}
+                                  className="w-8 h-8 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                                  title="Verify User"
+                              >
+                                  <Check className="w-4 h-4" />
+                              </button>
                               <button 
                                   onClick={() => onDeleteMember(user.id)}
                                   className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-all active:scale-95"
@@ -356,28 +324,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
               <form id="member-form" onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Staff ID</label>
-                    <input 
-                      required 
-                      disabled={!!editingId && !editingId.startsWith('T-')} 
-                      placeholder="e.g. 1001"
-                      className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold ${!!editingId && !editingId.startsWith('T-') ? 'opacity-60 cursor-not-allowed' : ''}`}
-                      value={formData.staffId} 
-                      onChange={e => {
-                          const val = e.target.value;
-                          if (val.startsWith('T-')) {
-                            setFormData({ ...formData, staffId: val });
-                          } else {
-                            const digits = val.replace(/\D/g, '').slice(0,4);
-                            setFormData({ ...formData, staffId: digits });
-                          }
-                      }} 
-                    />
-                    {editingId?.startsWith('T-') && (
-                      <p className="text-[9px] text-amber-600 font-bold mt-1">Please update temporary ID to a real 4-digit Staff ID.</p>
-                    )}
-                  </div>
-                  <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Full Name</label>
                     <input required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                   </div>
@@ -417,18 +363,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                     <label className="text-[10px] font-black uppercase text-slate-400">Contact</label>
                     <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400">PIN (4 Digits)</label>
-                    <input 
-                      type="password" 
-                      maxLength={4}
-                      pattern="\d{4}"
-                      placeholder={editingId ? "Leave blank to keep current" : "e.g. 1234"}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono" 
-                      value={formData.pin} 
-                      onChange={e => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '').slice(0,4) })} 
-                    />
-                  </div>
                 </div>
               </form>
             </div>
@@ -458,7 +392,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
           <table className="w-full text-left min-w-[900px]">
             <thead className="bg-slate-50/50 border-b border-slate-100">
               <tr>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-24">Staff ID</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Team Member</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Certification</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Actions</th>
@@ -471,14 +404,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                 
                 return (
                   <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="font-mono font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded text-xs w-fit">{user.id}</span>
-                          {user.id.startsWith('T-') && (
-                            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded-md border border-amber-200 w-fit">Temp ID</span>
-                          )}
-                        </div>
-                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 font-black border border-slate-200">
@@ -518,22 +443,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                               title="Issue Official Institutional Certificate"
                             >
                               <Stamp className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => {
-                                customConfirm(
-                                  "Reset PIN", 
-                                  `Are you sure you want to reset the PIN for ${user.name} to the default (1234)?`, 
-                                  () => {
-                                    onUpdateMember(user.id, { pin: '1234' });
-                                    customAlert(`PIN for ${user.name} has been reset to 1234.`);
-                                  }
-                                );
-                              }}
-                              className="w-9 h-9 flex items-center justify-center bg-amber-50 text-amber-600 border border-amber-100 rounded-xl hover:bg-amber-600 hover:text-white transition-all shadow-sm"
-                              title="Reset PIN to Default (1234)"
-                            >
-                              <Key className="w-4 h-4" />
                             </button>
                           </>
                         )}

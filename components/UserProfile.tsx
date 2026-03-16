@@ -11,42 +11,20 @@ interface UserProfileProps {
 
 export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onUpdate }) => {
   const [formData, setFormData] = useState({
-    id: user.id,
-    name: user.name,
+    name: user.name || '',
     contactNumber: user.contactNumber || '',
-    departmentId: user.departmentId || '',
-    pin: ''
+    departmentId: user.departmentId || ''
   });
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!/^\d{4}$/.test(formData.id)) {
-      alert("Staff ID must be exactly 4 digits.");
-      return;
-    }
-
-    if (formData.pin && !/^\d{4}$/.test(formData.pin)) {
-      alert("PIN must be exactly 4 digits.");
-      return;
-    }
-
-    if (user.mustChangePIN && !formData.pin) {
-      alert("You must set a new PIN before continuing.");
-      return;
-    }
 
     setIsSaving(true);
     
     try {
       const updates: Partial<User> = { ...formData };
-      if (!updates.pin) delete updates.pin; // Don't overwrite if empty
-      
-      if (user.mustChangePIN && formData.pin) {
-        updates.mustChangePIN = false;
-      }
       
       if (user.status === 'Pending') {
         updates.status = 'Active';
@@ -56,7 +34,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
       
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
-      setFormData(prev => ({ ...prev, pin: '' })); // Clear PIN field after save
     } catch (e) {
       // Error is handled by App.tsx showError, we just stop the saving state here
     } finally {
@@ -98,14 +75,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
         </div>
 
         <div className="pt-16 pb-8 px-8">
-          {user.mustChangePIN && (
+          {user.status === 'Pending' && (
             <div className="mb-6 flex items-start gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
               <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-                <KeyRound className="w-5 h-5" />
+                <Info className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-sm font-black text-amber-800">PIN Change Required</p>
-                <p className="text-xs text-amber-700 mt-0.5">Your account was created with a temporary PIN. Please set a new 4-digit PIN below before you can continue.</p>
+                <p className="text-sm font-black text-amber-800">Account Pending Approval</p>
+                <p className="text-xs text-amber-700 mt-0.5">Your account is currently pending administrator approval. You can update your profile details in the meantime.</p>
               </div>
             </div>
           )}
@@ -127,22 +104,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
             <div className="lg:col-span-2">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Staff ID (4 Digits)</label>
-                    <div className="relative group">
-                      <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
-                      <input 
-                        required
-                        type="text"
-                        maxLength={4}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono font-bold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-                        placeholder="e.g. 1001"
-                        value={formData.id}
-                        onChange={e => setFormData({ ...formData, id: e.target.value.toUpperCase() })}
-                      />
-                    </div>
-                  </div>
-
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Official Display Name</label>
                     <div className="relative group">
@@ -187,22 +148,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                           <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                       </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Update PIN (4 Digits)</label>
-                    <div className="relative group">
-                      <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
-                      <input 
-                        type="password"
-                        maxLength={4}
-                        pattern="\d{4}"
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-mono font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-                        placeholder="Leave blank to keep current PIN"
-                        value={formData.pin}
-                        onChange={e => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '').slice(0,4) })}
-                      />
                     </div>
                   </div>
                 </div>

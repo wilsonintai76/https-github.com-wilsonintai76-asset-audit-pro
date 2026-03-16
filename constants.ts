@@ -155,12 +155,11 @@ const fortyFiveDaysLater = new Date();
 fortyFiveDaysLater.setDate(fortyFiveDaysLater.getDate() + 45);
 
 export const CURRENT_USER: User = {
-  id: '1000', // Matches seeded admin ID
-  name: 'Wilson Intai',
+  id: 'b887fa1e-7613-4cc6-b7dd-a690ebe8ea72',
+  name: 'SysAdmin',
   email: 'wilsonintai76@gmail.com',
-  pin: '1234',
   roles: ['Admin', 'Coordinator', 'Supervisor', 'Staff'], 
-  departmentId: 'dummy-dept-id',
+  departmentId: '00000000-0000-0000-0000-000000000000', // System Management ID
   contactNumber: '+60 12-345 6789',
   certificationExpiry: fortyFiveDaysLater.toISOString().split('T')[0],
   status: 'Active',

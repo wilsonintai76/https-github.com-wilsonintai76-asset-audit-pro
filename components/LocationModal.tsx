@@ -48,10 +48,10 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   useEffect(() => {
     if (initialData) {
       setFormData({
-        name: initialData.name,
+        name: initialData.name || '',
         abbr: initialData.abbr || '',
-        departmentId: initialData.departmentId,
-        building: initialData.building,
+        departmentId: initialData.departmentId || userDeptId || '',
+        building: initialData.building || '',
         level: initialData.level || '',
         description: initialData.description || '',
         supervisorId: initialData.supervisorId || '',

@@ -10,16 +10,15 @@ interface EditAuditModalProps {
   locations: Location[];
   auditPhases: AuditPhase[];
   users: User[];
-  isSupervisor?: boolean;
 }
 
-export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, onUpdate, departments, locations, auditPhases, users, isSupervisor }) => {
+export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, onUpdate, departments, locations, auditPhases, users }) => {
   const [formData, setFormData] = useState({
-    departmentId: audit.departmentId,
-    locationId: audit.locationId,
-    supervisorId: audit.supervisorId,
+    departmentId: audit.departmentId || '',
+    locationId: audit.locationId || '',
+    supervisorId: audit.supervisorId || '',
     date: audit.date || '',
-    phaseId: audit.phaseId
+    phaseId: audit.phaseId || ''
   });
 
   const hasPhases = auditPhases?.length > 0;
@@ -90,9 +89,7 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
         <div className="bg-blue-600 p-5 md:p-6 text-white flex items-center justify-between">
           <div>
             <h3 className="text-lg md:text-xl font-bold">Edit Audit Schedule</h3>
-            <p className="text-blue-100 text-[10px] md:text-xs mt-1">
-              {isSupervisor ? 'Supervisor access — set the audit date only.' : 'Update the details for this audit.'}
-            </p>
+            <p className="text-blue-100 text-[10px] md:text-xs mt-1">Update the details for this audit.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
             <X className="w-4 h-4" />
@@ -105,8 +102,7 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
             <div className="relative">
               <select
                 required
-                disabled={isSupervisor}
-                className="w-full px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-bold text-blue-900 appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm font-bold text-blue-900 appearance-none cursor-pointer"
                 value={formData.phaseId}
                 onChange={e => setFormData({...formData, phaseId: e.target.value})}
               >
@@ -125,8 +121,7 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
               <div className="relative">
                 <select
                   required
-                  disabled={isSupervisor}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer"
                   value={formData.departmentId}
                   onChange={handleDeptChange}
                 >
@@ -144,7 +139,7 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
               <div className="relative">
                 <select
                   required
-                  disabled={!formData.departmentId || !formData.phaseId || isSupervisor}
+                  disabled={!formData.departmentId || !formData.phaseId}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-50"
                   value={formData.locationId}
                   onChange={handleLocationChange}
@@ -163,32 +158,9 @@ export const EditAuditModal: React.FC<EditAuditModalProps> = ({ audit, onClose, 
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Supervisor Name</label>
-              <div className="relative">
-                <select
-                  required
-                  disabled={isSupervisor}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm appearance-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                  value={formData.supervisorId}
-                  onChange={e => setFormData({...formData, supervisorId: e.target.value})}
-                >
-                  <option value="">Select Supervisor</option>
-                  {users
-                    .filter(u => {
-                      const hasRole = u.roles.includes('Supervisor') || u.roles.includes('Admin') || u.roles.includes('Coordinator');
-                      const matchesDept = !formData.departmentId || u.departmentId === formData.departmentId;
-                      return hasRole && matchesDept;
-                    })
-                    .map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))
-                  }
-                  {/* Fallback if the supervisor is not in the list but exists as a string */}
-                  {formData.supervisorId && !users.find(u => u.id === formData.supervisorId) && (
-                    <option value={formData.supervisorId}>{formData.supervisorId}</option>
-                  )}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Site Supervisor</label>
+              <div className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-600">
+                {formData.supervisorId ? (users.find(u => u.id === formData.supervisorId)?.name || formData.supervisorId) : 'No supervisor assigned'}
               </div>
             </div>
             
