@@ -154,6 +154,12 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
 const fortyFiveDaysLater = new Date();
 fortyFiveDaysLater.setDate(fortyFiveDaysLater.getDate() + 45);
 
+// Branding Assets
+export const BRANDING = {
+  logoHorizontal: 'https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/A%20horizontal%20logo.png',
+  logoSquare: 'https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/Sidebar%20Icon.png'
+};
+
 export const CURRENT_USER: User = {
   id: 'b887fa1e-7613-4cc6-b7dd-a690ebe8ea72',
   name: 'SysAdmin',

@@ -31,8 +31,12 @@ export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ us
         <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
           <Award className="absolute -right-4 -bottom-4 text-white/5 w-32 h-32" />
           <div className="relative z-10 text-center">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-xl shadow-blue-600/20">
-              <Stamp className="w-8 h-8" />
+            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-xl shadow-white/10 overflow-hidden">
+              <img 
+                src="https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/Sidebar%20Icon.png" 
+                alt="Logo" 
+                className="w-full h-full object-cover" 
+              />
             </div>
             <h3 className="text-xl font-black uppercase tracking-tight">Issue Institutional Cert</h3>
             <p className="text-slate-400 text-xs mt-1">Official validation for: <strong>{user.name}</strong></p>

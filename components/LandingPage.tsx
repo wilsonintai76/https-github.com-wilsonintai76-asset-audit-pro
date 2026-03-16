@@ -126,12 +126,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-xl shadow-slate-900/20">
-              <ShieldCheck className="w-6 h-6" />
+            <div className="h-10 px-4 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-xl shadow-slate-900/20 overflow-hidden">
+               <img 
+                 src="https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/A%20horizontal%20logo.png" 
+                 alt="Institutional Logo" 
+                 className="h-6 w-auto object-contain brightness-0 invert" 
+               />
             </div>
             <span className="text-xl font-black text-slate-900 tracking-tight">Inspect-<span className="text-blue-600">able</span></span>
-          </div>
 
           <div className="flex items-center gap-8">
             <button
@@ -373,12 +375,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* Footer */}
       <footer className="border-t border-slate-200 py-16 bg-white relative z-10">
         <div className="max-w-7xl mx-auto px-6 text-center">
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">
-              <ShieldCheck className="w-4 h-4" />
+            <div className="h-8 px-3 bg-slate-900 rounded-lg flex items-center justify-center text-white">
+              <img 
+                src="https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/A%20horizontal%20logo.png" 
+                alt="Institutional Logo" 
+                className="h-4 w-auto object-contain brightness-0 invert" 
+              />
             </div>
             <span className="text-sm font-black text-slate-900 tracking-tight">Inspect-<span className="text-blue-600">able</span></span>
-          </div>
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">© 2026 PKS Asset Management Unit</p>
           <a
             href="/privacy_policy.html"
