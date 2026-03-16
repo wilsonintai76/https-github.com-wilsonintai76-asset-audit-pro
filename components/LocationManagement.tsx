@@ -118,78 +118,79 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Locations</h3>
-          <p className="text-sm text-slate-500">
+          <h3 className="text-xl font-bold text-slate-900 tracking-tight">Locations</h3>
+          <p className="text-xs text-slate-500 font-medium">
             {(isCoordinator && !isAdmin) ? `Managing locations for ${userDeptId}` : 'Institutional site mapping and asset nodes.'}
           </p>
         </div>
         
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          {isAdmin && (
-            <div className="relative min-w-[200px] w-full sm:w-auto">
-              <Network className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <select
-                className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-sm appearance-none cursor-pointer"
-                value={selectedDeptFilter}
-                onChange={(e) => {
-                  setSelectedDeptFilter(e.target.value);
-                  setSelectedBlockFilter('All');
-                  setSelectedLevelFilter('All');
-                }}
-              >
-                <option value="All">All Departments</option>
-                {departments.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
-            </div>
-          )}
+        {(isAdmin || (isCoordinator && !isAdmin)) && (
+          <button 
+            onClick={startAdd}
+            className="px-4 py-2 bg-blue-600 text-white rounded-2xl text-[13px] font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            New Location
+          </button>
+        )}
+      </div>
 
-          <div className="relative min-w-[160px] w-full sm:w-auto">
-            <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+      {/* FILTERS BAR */}
+      <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-2 rounded-[24px] border border-slate-100 shadow-sm sm:w-fit">
+        {isAdmin && (
+          <div className="relative min-w-[180px] w-full sm:w-auto">
+            <Network className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
             <select
-              className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-sm appearance-none cursor-pointer"
-              value={selectedBlockFilter}
+              className="w-full pl-10 pr-8 py-2 bg-slate-50/50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/10 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
+              value={selectedDeptFilter}
               onChange={(e) => {
-                setSelectedBlockFilter(e.target.value);
+                setSelectedDeptFilter(e.target.value);
+                setSelectedBlockFilter('All');
                 setSelectedLevelFilter('All');
               }}
             >
-              <option value="All">All Blocks</option>
-              {availableBlocks.map(b => (
-                <option key={b} value={b}>{b}</option>
+              <option value="All">All Departments</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
           </div>
+        )}
 
-          <div className="relative min-w-[160px] w-full sm:w-auto">
-            <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <select
-              className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-sm appearance-none cursor-pointer"
-              value={selectedLevelFilter}
-              onChange={(e) => setSelectedLevelFilter(e.target.value)}
-            >
-              <option value="All">All Levels</option>
-              {availableLevels.map(l => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
-          </div>
+        <div className="relative min-w-[140px] w-full sm:w-auto">
+          <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+          <select
+            className="w-full pl-10 pr-8 py-2 bg-slate-50/50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/10 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
+            value={selectedBlockFilter}
+            onChange={(e) => {
+              setSelectedBlockFilter(e.target.value);
+              setSelectedLevelFilter('All');
+            }}
+          >
+            <option value="All">All Blocks</option>
+            {availableBlocks.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+        </div>
 
-          {(isAdmin || (isCoordinator && !isAdmin)) && (
-            <button 
-              onClick={startAdd}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New Location
-            </button>
-          )}
+        <div className="relative min-w-[140px] w-full sm:w-auto">
+          <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+          <select
+            className="w-full pl-10 pr-8 py-2 bg-slate-50/50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/10 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
+            value={selectedLevelFilter}
+            onChange={(e) => setSelectedLevelFilter(e.target.value)}
+          >
+            <option value="All">All Levels</option>
+            {availableLevels.map(l => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
         </div>
       </div>
 
