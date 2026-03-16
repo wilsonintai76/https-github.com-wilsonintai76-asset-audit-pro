@@ -188,12 +188,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                         <button onClick={() => startEdit(tier)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center transition-colors">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button 
-                          onClick={() => handleDeleteClick(tier.id)} 
-                          className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 flex items-center justify-center transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {/* Remove Delete button to lock to 3 tiers */}
                       </div>
                     )}
                   </td>

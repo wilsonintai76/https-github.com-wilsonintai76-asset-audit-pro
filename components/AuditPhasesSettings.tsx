@@ -86,15 +86,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
           <h3 className="text-xl font-bold text-slate-900">Audit Phases</h3>
           <p className="text-sm text-slate-500">Define active date ranges for audits (e.g., Phase 1: March). Date selection will be restricted to these periods.</p>
         </div>
-        {isAdmin && !isAdding && (
-          <button 
-            onClick={() => setIsAdding(true)} 
-            className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Phase
-          </button>
-        )}
+        {/* Remove Add Phase button to lock to 3 phases */}
       </div>
 
       {isAdding && (
@@ -190,16 +182,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                                     >
                                         <Pencil className="w-3 h-3" />
                                     </button>
-                                    <button 
-                                      onClick={() => onDelete(phase.id)} 
-                                      className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
-                                        isActive 
-                                          ? 'text-emerald-400 hover:text-rose-600 hover:bg-rose-50' 
-                                          : 'text-slate-400 hover:text-red-600 hover:bg-red-50'
-                                      }`}
-                                    >
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
+                                    {/* Remove Delete button to lock to 3 phases */}
                                   </>
                                 )}
                             </div>
