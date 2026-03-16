@@ -80,16 +80,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
       `}>
         <div className="flex flex-col h-full p-6">
           <div className="flex items-center gap-3 mb-10 px-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20 overflow-hidden">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden shrink-0">
               <img 
                 src={BRANDING.logoSquare} 
                 alt="Logo" 
-                className="w-full h-full object-cover" 
+                className="w-full h-full object-contain" 
               />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-tight">Asset Audit</h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Pro Edition</p>
+              <h1 className="text-xl font-black tracking-tight text-slate-900 leading-tight">Inspect-<span className="text-blue-600">able</span></h1>
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Institutional Edition</p>
             </div>
             <button 
               onClick={onClose}

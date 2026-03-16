@@ -32,11 +32,11 @@ export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ us
         <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
           <Award className="absolute -right-4 -bottom-4 text-white/5 w-32 h-32" />
           <div className="relative z-10 text-center">
-            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-xl shadow-white/10 overflow-hidden">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden">
               <img 
                 src={BRANDING.logoSquare} 
                 alt="Logo" 
-                className="w-full h-full object-cover" 
+                className="w-full h-full object-contain" 
               />
             </div>
             <h3 className="text-xl font-black uppercase tracking-tight">Issue Institutional Cert</h3>
