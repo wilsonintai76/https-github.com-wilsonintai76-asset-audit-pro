@@ -8,6 +8,39 @@ class DataGateway {
   private isDemoMode: boolean = false;
   
   constructor() {}
+  
+  private mapDepartmentToDB(dept: Partial<Department>) {
+    const payload: any = {};
+    if (dept.name !== undefined) payload.name = dept.name;
+    if (dept.abbr !== undefined) payload.abbr = dept.abbr;
+    if (dept.description !== undefined) payload.description = dept.description;
+    if (dept.auditGroup !== undefined) payload.audit_group = dept.auditGroup;
+    if (dept.totalAssets !== undefined) payload.total_assets = dept.totalAssets;
+    if (dept.headOfDeptId !== undefined) {
+      payload.head_of_dept_id = (dept.headOfDeptId && dept.headOfDeptId !== "") ? dept.headOfDeptId : null;
+    }
+    return payload;
+  }
+
+  private mapLocationToDB(loc: Partial<Location>) {
+    const payload: any = {};
+    if (loc.name !== undefined) payload.name = loc.name;
+    if (loc.abbr !== undefined) payload.abbr = loc.abbr;
+    if (loc.building !== undefined) payload.building = loc.building;
+    if (loc.level !== undefined) payload.level = loc.level;
+    if (loc.description !== undefined) payload.description = loc.description;
+    if (loc.contact !== undefined) payload.contact = loc.contact;
+    if (loc.totalAssets !== undefined) payload.total_assets = loc.totalAssets;
+    if (loc.isActive !== undefined) payload.is_active = loc.isActive;
+    
+    if (loc.departmentId !== undefined) {
+      payload.department_id = (loc.departmentId && loc.departmentId !== "") ? loc.departmentId : null;
+    }
+    if (loc.supervisorId !== undefined) {
+      payload.supervisor_id = (loc.supervisorId && loc.supervisorId !== "") ? loc.supervisorId : null;
+    }
+    return payload;
+  }
 
   private generateId(): string {
     return crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`;
@@ -252,15 +285,7 @@ class DataGateway {
 
   async addDepartment(dept: Omit<Department, 'id'>): Promise<Department> {
     if (supabase) {
-      const payload: any = { ...dept };
-      if (dept.headOfDeptId !== undefined) { payload.head_of_dept_id = dept.headOfDeptId; }
-      if (dept.auditGroup !== undefined) { payload.audit_group = dept.auditGroup; }
-      if (dept.totalAssets !== undefined) { payload.total_assets = dept.totalAssets; }
-      
-      delete payload.headOfDeptId;
-      delete payload.auditGroup;
-      delete payload.totalAssets;
-
+      const payload = this.mapDepartmentToDB(dept);
       const { data, error } = await supabase.from('departments').insert([payload]).select().single();
       if (error) throw error;
       
@@ -277,15 +302,7 @@ class DataGateway {
 
   async updateDepartment(id: string, updates: Partial<Department>) {
     if (supabase) {
-      const payload: any = { ...updates };
-      if (updates.headOfDeptId !== undefined) { payload.head_of_dept_id = updates.headOfDeptId; }
-      if (updates.auditGroup !== undefined) { payload.audit_group = updates.auditGroup; }
-      if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; }
-      
-      delete payload.headOfDeptId;
-      delete payload.auditGroup;
-      delete payload.totalAssets;
-
+      const payload = this.mapDepartmentToDB(updates);
       const { error } = await supabase.from('departments').update(payload).eq('id', id);
       if (error) throw error;
       return;
@@ -320,16 +337,7 @@ class DataGateway {
 
   async addLocation(loc: Omit<Location, 'id'>): Promise<Location> {
     if (supabase) {
-      const payload: any = { ...loc };
-      payload.department_id = loc.departmentId && loc.departmentId !== "" ? loc.departmentId : null;
-      payload.supervisor_id = loc.supervisorId && loc.supervisorId !== "" ? loc.supervisorId : null;
-      if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; }
-      if (loc.isActive !== undefined) { payload.is_active = loc.isActive; }
-
-      delete payload.departmentId;
-      delete payload.supervisorId;
-      delete payload.totalAssets;
-      delete payload.isActive;
+      const payload = this.mapLocationToDB(loc);
 
       const { data, error } = await supabase.from('locations').insert([payload]).select().single();
       if (error) throw error;
@@ -348,19 +356,7 @@ class DataGateway {
 
   async bulkAddLocations(locations: Omit<Location, 'id'>[]): Promise<Location[]> {
     if (supabase) {
-      const payloads = locations.map(loc => {
-        const payload: any = { ...loc };
-        payload.department_id = loc.departmentId && loc.departmentId !== "" ? loc.departmentId : null;
-        payload.supervisor_id = loc.supervisorId && loc.supervisorId !== "" ? loc.supervisorId : null;
-        if (loc.totalAssets !== undefined) { payload.total_assets = loc.totalAssets; }
-        if (loc.isActive !== undefined) { payload.is_active = loc.isActive; }
-
-        delete payload.departmentId;
-        delete payload.supervisorId;
-        delete payload.totalAssets;
-        delete payload.isActive;
-        return payload;
-      });
+      const payloads = locations.map(loc => this.mapLocationToDB(loc));
 
       const { data, error } = await supabase.from('locations').insert(payloads).select();
       if (error) throw error;
@@ -377,21 +373,7 @@ class DataGateway {
 
   async updateLocation(id: string, updates: Partial<Location>) {
     if (supabase) {
-      const payload: any = { ...updates };
-      if (updates.departmentId !== undefined) { 
-        payload.department_id = updates.departmentId && updates.departmentId !== "" ? updates.departmentId : null; 
-      }
-      if (updates.supervisorId !== undefined) { 
-        payload.supervisor_id = updates.supervisorId && updates.supervisorId !== "" ? updates.supervisorId : null; 
-      }
-      if (updates.totalAssets !== undefined) { payload.total_assets = updates.totalAssets; }
-      if (updates.isActive !== undefined) { payload.is_active = updates.isActive; }
-
-      delete payload.departmentId;
-      delete payload.supervisorId;
-      delete payload.totalAssets;
-      delete payload.isActive;
-
+      const payload = this.mapLocationToDB(updates);
       const { error } = await supabase.from('locations').update(payload).eq('id', id);
       if (error) throw error;
       return;
