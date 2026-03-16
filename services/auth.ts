@@ -98,14 +98,16 @@ export const authService = {
         const defaultDeptId = depts && depts.length > 0 ? depts[0].id : null;
 
         // Auto-create profile if it doesn't exist
+        const isMasterAdmin = authUser.email === 'wilsonintai76@gmail.com';
+        
         const newProfile = {
           id: authUser.id,
           email: authUser.email,
           name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'User',
-          roles: ['Staff'],
-          status: 'Active',
-          is_verified: true,
-          department_id: defaultDeptId // Use dynamic ID
+          roles: isMasterAdmin ? ['Admin', 'Coordinator', 'Supervisor', 'Staff'] : ['Guest'],
+          status: isMasterAdmin ? 'Active' : 'Pending',
+          is_verified: isMasterAdmin,
+          department_id: defaultDeptId
         };
         
         const { data: createdProfile, error: createError } = await supabase

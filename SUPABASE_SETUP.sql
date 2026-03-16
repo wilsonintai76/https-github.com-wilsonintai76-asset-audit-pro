@@ -334,6 +334,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
+    -- 0. STRICT DOMAIN BLOCK (Database Level)
+    -- Only allow @poliku.edu.my or the master admin.
+    -- Returning NULL kills the insert/update, effectively blocking the registration.
+    IF NOT (LOWER(new.email) LIKE '%@poliku.edu.my' OR LOWER(new.email) = 'wilsonintai76@gmail.com') THEN
+        RETURN NULL;
+    END IF;
+
     -- 1. Case-insensitive email check to prevent duplicate key errors
     -- We match using LOWER() and update existing records to avoid unique constraint violations
     IF EXISTS (SELECT 1 FROM public.users WHERE LOWER(email) = LOWER(new.email)) THEN
