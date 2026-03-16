@@ -72,7 +72,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, onShowKnowled
             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-xl shadow-slate-900/20">
               <ShieldCheck className="w-6 h-6" />
             </div>
-            <span className="text-xl font-black text-slate-900 tracking-tight">Asset Audit <span className="text-blue-600">Pro</span></span>
+            <span className="text-xl font-black text-slate-900 tracking-tight">Inspect-<span className="text-blue-600">able</span></span>
           </div>
 
           <div className="flex items-center gap-8">
@@ -219,7 +219,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, onShowKnowled
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">
               <ShieldCheck className="w-4 h-4" />
             </div>
-            <span className="text-sm font-black text-slate-900 tracking-tight">Asset Audit <span className="text-blue-600">Pro</span></span>
+            <span className="text-sm font-black text-slate-900 tracking-tight">Inspect-<span className="text-blue-600">able</span></span>
           </div>
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">© 2026 PKS Asset Management Unit</p>
           <a

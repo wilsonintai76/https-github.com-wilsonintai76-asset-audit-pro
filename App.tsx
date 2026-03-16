@@ -322,9 +322,17 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await authService.logout();
-    setCurrentUser(null);
-    setViewState('landing');
+    try {
+      await authService.logout();
+    } catch (e) {
+      console.error("[App] Logout error:", e);
+    } finally {
+      // ALWAYS clear local state regardless of Supabase results
+      localStorage.removeItem('audit_pro_session');
+      setCurrentUser(null);
+      setViewState('landing');
+      setIsSidebarOpen(false); // Close sidebar just in case
+    }
   };
 
   useEffect(() => {

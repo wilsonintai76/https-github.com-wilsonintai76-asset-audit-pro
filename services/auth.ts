@@ -26,8 +26,18 @@ export const authService = {
   },
 
   logout: async () => {
-    localStorage.removeItem('audit_pro_session');
-    if (supabase) await supabase.auth.signOut();
+    try {
+      localStorage.removeItem('audit_pro_session');
+      if (supabase) {
+        // We use a promise with a timeout for signOut to ensure it doesn't hang the app
+        const signOutPromise = supabase.auth.signOut();
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('SignOut Timeout')), 3000));
+        await Promise.race([signOutPromise, timeoutPromise]);
+      }
+    } catch (error) {
+      console.warn("[Auth] Logout warning (Supabase signOut may have failed or timed out):", error);
+      // We still cleared localStorage, so the app will consider the user logged out locally.
+    }
   },
 
   getCurrentUser: async (): Promise<User | null> => {
