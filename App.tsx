@@ -255,6 +255,20 @@ const App: React.FC = () => {
     });
   }, [schedules, selectedDept, selectedStatus, selectedPhaseId, currentUser, departmentsWithAssets]);
 
+  const topDepartments = useMemo(() => {
+    return departmentsWithAssets
+      .map(dept => {
+        const deptSchedules = schedules.filter(s => s.departmentId === dept.id);
+        const total = deptSchedules.length;
+        const completed = deptSchedules.filter(s => s.status === 'Completed').length;
+        const compliance = total > 0 ? Math.round((completed / total) * 100) : 0;
+        return { name: dept.name, compliance, total };
+      })
+      .filter(d => d.total > 0)
+      .sort((a, b) => b.compliance - a.compliance || b.total - a.total)
+      .slice(0, 3);
+  }, [departmentsWithAssets, schedules]);
+
   // --- AUTH HANDLERS ---
   const handleLoginSuccess = useCallback(async (userProfile: User) => {
     // Check verification status - If not verified, force role to Guest
@@ -1670,6 +1684,9 @@ const App: React.FC = () => {
         totalAssets={!isInitialLoading ? totalAssets : undefined}
         totalPhases={!isInitialLoading ? auditPhases.length : undefined}
         complianceProgress={!isInitialLoading ? complianceProgress : undefined}
+        phases={auditPhases}
+        activities={activities}
+        topDepartments={topDepartments}
       />
     );
   }

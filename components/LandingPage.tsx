@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   CalendarCheck,
   Network,
@@ -11,8 +10,13 @@ import {
   ArrowRight,
   X,
   ArrowLeft,
-  Check
+  Check,
+  Clock,
+  ChevronDown,
+  Trophy,
+  History
 } from 'lucide-react';
+import { AuditPhase, SystemActivity } from '../types';
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -20,6 +24,9 @@ interface LandingPageProps {
   totalAssets?: number;
   totalPhases?: number;
   complianceProgress?: number;
+  phases?: AuditPhase[];
+  activities?: SystemActivity[];
+  topDepartments?: { name: string, compliance: number }[];
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ 
@@ -27,10 +34,46 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onShowKnowledgeBase,
   totalAssets = 18302,
   totalPhases = 3,
-  complianceProgress = 84
+  complianceProgress = 84,
+  phases = [],
+  activities = [],
+  topDepartments = []
 }) => {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({
+        x: (e.clientX / window.innerWidth - 0.5) * 20,
+        y: (e.clientY / window.innerHeight - 0.5) * 20
+      });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  const faqs = [
+    {
+      q: "How do I get my Auditor Certification?",
+      a: "Certifications are issued by the Institutional Admin after you complete the mandatory audit training module. Once issued, your Staff ID will be unlocked for audit assignments."
+    },
+    {
+      q: "What is the Conflict-of-Interest (COI) Engine?",
+      a: "Our system automatically prevents staff from auditing assets within their own department. It uses a neutral pairing matrix to ensure maximum objectivity during every audit phase."
+    },
+    {
+      q: "Can I perform audits outside the active phase?",
+      a: "No. The system only permits data entry and scheduling within the authorized window for Phase 1, 2, or 3. All other periods are read-only to maintain data integrity."
+    }
+  ];
+
+  const isActivePhase = (phase: AuditPhase) => {
+    const today = new Date().toISOString().split('T')[0];
+    return today >= phase.startDate && today <= phase.endDate;
+  };
 
   const tourSteps = [
     {
@@ -69,8 +112,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     <div className="min-h-screen bg-slate-50 overflow-x-hidden">
       {/* Background Decor */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-blue-400/10 rounded-full blur-[120px]"></div>
-        <div className="absolute top-[20%] -right-[5%] w-[30%] h-[30%] bg-indigo-400/10 rounded-full blur-[100px]"></div>
+        <div 
+          className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-blue-400/10 rounded-full blur-[120px] transition-transform duration-700 ease-out"
+          style={{ transform: `translate(${mousePos.x}px, ${mousePos.y}px)` }}
+        ></div>
+        <div 
+          className="absolute top-[20%] -right-[5%] w-[30%] h-[30%] bg-indigo-400/10 rounded-full blur-[100px] transition-transform duration-1000 ease-out"
+          style={{ transform: `translate(${-mousePos.x * 1.5}px, ${-mousePos.y * 1.5}px)` }}
+        ></div>
         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#1e293b 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
       </div>
 
@@ -99,9 +148,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </nav>
 
       {/* Hero Section */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 pt-32 md:pt-48 pb-40">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
+      <main className="relative z-10 max-w-7xl mx-auto px-6 pt-32 md:pt-48 pb-20">
+        <div className="grid lg:grid-cols-2 gap-16 items-start">
           <div className="animate-in fade-in slide-in-from-left-4 duration-1000">
+            {/* Phase Timeline (Feature 1) */}
+            {phases.length > 0 && (
+              <div className="mb-12 flex flex-wrap gap-4 items-center">
+                {phases.map((p, i) => {
+                  const active = isActivePhase(p);
+                  return (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-black uppercase transition-all duration-500 ${
+                        active 
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-500/30 scale-110' 
+                          : 'bg-white text-slate-400 border-slate-200'
+                      }`}>
+                        {active && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>}
+                        {p.name}
+                      </div>
+                      {i < phases.length - 1 && <div className="w-4 h-px bg-slate-200"></div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex items-center gap-4 mb-6">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 text-[10px] font-black uppercase rounded-full border border-blue-100">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
@@ -145,6 +216,32 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
 
                 <div className="space-y-6">
+                  {/* Department Spotlight (Feature 2) */}
+                  {topDepartments.length > 0 && (
+                    <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Trophy className="w-4 h-4 text-amber-400" />
+                        <span className="text-[10px] whitespace-nowrap font-black uppercase tracking-widest text-slate-300">Live Top Performers</span>
+                      </div>
+                      <div className="space-y-3">
+                        {topDepartments.map((dept, idx) => (
+                          <div key={dept.name} className="flex items-center justify-between group">
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] font-black text-slate-500">0{idx + 1}</span>
+                              <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{dept.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-1 w-12 bg-white/10 rounded-full overflow-hidden">
+                                <div className="h-full bg-emerald-500" style={{ width: `${dept.compliance}%` }}></div>
+                              </div>
+                              <span className="text-[10px] font-mono text-emerald-400">{dept.compliance}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
                     <div className="flex justify-between items-end mb-2">
                       <span className="text-xs font-bold">Overall Compliance Progress</span>
@@ -169,6 +266,58 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Live Activity Ticker (Feature 3) */}
+        {activities.length > 0 && (
+          <div className="mt-20 py-4 border-y border-slate-200 bg-white/50 backdrop-blur-sm overflow-hidden flex items-center gap-8 group">
+            <div className="flex items-center gap-2 px-6 border-r border-slate-200 shrink-0">
+              <History className="w-4 h-4 text-blue-600" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-900">Activity</span>
+            </div>
+            <div className="flex gap-12 animate-marquee-slower whitespace-nowrap">
+              {activities.slice(0, 5).map((act, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{act.message}</span>
+                </div>
+              ))}
+              {/* Duplicate for seamless scroll */}
+              {activities.slice(0, 5).map((act, i) => (
+                <div key={`dup-${i}`} className="flex items-center gap-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{act.message}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* FAQ Section (Feature 4) */}
+        <section className="mt-40 max-w-3xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-black text-slate-900 mb-4">Staff FAQ</h2>
+            <p className="text-slate-500 font-medium">Quick answers to common institutional audit questions.</p>
+          </div>
+          <div className="space-y-4">
+            {faqs.map((faq, i) => (
+              <div 
+                key={i}
+                className="bg-white border border-slate-200 rounded-3xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-slate-200/50"
+              >
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full px-8 py-6 flex items-center justify-between text-left"
+                >
+                  <span className="font-bold text-slate-900">{faq.q}</span>
+                  <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${openFaq === i ? 'rotate-180' : ''}`} />
+                </button>
+                <div className={`transition-all duration-300 ease-in-out px-8 overflow-hidden ${openFaq === i ? 'max-h-40 pb-6 opacity-100' : 'max-h-0 opacity-0'}`}>
+                  <p className="text-slate-500 leading-relaxed">{faq.a}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </main>
 
       {/* TOUR OVERLAY */}

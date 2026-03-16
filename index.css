@@ -19,4 +19,21 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  .animate-marquee-slower {
+    animation: marquee 40s linear infinite;
+  }
+
+  .animate-marquee-slower:hover {
+    animation-play-state: paused;
+  }
+
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl;
+  }
 }
