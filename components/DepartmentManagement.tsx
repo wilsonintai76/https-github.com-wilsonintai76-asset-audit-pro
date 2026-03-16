@@ -111,10 +111,13 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ depa
       {/* LIST */}
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
-          <table className="w-full text-left min-w-[600px]">
+          <table className="w-full text-left min-w-[900px]">
             <thead className="bg-slate-50/50 border-b border-slate-100">
               <tr>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-[1%] whitespace-nowrap">Department</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Head of Department</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Asset</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Tier & Group</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-left">Actions</th>
               </tr>
             </thead>
@@ -124,30 +127,41 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ depa
                 return (
                   <tr key={dept.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-start gap-4">
+                      <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black shadow-sm border ${colorClass} shrink-0`}>
                           {dept.abbr}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
-                            {dept.name}
-                            {/* Logic exists to hide manual grouping UI, but we show the badge if system grouped */}
-                            {dept.auditGroup && <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[9px] text-blue-600 border border-blue-100 font-bold" title="Optimized Group Assignment">
-                                <Layers className="w-3 h-3 mr-1 inline-block" />
-                                {dept.auditGroup}
-                            </span>}
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-medium truncate max-w-[400px] mb-1.5">{dept.description || 'No description provided'}</div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1.5 text-[10px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 font-bold"><UserRound className="w-3 h-3 opacity-60" />{dept.headOfDeptId || 'No Head'}</div>
-                            <div className="flex items-center gap-1.5 text-[10px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-slate-600 font-bold"><Boxes className="w-3 h-3 opacity-60" />{(dept.totalAssets || 0).toLocaleString()} Assets</div>
-                            {dept.totalAssets !== undefined && (
-                              <div className="px-2 py-0.5 rounded bg-blue-50 text-[9px] text-blue-600 border border-blue-100 font-bold uppercase tracking-tighter">
-                                Tier Detected
-                              </div>
-                            )}
-                          </div>
+                          <div className="font-bold text-slate-900 text-sm truncate">{dept.name}</div>
+                          <div className="text-[11px] text-slate-500 font-medium truncate max-w-[250px]">{dept.description || 'No description provided'}</div>
                         </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
+                        <UserRound className="w-4 h-4 opacity-40" />
+                        {dept.headOfDeptId || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2 text-sm text-slate-600 font-bold">
+                        <Boxes className="w-4 h-4 opacity-40" />
+                        {(dept.totalAssets || 0).toLocaleString()}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        {dept.totalAssets !== undefined && (
+                          <div className="px-2 py-0.5 rounded bg-blue-50 text-[9px] text-blue-600 border border-blue-100 font-bold uppercase tracking-tighter">
+                            Tier Detected
+                          </div>
+                        )}
+                        {dept.auditGroup && (
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-[9px] text-indigo-600 border border-indigo-100 font-bold flex items-center gap-1" title="Optimized Group Assignment">
+                            <Layers className="w-3 h-3" />
+                            {dept.auditGroup}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-left align-middle">
@@ -162,7 +176,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ depa
                 );
               })}
               {(!departments || departments.length === 0) && (
-                <tr><td colSpan={2} className="px-6 py-12 text-center text-slate-400"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3"><Layers className="w-6 h-6" /></div>No departments defined.</td></tr>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400"><div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3"><Layers className="w-6 h-6" /></div>No departments defined.</td></tr>
               )}
             </tbody>
           </table>

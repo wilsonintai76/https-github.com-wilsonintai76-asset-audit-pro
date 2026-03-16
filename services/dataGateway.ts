@@ -36,6 +36,9 @@ class DataGateway {
     if (loc.departmentId !== undefined) {
       payload.department_id = (loc.departmentId && loc.departmentId !== "") ? loc.departmentId : null;
     }
+    if (loc.supervisorId !== undefined) {
+      payload.supervisor_id = (loc.supervisorId && loc.supervisorId !== "") ? loc.supervisorId : null;
+    }
     return payload;
   }
 
