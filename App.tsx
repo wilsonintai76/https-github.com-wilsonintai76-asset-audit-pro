@@ -192,7 +192,7 @@ const App: React.FC = () => {
     return departments.map(dept => {
       const deptLocations = locations.filter(l => l.departmentId === dept.id);
       const computedAssets = deptLocations.reduce((sum, loc) => sum + (loc.totalAssets || 0), 0);
-      // We use the larger of the two: manually entered or sum of locations
+  // We use the larger of the two: manually entered or sum of locations
       const finalAssets = Math.max(dept.totalAssets || 0, computedAssets);
       return {
         ...dept,
@@ -200,6 +200,36 @@ const App: React.FC = () => {
       };
     });
   }, [departments, locations]);
+
+  const refreshDepartmentTotals = async () => {
+    try {
+      console.log("[Auto-Sync] Recalculating department asset totals...");
+      const allLocs = await gateway.getLocations();
+      const allDepts = await gateway.getDepartments();
+
+      const deptTotals: Record<string, number> = {};
+      allLocs.forEach(loc => {
+        if (loc.departmentId) {
+          deptTotals[loc.departmentId] = (deptTotals[loc.departmentId] || 0) + (loc.totalAssets || 0);
+        }
+      });
+
+      const updates = allDepts.map(d => ({
+        id: d.id,
+        data: { totalAssets: deptTotals[d.id] || 0 }
+      })).filter(u => {
+        const d = allDepts.find(dept => dept.id === u.id);
+        return d && d.totalAssets !== u.data.totalAssets;
+      });
+
+      if (updates.length > 0) {
+        console.log(`[Auto-Sync] Updating ${updates.length} departments...`);
+        await handleBulkUpdateDepts(updates);
+      }
+    } catch (e) {
+      console.error("[Auto-Sync] Failed to refresh department totals:", e);
+    }
+  };
 
   const departmentNames = useMemo(() => {
     const names = new Set(departmentsWithAssets.map(d => d.name));
@@ -733,6 +763,7 @@ const App: React.FC = () => {
         read: false
       }, ...prev]);
       showToast('Location added successfully');
+      await refreshDepartmentTotals();
     } catch (e) {
       showError(e, 'Failed to Add Location');
     }
@@ -881,6 +912,7 @@ const App: React.FC = () => {
       const allUpdatedLocs = await gateway.getLocations();
       setLocations(allUpdatedLocs);
 
+      await refreshDepartmentTotals();
       const allUpdatedDepts = await gateway.getDepartments();
       setDepartments(allUpdatedDepts);
 
@@ -967,6 +999,7 @@ const App: React.FC = () => {
         }
       }
       showToast('Location updated successfully');
+      await refreshDepartmentTotals();
     } catch (e) {
       showError(e, 'Location Update Failed');
     }
@@ -990,6 +1023,7 @@ const App: React.FC = () => {
         await gateway.deleteLocation(id);
         setLocations(await gateway.getLocations());
         showToast('Location deleted successfully');
+        await refreshDepartmentTotals();
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -1399,6 +1433,7 @@ const App: React.FC = () => {
     customConfirm("Reset Operational Data", "This will delete all departments, locations, user accounts (except yours), and audit schedules. System settings like Audit Phases and KPI Tiers will be preserved. Proceed?", async () => {
       try {
         await gateway.clearAllDepartments(currentUser.id);
+        await gateway.clearDepartmentMappings();
         setDepartments([]);
         setLocations([]);
         setSchedules([]);
@@ -1474,6 +1509,7 @@ const App: React.FC = () => {
       }
       const updatedLocs = await gateway.getLocations();
       setLocations(updatedLocs);
+      await refreshDepartmentTotals();
     } catch (e) {
       showError(e, 'Location Upsert Failed');
     }

@@ -218,11 +218,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           throw new Error('No departments could be matched. Check your mapping rules.');
         }
 
-        // Update Department Totals
-        await onBulkUpdateDepartments(Object.entries(deptTotals).map(([id, total]) => ({
-          id,
-          data: { totalAssets: total }
-        })));
 
         // Update Locations
         const locationObjects: Omit<Location, 'id'>[] = [];

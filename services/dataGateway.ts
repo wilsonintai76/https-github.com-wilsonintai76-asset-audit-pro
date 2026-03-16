@@ -429,10 +429,10 @@ class DataGateway {
 
   async addDepartmentMapping(mapping: Omit<DepartmentMapping, 'id'>): Promise<DepartmentMapping> {
     if (supabase) {
-      const { data, error } = await supabase.from('department_mappings').insert({
+      const { data, error } = await supabase.from('department_mappings').upsert({
         source_name: mapping.sourceName,
         target_department_id: mapping.targetDepartmentId
-      }).select().single();
+      }, { onConflict: 'source_name' }).select().single();
       if (error) throw error;
       
       const result = data as any;
@@ -441,6 +441,15 @@ class DataGateway {
         sourceName: result.source_name,
         targetDepartmentId: result.target_department_id
       } as DepartmentMapping;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async clearDepartmentMappings(): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('department_mappings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) throw error;
+      return;
     }
     throw new Error("Supabase client not initialized");
   }
