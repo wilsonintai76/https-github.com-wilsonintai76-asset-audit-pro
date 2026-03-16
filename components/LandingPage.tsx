@@ -221,7 +221,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter, onShowKnowled
               </div>
               <span className="text-sm font-black text-slate-900 tracking-tight">Asset Audit <span className="text-blue-600">Pro</span></span>
            </div>
-           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">© 2026 PKS Asset Management Unit</p>
+           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4">© 2026 PKS Asset Management Unit</p>
+           <a 
+             href="/privacy_policy.html" 
+             className="text-[10px] font-black uppercase text-blue-600/60 hover:text-blue-600 tracking-[0.2em] transition-colors"
+           >
+             Privacy Policy
+           </a>
         </div>
       </footer>
     </div>
