@@ -94,6 +94,10 @@ export const authService = {
       if (!profile) {
         console.warn("[Auth] No profile found for authenticated user:", authUser.id);
         
+        // Fetch a valid department ID dynamically
+        const { data: depts } = await supabase.from('departments').select('id').limit(1);
+        const defaultDeptId = depts && depts.length > 0 ? depts[0].id : null;
+
         // Auto-create profile if it doesn't exist
         const newProfile = {
           id: authUser.id,
@@ -102,7 +106,7 @@ export const authService = {
           roles: ['Staff'],
           status: 'Active',
           is_verified: true,
-          department_id: 'DEPT-001'
+          department_id: defaultDeptId // Use dynamic ID
         };
         
         const { data: createdProfile, error: createError } = await supabase
