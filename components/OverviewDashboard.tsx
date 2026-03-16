@@ -114,7 +114,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="max-w-xl">
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Institutional Dashboard</h2>
-          <p className="text-slate-500 text-lg mt-1">Real-time status of your institutional asset auditing operations.</p>
+          <p className="text-slate-500 text-lg mt-1">Real-time status of your institutional asset inspection operations.</p>
         </div>
         <div className="flex items-center gap-3">
           <button 

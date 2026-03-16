@@ -59,7 +59,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const faqs = [
     {
       q: "How do I get my Auditor Certification?",
-      a: "Certifications are issued by the Institutional Admin after you complete the mandatory audit training module. Once issued, your Staff ID will be unlocked for audit assignments."
+      a: "Certification ensures you remain compliant with JKE and Kamsis institutional inspection standards. Certifications are issued by the Institutional Admin after you complete the mandatory audit training module. Once issued, your Staff ID will be unlocked for audit assignments."
     },
     {
       q: "What is the Conflict-of-Interest (COI) Engine?",
@@ -186,7 +186,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Eliminate <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Bias</span> in Auditing.
             </h1>
             <p className="text-lg text-slate-500 mb-10 leading-relaxed max-w-lg font-medium">
-              The institutional standard for automated asset audit scheduling. Enforce neutral pairings, monitor weighted KPIs, and ensure staff compliance across all departments.
+              The central source of truth for Inspect-able operations. Understand how our anti-bias pairing works and how to manage institutional compliance.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
@@ -299,7 +299,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <section className="mt-40 max-w-3xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl font-black text-slate-900 mb-4">Staff FAQ</h2>
-            <p className="text-slate-500 font-medium">Quick answers to common institutional audit questions.</p>
+            <p className="text-slate-500 text-lg mt-1">Real-time status of your institutional asset inspection operations.</p>
           </div>
           <div className="space-y-4">
             {faqs.map((faq, i) => (

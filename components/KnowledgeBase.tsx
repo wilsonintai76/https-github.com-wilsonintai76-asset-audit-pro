@@ -60,7 +60,7 @@ export const KnowledgeBase: React.FC = () => {
           <section>
             <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4">System Knowledge Base</h2>
             <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-2xl">
-              The central source of truth for Asset Audit Pro operations. Understand how our anti-bias pairing works and how to manage institutional compliance.
+              The central source of truth for Inspect-able operations. Understand how our anti-bias pairing works and how to manage institutional compliance.
             </p>
           </section>
 

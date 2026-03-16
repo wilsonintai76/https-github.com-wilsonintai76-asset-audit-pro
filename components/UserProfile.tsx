@@ -238,7 +238,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
           <div className="max-w-md">
             <h3 className="text-xl font-bold mb-2">Institutional Security</h3>
             <p className="text-slate-400 text-sm leading-relaxed">
-              Certification ensures you remain compliant with JKE and Kamsis asset auditing standards.
+              Certification ensures you remain compliant with JKE and Kamsis institutional inspection standards.
             </p>
           </div>
           <button className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-black uppercase tracking-widest transition-all">
