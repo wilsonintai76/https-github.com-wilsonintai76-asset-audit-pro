@@ -36,8 +36,55 @@ class DataGateway {
     if (loc.departmentId !== undefined) {
       payload.department_id = (loc.departmentId && loc.departmentId !== "") ? loc.departmentId : null;
     }
-    if (loc.supervisorId !== undefined) {
-      payload.supervisor_id = (loc.supervisorId && loc.supervisorId !== "") ? loc.supervisorId : null;
+    return payload;
+  }
+
+  private mapUserToDB(user: Partial<User>) {
+    const payload: any = {};
+    if (user.id !== undefined) payload.id = user.id;
+    if (user.name !== undefined) payload.name = user.name;
+    if (user.email !== undefined) payload.email = user.email;
+    if (user.pin !== undefined) payload.pin = user.pin;
+    if (user.roles !== undefined) payload.roles = user.roles;
+    if (user.designation !== undefined) payload.designation = user.designation;
+    if (user.status !== undefined) payload.status = user.status;
+    if (user.isVerified !== undefined) payload.is_verified = user.isVerified;
+    if (user.mustChangePIN !== undefined) payload.must_change_pin = user.mustChangePIN;
+    if (user.dashboardConfig !== undefined) payload.dashboard_config = user.dashboardConfig;
+    
+    if (user.departmentId !== undefined) {
+      payload.department_id = (user.departmentId && user.departmentId !== "") ? user.departmentId : null;
+    }
+    if (user.contactNumber !== undefined) payload.contact_number = user.contactNumber;
+    if (user.lastActive !== undefined) payload.last_active = user.lastActive;
+    if (user.certificationIssued !== undefined) payload.certification_issued = user.certificationIssued;
+    if (user.certificationExpiry !== undefined) payload.certification_expiry = user.certificationExpiry;
+    
+    return payload;
+  }
+
+  private mapAuditToDB(audit: Partial<AuditSchedule>) {
+    const payload: any = {};
+    if (audit.status !== undefined) payload.status = audit.status;
+    if (audit.date !== undefined) payload.date = (audit.date === "" ? null : audit.date);
+    
+    if (audit.departmentId !== undefined) {
+      payload.department_id = (audit.departmentId && audit.departmentId !== "") ? audit.departmentId : null;
+    }
+    if (audit.locationId !== undefined) {
+      payload.location_id = (audit.locationId && audit.locationId !== "") ? audit.locationId : null;
+    }
+    if (audit.supervisorId !== undefined) {
+      payload.supervisor_id = (audit.supervisorId && audit.supervisorId !== "") ? audit.supervisorId : null;
+    }
+    if (audit.auditor1Id !== undefined) {
+      payload.auditor1_id = (audit.auditor1Id && audit.auditor1Id !== "") ? audit.auditor1Id : null;
+    }
+    if (audit.auditor2Id !== undefined) {
+      payload.auditor2_id = (audit.auditor2Id && audit.auditor2Id !== "") ? audit.auditor2Id : null;
+    }
+    if (audit.phaseId !== undefined) {
+      payload.phase_id = (audit.phaseId && audit.phaseId !== "") ? audit.phaseId : null;
     }
     return payload;
   }
@@ -70,21 +117,7 @@ class DataGateway {
 
   async addAudit(audit: Omit<AuditSchedule, 'id'>): Promise<AuditSchedule> {
     if (supabase) {
-      const payload: any = { ...audit };
-      if (audit.departmentId !== undefined) payload.department_id = audit.departmentId;
-      if (audit.locationId !== undefined) payload.location_id = audit.locationId;
-      if (audit.supervisorId !== undefined) payload.supervisor_id = audit.supervisorId;
-      if (audit.auditor1Id !== undefined) payload.auditor1_id = audit.auditor1Id;
-      if (audit.auditor2Id !== undefined) payload.auditor2_id = audit.auditor2Id;
-      if (audit.phaseId !== undefined) payload.phase_id = audit.phaseId;
-
-      delete payload.departmentId;
-      delete payload.locationId;
-      delete payload.supervisorId;
-      delete payload.auditor1Id;
-      delete payload.auditor2Id;
-      delete payload.phaseId;
-      if (payload.date === "") payload.date = null;
+      const payload = this.mapAuditToDB(audit);
       const { data, error } = await supabase.from('audits').insert([payload]).select().single();
       if (error) throw error;
       return { 
@@ -102,24 +135,7 @@ class DataGateway {
   
   async bulkAddAudits(audits: Omit<AuditSchedule, 'id'>[]): Promise<AuditSchedule[]> {
     if (supabase) {
-      const payloads = audits.map(a => {
-        const p: any = { ...a };
-        if (a.departmentId !== undefined) p.department_id = a.departmentId;
-        if (a.locationId !== undefined) p.location_id = a.locationId;
-        if (a.supervisorId !== undefined) p.supervisor_id = a.supervisorId;
-        if (a.auditor1Id !== undefined) p.auditor1_id = a.auditor1Id;
-        if (a.auditor2Id !== undefined) p.auditor2_id = a.auditor2Id;
-        if (a.phaseId !== undefined) p.phase_id = a.phaseId;
-
-        delete p.departmentId;
-        delete p.locationId;
-        delete p.supervisorId;
-        delete p.auditor1Id;
-        delete p.auditor2Id;
-        delete p.phaseId;
-        if (p.date === "") p.date = null;
-        return p;
-      });
+      const payloads = audits.map(a => this.mapAuditToDB(a));
       const { data, error } = await supabase.from('audits').insert(payloads).select();
       if (error) throw error;
       return (data || []).map((a: any) => ({
@@ -137,21 +153,7 @@ class DataGateway {
 
   async updateAudit(id: string, updates: Partial<AuditSchedule>) {
     if (supabase) {
-      const payload: any = { ...updates };
-      if (updates.departmentId !== undefined) payload.department_id = updates.departmentId;
-      if (updates.locationId !== undefined) payload.location_id = updates.locationId;
-      if (updates.supervisorId !== undefined) payload.supervisor_id = updates.supervisorId;
-      if (updates.auditor1Id !== undefined) payload.auditor1_id = updates.auditor1Id;
-      if (updates.auditor2Id !== undefined) payload.auditor2_id = updates.auditor2Id;
-      if (updates.phaseId !== undefined) payload.phase_id = updates.phaseId;
-
-      delete payload.departmentId;
-      delete payload.locationId;
-      delete payload.supervisorId;
-      delete payload.auditor1Id;
-      delete payload.auditor2Id;
-      delete payload.phaseId;
-      if (payload.date === "") payload.date = null;
+      const payload = this.mapAuditToDB(updates);
       const { error } = await supabase.from('audits').update(payload).eq('id', id);
       if (error) throw error;
       return;
@@ -189,14 +191,7 @@ class DataGateway {
 
   async addUser(user: User): Promise<User> {
     if (supabase) {
-      const payload: any = { ...user };
-      if (user.departmentId !== undefined) { payload.department_id = user.departmentId; delete payload.departmentId; }
-      if (user.contactNumber !== undefined) { payload.contact_number = user.contactNumber; delete payload.contactNumber; }
-      if (user.isVerified !== undefined) { payload.is_verified = user.isVerified; delete payload.isVerified; }
-      if (user.lastActive !== undefined) { payload.last_active = user.lastActive; delete payload.lastActive; }
-      if (user.certificationIssued !== undefined) { payload.certification_issued = user.certificationIssued; delete payload.certificationIssued; }
-      if (user.certificationExpiry !== undefined) { payload.certification_expiry = user.certificationExpiry; delete payload.certificationExpiry; }
-      if (user.dashboardConfig !== undefined) { payload.dashboard_config = user.dashboardConfig; delete payload.dashboardConfig; }
+      const payload = this.mapUserToDB(user);
       
       const { data, error } = await supabase.from('users').upsert([payload]).select().single();
       if (error) throw error;
@@ -212,6 +207,16 @@ class DataGateway {
         certificationExpiry: result.certification_expiry,
         dashboardConfig: result.dashboard_config
       } as User;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async updateUser(id: string, updates: Partial<User>) {
+    if (supabase) {
+      const payload = this.mapUserToDB(updates);
+      const { error } = await supabase.from('users').update(payload).eq('id', id);
+      if (error) throw error;
+      return;
     }
     throw new Error("Supabase client not initialized");
   }
@@ -232,24 +237,6 @@ class DataGateway {
         certificationExpiry: result.certification_expiry,
         dashboardConfig: result.dashboard_config
       } as User;
-    }
-    throw new Error("Supabase client not initialized");
-  }
-
-  async updateUser(id: string, updates: Partial<User>) {
-    if (supabase) {
-      const payload: any = { ...updates };
-      if (updates.departmentId !== undefined) { payload.department_id = updates.departmentId; delete payload.departmentId; }
-      if (updates.contactNumber !== undefined) { payload.contact_number = updates.contactNumber; delete payload.contactNumber; }
-      if (updates.isVerified !== undefined) { payload.is_verified = updates.isVerified; delete payload.isVerified; }
-      if (updates.lastActive !== undefined) { payload.last_active = updates.lastActive; delete payload.lastActive; }
-      if (updates.certificationIssued !== undefined) { payload.certification_issued = updates.certificationIssued; delete payload.certificationIssued; }
-      if (updates.certificationExpiry !== undefined) { payload.certification_expiry = updates.certificationExpiry; delete payload.certificationExpiry; }
-      if (updates.dashboardConfig !== undefined) { payload.dashboard_config = updates.dashboardConfig; delete payload.dashboardConfig; }
-
-      const { error } = await supabase.from('users').update(payload).eq('id', id);
-      if (error) throw error;
-      return;
     }
     throw new Error("Supabase client not initialized");
   }
