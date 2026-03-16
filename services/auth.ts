@@ -61,17 +61,16 @@ export const authService = {
 
       // STRICT DOMAIN CHECK
       const allowedDomain = 'poliku.edu.my';
-      const userEmail = authUser.email || '';
+      const userEmail = authUser.email?.toLowerCase() || '';
       
-      // Allow the developer/admin email for testing if needed, 
-      // but for production we enforce the domain.
-      // We'll allow wilsonintai76@gmail.com for now so you don't get locked out.
+      console.log("[Auth] Validating email:", userEmail);
+      
       const isAllowedEmail = userEmail.endsWith(`@${allowedDomain}`) || userEmail === 'wilsonintai76@gmail.com';
 
       if (!isAllowedEmail) {
         console.warn("[Auth] Domain not allowed:", userEmail);
         await supabase.auth.signOut();
-        alert(`Access restricted. Please use your @${allowedDomain} email account.`);
+        alert(`Access restricted. Your email (${userEmail}) does not belong to the @${allowedDomain} domain.`);
         return null;
       }
 
