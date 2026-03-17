@@ -283,12 +283,7 @@ const App: React.FC = () => {
 
   // --- AUTH HANDLERS ---
   const handleLoginSuccess = useCallback(async (userProfile: User) => {
-    // Check verification status - If not verified, force role to Guest
     const finalUser = { ...userProfile };
-    if (userProfile.isVerified === false) {
-      finalUser.roles = ['Guest'];
-    }
-
     setCurrentUser(finalUser);
 
     // Default view logic
@@ -321,7 +316,6 @@ const App: React.FC = () => {
       case 'Coordinator': return ['Coordinator', 'Supervisor', 'Staff'];
       case 'Supervisor': return ['Supervisor', 'Staff'];
       case 'Staff': return ['Staff'];
-      case 'Guest': return ['Guest'];
       default: return ['Staff'];
     }
   };
@@ -350,7 +344,6 @@ const App: React.FC = () => {
       isVerified: true
     };
 
-    if (role === 'Guest') user.departmentId = 'dummy-dept-id';
 
     try {
       const existingUsers = await gateway.getUsers();
@@ -1833,17 +1826,10 @@ const App: React.FC = () => {
             </button>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-bold text-slate-900 capitalize leading-none">{activeView.replace('-', ' ')}</h1>
-              {currentUser.roles.includes('Guest') && currentUser.isVerified === false ? (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-amber-50 text-amber-600 border-amber-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                  Verification Pending
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-indigo-50 text-indigo-600 border-indigo-100">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-                  Secure Session
-                </span>
-              )}
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-indigo-50 text-indigo-600 border-indigo-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                Secure Session
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -1923,9 +1909,6 @@ const App: React.FC = () => {
                 onToggleStatus={handleToggleStatus}
                 allDepartments={departmentsWithAssets}
                 allLocations={locations}
-                onAddAudit={handleAddAudit}
-                onBulkAddAudits={handleBulkAddAudits}
-                onDeleteAudit={handleDeleteAudit}
                 crossAuditPermissions={crossAuditPermissions}
                 auditPhases={auditPhases}
                 maxAssetsPerDay={maxAssetsPerDay}

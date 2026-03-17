@@ -83,9 +83,9 @@ CREATE TABLE users (
   id                   UUID PRIMARY KEY, -- Linked to auth.users.id
   name                 TEXT NOT NULL,
   email                TEXT NOT NULL UNIQUE,
-  roles                TEXT[]       NOT NULL DEFAULT '{Guest}'
+  roles                TEXT[]       NOT NULL DEFAULT '{Staff}'
                          CONSTRAINT chk_roles CHECK (
-                           roles <@ ARRAY['Admin','Coordinator','Supervisor','Staff','Guest']::TEXT[]
+                           roles <@ ARRAY['Admin','Coordinator','Supervisor','Staff']::TEXT[]
                          ),
   picture              TEXT,
   department_id        UUID,        -- FK to departments(id) added via ALTER TABLE below
@@ -97,7 +97,7 @@ CREATE TABLE users (
   designation          TEXT         CONSTRAINT chk_user_designation CHECK (
                            designation IS NULL OR designation IN ('Head Of Department','Coordinator','Supervisor','Staff')
                          ),
-  status               TEXT NOT NULL DEFAULT 'Pending'
+  status               TEXT NOT NULL DEFAULT 'Active'
                          CONSTRAINT chk_user_status CHECK (status IN ('Active','Inactive','Suspended','Pending')),
   is_verified          BOOLEAN NOT NULL DEFAULT false,
   CONSTRAINT chk_department_required CHECK (
@@ -435,9 +435,9 @@ BEGIN
                 new.id,
                 LOWER(new.email),
                 COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
-                ARRAY['Guest']::TEXT[],
-                'Pending',
-                false,
+                ARRAY['Staff']::TEXT[],
+                'Active',
+                true,
                 NOW()
             );
         END IF;

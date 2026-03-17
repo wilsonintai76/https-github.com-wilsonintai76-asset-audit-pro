@@ -55,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
   const isSupervisor = userRoles.includes('Supervisor');
   const isStaff = userRoles.includes('Staff');
 
-  // Show Auditor Dashboard if user is certified, regardless of role (except Guest maybe, but Guests usually aren't certified)
+  // Show Auditor Dashboard if user is certified, regardless of role.
   const showAuditorDashboard = isCertified;
   
   const canAccessSchedule = isAdmin || isCoordinator || isSupervisor || isStaff;

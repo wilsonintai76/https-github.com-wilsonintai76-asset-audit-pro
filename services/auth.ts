@@ -105,9 +105,9 @@ export const authService = {
           id: authUser.id,
           email: authUser.email,
           name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'User',
-          roles: isMasterAdmin ? ['Admin', 'Coordinator', 'Supervisor', 'Staff'] : (isInstitutionalUser ? ['Staff'] : ['Guest']),
-          status: (isMasterAdmin || isInstitutionalUser) ? 'Active' : 'Pending',
-          is_verified: isMasterAdmin || isInstitutionalUser,
+          roles: isMasterAdmin ? ['Admin', 'Coordinator', 'Supervisor', 'Staff'] : ['Staff'],
+          status: 'Active',
+          is_verified: true,
           department_id: defaultDeptId
         };
         

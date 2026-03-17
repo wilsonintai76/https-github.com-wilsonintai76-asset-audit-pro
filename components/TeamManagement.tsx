@@ -123,7 +123,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
               id,
               name, email,
               departmentId: row['Department'] || row['department'] || '',
-              roles: (row['Role'] || row['role'] || 'Staff').split(',').map((r: string) => r.trim() as UserRole).filter(r => ['Admin', 'Coordinator', 'Supervisor', 'Staff', 'Guest'].includes(r)),
+              roles: (row['Role'] || row['role'] || 'Staff').split(',').map((r: string) => r.trim() as UserRole).filter(r => ['Admin', 'Coordinator', 'Supervisor', 'Staff'].includes(r)),
               contactNumber: row['Contact'] || row['contact'] || '',
               status: 'Active',
               lastActive: 'Just now',
@@ -171,7 +171,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     if (user.roles.includes('Admin')) return 'Admin';
     if (user.roles.includes('Coordinator')) return 'Coordinator';
     if (user.roles.includes('Supervisor')) return 'Supervisor';
-    if (user.roles.includes('Guest')) return 'Guest';
     return 'Staff';
   };
 
@@ -371,7 +370,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[10px] font-black uppercase text-slate-400">Administrative Roles (RBAC)</label>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-2">
-                      {(['Admin', 'Coordinator', 'Supervisor', 'Staff', 'Guest'] as UserRole[]).map((r) => (
+                      {(['Admin', 'Coordinator', 'Supervisor', 'Staff'] as UserRole[]).map((r) => (
                         <label key={r} className={`flex items-center gap-2 p-3 rounded-xl border transition-all cursor-pointer ${
                           formData.roles.includes(r) 
                           ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' 

@@ -8,7 +8,7 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "email": { "type": "string", "format": "email" },
-        "roles": { "type": "array", "items": { "type": "string", "enum": ["Admin", "Coordinator", "Supervisor", "Staff", "Guest"] } },
+        "roles": { "type": "array", "items": { "type": "string", "enum": ["Admin", "Coordinator", "Supervisor", "Staff"] } },
         "departmentId": { "type": "string", "description": "Reference to Department ID" },
         "certificationExpiry": { "type": "string", "format": "date-time" },
         "status": { "type": "string", "enum": ["Active", "Inactive", "Suspended"] }

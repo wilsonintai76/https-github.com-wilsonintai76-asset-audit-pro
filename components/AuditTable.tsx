@@ -1,23 +1,17 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import Papa from 'papaparse';
 import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase } from '../types';
-import { NewAuditModal } from './NewAuditModal';
 import { AuditReportModal } from './AuditReportModal';
 import { 
   ShieldOff, 
   Loader2, 
   X, 
   ChevronDown, 
-  FileSpreadsheet, 
-  Plus, 
   Building, 
   Layers,
   UserCheck, 
   Phone, 
-  Minus, 
   Lock, 
-  UserMinus, 
   RotateCcw, 
   FileText, 
   Search,
@@ -46,9 +40,6 @@ interface AuditTableProps {
   onToggleStatus: (id: string) => void;
   allDepartments: Department[];
   allLocations: Location[];
-  onAddAudit: (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1Id' | 'auditor2Id'>) => void;
-  onBulkAddAudits: (audits: Omit<AuditSchedule, 'id'>[]) => void;
-  onDeleteAudit: (id: string) => void;
   crossAuditPermissions: CrossAuditPermission[];
   auditPhases: AuditPhase[];
   maxAssetsPerDay: number;
@@ -57,7 +48,7 @@ interface AuditTableProps {
 export const AuditTable: React.FC<AuditTableProps> = ({ 
   schedules, users, currentUserName, userRoles, departments, selectedDept, onDeptChange, selectedStatus, onStatusChange,
   selectedPhaseId, onPhaseChange, onAssign, onUnassign, onUpdateDate, onUpdateAudit, onToggleStatus,
-  allDepartments, allLocations, onAddAudit, onBulkAddAudits, onDeleteAudit, crossAuditPermissions, auditPhases,
+  allDepartments, allLocations, crossAuditPermissions, auditPhases,
   maxAssetsPerDay
 }) => {
   const [reportAudit, setReportAudit] = useState<AuditSchedule | null>(null);
@@ -89,9 +80,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   // Combined concept: Eligible Field Auditor
   const canSelfAssignSelf = hasFieldRole && isCertified;
 
-  // Permission Logic for Management Actions (Not self-assign)
-  const canAddAudit = isAdmin;
-  const canManageAssignments = isAdmin || isCoordinator || isSupervisor;
+  // Permission Logic for Management Actions (Not assignment/unassignment)
+  const canManageAssignments = false; // Manual assignment/unassignment by admins is now disabled
   const canToggleStatus = isAdmin || isCoordinator || isSupervisor;
 
   const hasPhases = auditPhases?.length > 0;
@@ -220,62 +210,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     onAssign(auditId, slot, currentUser?.id || '');
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (selectedPhaseId === 'All' || !selectedPhaseId) {
-      alert("IMPORT BLOCKED: Please select a specific 'Audit Phase' from the filter buttons above (e.g., 'Phase 1') before importing. All imported audits will be assigned to the selected phase.");
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const newAudits: Omit<AuditSchedule, 'id'>[] = [];
-        let skipped = 0;
-
-        results.data.forEach((row: any) => {
-          // Mapping based on user request:
-          // LABEL -> building (Unique label)
-          // PEGAWAI PENEMPATAN -> supervisor
-          // BAHAGIAN -> department
-          // LOKASI TERKINI -> location
-          const location = row['LOKASI TERKINI'] || row['Location'] || row['location'];
-          const department = row['BAHAGIAN'] || row['Department'] || row['department'];
-          const supervisor = row['PEGAWAI PENEMPATAN'] || row['Supervisor'] || row['supervisor'];
-          const building = row['LABEL'] || row['Building'] || row['building'] || '';
-          const date = row['Date'] || row['date'] || '';
-
-          if (location && department) {
-            newAudits.push({
-              locationId: String(location).trim(),
-              departmentId: String(department).trim(),
-              supervisorId: supervisor ? String(supervisor).trim() : 'To be filled',
-              date: date, 
-              phaseId: selectedPhaseId,
-              status: 'Pending',
-              auditor1Id: null,
-              auditor2Id: null
-            } as any);
-          } else {
-            skipped++;
-          }
-        });
-
-        if (newAudits?.length > 0) {
-          onBulkAddAudits(newAudits);
-          alert(`Successfully scheduled ${newAudits.length} new audits for ${getPhaseName(selectedPhaseId)}.${skipped > 0 ? ` (${skipped} rows skipped due to missing required fields)` : ''}`);
-        } else {
-          alert("No valid audit rows found. Ensure CSV has 'LOKASI TERKINI' and 'BAHAGIAN' columns.");
-        }
-      },
-      error: () => alert("Failed to parse CSV file.")
-    });
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
 
   const getStatusBadgeStyles = (status: string) => {
     switch(status) {
@@ -319,13 +253,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         icon={Calendar}
         activePhase={activePhase}
         description="Plan and manage institutional audit windows and auditor assignments."
-      />
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileUpload} 
-        className="hidden" 
-        accept=".csv"
       />
 
       {hasFieldRole && !isCertified && (
@@ -448,20 +375,6 @@ export const AuditTable: React.FC<AuditTableProps> = ({
              );
          })}
          
-         <div className="flex-grow"></div>
-
-         {canAddAudit && (
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!hasPhases}
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all border ${!hasPhases ? 'bg-slate-100 text-slate-300 border-slate-200' : 'bg-white text-slate-500 border-slate-200 hover:text-emerald-500 hover:border-emerald-200'}`}
-              title="Import CSV"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
