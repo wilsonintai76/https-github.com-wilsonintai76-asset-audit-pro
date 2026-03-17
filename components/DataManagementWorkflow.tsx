@@ -302,95 +302,187 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   // ────────────────────────────────────────────────────────────
   // Render
   // ────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = React.useState<'departments' | 'mappings' | 'sync' | 'staff'>('departments');
+
+  // ────────────────────────────────────────────────────────────
+  // Render
+  // ────────────────────────────────────────────────────────────
+  const tabs = [
+    { id: 'departments', label: '1. Departments', icon: FileSpreadsheet, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
+    { id: 'mappings', label: '2. Mappings', icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
+    { id: 'sync', label: '3. Asset Sync', icon: CheckCircle, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-100' },
+    { id: 'staff', label: '4. Staff (Opt)', icon: UserCheck, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' },
+  ] as const;
+
   return (
     <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
-      <h3 className="text-xl font-bold text-slate-900 mb-2">Data Management Workflow</h3>
-      <p className="text-sm text-slate-500 mb-6">Follow these steps in order to set up your asset data and reconcile merged departments.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h3 className="text-xl font-bold text-slate-900">Data Management Workflow</h3>
+          <p className="text-sm text-slate-500">Configure your system data through these sequential modules.</p>
+        </div>
+      </div>
 
-      <div className="space-y-8">
+      {/* Tab Navigation */}
+      <div className="flex flex-wrap gap-2 mb-8 bg-slate-50 p-1.5 rounded-[20px] border border-slate-200 w-fit">
+        {tabs.map((tab) => {
+          const IsActive = activeTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-[14px] text-xs font-bold transition-all ${
+                IsActive 
+                  ? `${tab.bg} ${tab.color} ${tab.border} border shadow-sm scale-[1.02]` 
+                  : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="min-h-[300px]">
         {/* Hidden file inputs */}
         <input type="file" ref={staffFileInputRef} className="hidden" accept=".csv" onChange={handleStaffFileUpload} />
         <input type="file" ref={deptFileInputRef} className="hidden" accept=".csv" onChange={handleDeptFileUpload} />
         <input type="file" ref={bulkMappingRef} className="hidden" accept=".csv" onChange={handleBulkMappingUpload} />
 
-        {/* Step 1 */}
-        <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200">
-          <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-3">Step 1 — Official Departments</p>
-          <p className="text-sm text-slate-600 mb-4">Upload the official department list ([DEPARTMENT.csv]) to populate the system's baseline.</p>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={handleDownloadDeptTemplate} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all">
-              Download Template
-            </button>
-            <button onClick={() => deptFileInputRef.current?.click()} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4" /> Import Departments CSV
-            </button>
-          </div>
-        </div>
-
-        {/* Step 2 */}
-        <div className="p-6 bg-indigo-50 border border-indigo-100 rounded-2xl">
-          <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-3">Step 2 — Department Mapping Rules</p>
-          <p className="text-sm text-slate-600 mb-4">Upload the mapping reference ([MAPPING FROM CO TO SPPA.csv]) to automatically reconcile sub-units into parent departments.</p>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={() => bulkMappingRef.current?.click()} className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4" /> Import Mapping CSV
-            </button>
-          </div>
-        </div>
-
-        {/* Current Mapping Rules — inline */}
-        <MappingRules
-          departments={departments}
-          departmentMappings={departmentMappings}
-          onAddDepartmentMapping={onAddDepartmentMapping}
-          onDeleteDepartmentMapping={onDeleteDepartmentMapping}
-          onSyncLocationMappings={onSyncLocationMappings}
-        />
-
-        {/* Step 3 */}
-        <div className="p-6 bg-violet-50 border border-violet-100 rounded-2xl">
-          <p className="text-xs font-bold text-violet-600 uppercase tracking-widest mb-3">Step 3 — Sync Assets &amp; Locations</p>
-          <p className="text-sm text-slate-600 mb-4">Upload [location.csv] or [senarai aset.csv]. The system will use your mapping rules to aggregate asset totals and create location units.</p>
-          <div className="flex flex-wrap gap-3 items-center">
-            <button
-              onClick={() => assetSyncRef.current?.click()}
-              disabled={isAssetSyncing}
-              className="px-5 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-500/20 hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-60"
-            >
-              <RefreshCw className={`w-4 h-4 ${isAssetSyncing ? 'animate-spin' : ''}`} />
-              Sync Assets &amp; Locations
-            </button>
-            <input ref={assetSyncRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleAssetSync} />
-            {assetSyncStatus && (
-              <div className={`flex items-start gap-2 px-4 py-2.5 rounded-xl text-xs font-medium border flex-1 ${
-                assetSyncStatus.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : assetSyncStatus.type === 'warn' ? 'bg-amber-50 border-amber-200 text-amber-800'
-                : 'bg-red-50 border-red-200 text-red-800'
-              }`}>
-                {assetSyncStatus.type === 'success'
-                  ? <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  : <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+        {activeTab === 'departments' && (
+          <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+            <div className="p-8 bg-indigo-50/50 rounded-3xl border border-indigo-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
                 <div>
-                  <div>{assetSyncStatus.message}</div>
-                  {assetSyncStatus.detail && <div className="opacity-70 mt-0.5">{assetSyncStatus.detail}</div>}
+                  <p className="text-xs font-black text-indigo-600 uppercase tracking-widest leading-none mb-1">Module 01</p>
+                  <h4 className="text-lg font-bold text-slate-900 leading-none caps-none">Official Departments</h4>
                 </div>
               </div>
-            )}
+              <p className="text-sm text-slate-600 mb-6 max-w-2xl">
+                Upload the official department list ([DEPARTMENT.csv]) to populate the system's baseline. This ensures all asset data correctly attributes to valid organizational units.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button onClick={handleDownloadDeptTemplate} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all active:scale-95 leading-none">
+                  Download Template
+                </button>
+                <button onClick={() => deptFileInputRef.current?.click()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95 leading-none">
+                  <FileSpreadsheet className="w-4 h-4" /> Import Departments CSV
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Optional Step 4 */}
-        <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl opacity-60 hover:opacity-100 transition-opacity">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Optional — Staff Management</p>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={handleDownloadStaffTemplate} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all">
-              Staff Template
-            </button>
-            <button onClick={() => staffFileInputRef.current?.click()} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center gap-2">
-              <UserCheck className="w-4 h-4" /> Import Staff CSV
-            </button>
+        {activeTab === 'mappings' && (
+          <div className="animate-in fade-in slide-in-from-left-4 duration-300 space-y-6">
+            <div className="p-8 bg-blue-50/50 rounded-3xl border border-blue-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-blue-600 uppercase tracking-widest leading-none mb-1">Module 02</p>
+                  <h4 className="text-lg font-bold text-slate-900 leading-none caps-none">Department Mapping Rules</h4>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 mb-6 max-w-2xl">
+                Upload the mapping reference ([MAPPING FROM CO TO SPPA.csv]) to automatically reconcile sub-units into parent departments. This is critical for accurate asset aggregation.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button onClick={() => bulkMappingRef.current?.click()} className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95 leading-none">
+                  <FileSpreadsheet className="w-4 h-4" /> Import Mapping CSV
+                </button>
+              </div>
+            </div>
+
+            <div className="border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
+              <MappingRules
+                departments={departments}
+                departmentMappings={departmentMappings}
+                onAddDepartmentMapping={onAddDepartmentMapping}
+                onDeleteDepartmentMapping={onDeleteDepartmentMapping}
+                onSyncLocationMappings={onSyncLocationMappings}
+              />
+            </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === 'sync' && (
+          <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+            <div className="p-8 bg-violet-50/50 rounded-3xl border border-violet-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-violet-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/20">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-violet-600 uppercase tracking-widest leading-none mb-1">Module 03</p>
+                  <h4 className="text-lg font-bold text-slate-900 leading-none caps-none">Sync Assets & Locations</h4>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 mb-6 max-w-2xl">
+                Upload [location.csv] or [senarai aset.csv]. The system will use your mapping rules to aggregate asset totals and create location units automatically.
+              </p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button
+                  onClick={() => assetSyncRef.current?.click()}
+                  disabled={isAssetSyncing}
+                  className="px-6 py-3 bg-violet-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-500/20 hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-60 active:scale-95 leading-none"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isAssetSyncing ? 'animate-spin' : ''}`} />
+                  Sync Assets & Locations
+                </button>
+                <input ref={assetSyncRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleAssetSync} />
+                {assetSyncStatus && (
+                  <div className={`flex items-start gap-3 px-5 py-3 rounded-2xl text-xs font-medium border flex-1 max-w-md ${
+                    assetSyncStatus.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : assetSyncStatus.type === 'warn' ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    {assetSyncStatus.type === 'success'
+                      ? <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
+                      : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+                    <div>
+                      <div className="font-bold">{assetSyncStatus.message}</div>
+                      {assetSyncStatus.detail && <div className="opacity-70 mt-1">{assetSyncStatus.detail}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'staff' && (
+          <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+            <div className="p-8 bg-slate-50 rounded-3xl border border-slate-200">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Optional</p>
+                  <h4 className="text-lg font-bold text-slate-900 leading-none caps-none">Staff Management</h4>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 mb-6 max-w-2xl">
+                Upload a staff list to automatically create accounts and assign roles. This is optional but recommended for large teams.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <button onClick={handleDownloadStaffTemplate} className="px-6 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-50 transition-all active:scale-95 leading-none">
+                  Download Template
+                </button>
+                <button onClick={() => staffFileInputRef.current?.click()} className="px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-emerald-500/20 hover:bg-emerald-700 transition-all flex items-center gap-2 active:scale-95 leading-none">
+                  <UserCheck className="w-4 h-4" /> Import Staff CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
