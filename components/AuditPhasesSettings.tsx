@@ -21,6 +21,17 @@ const addDays = (dateStr: string, days: number): string => {
   return d.toISOString().split('T')[0];
 };
 
+/** Formats YYYY-MM-DD to DD/MM/YYYY */
+const formatDisplayDate = (dateStr: string): string => {
+  if (!dateStr) return '—';
+  try {
+    const [year, month, day] = dateStr.split('-');
+    return `${day}/${month}/${year}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases, isAdmin = false, onAdd, onUpdate, onDelete }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
@@ -155,7 +166,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                     ) : (
                       <div className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-2 ${isActive ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
                         <CalendarCheck className="w-3 h-3" />
-                        {phase.startDate || '—'}
+                        {formatDisplayDate(phase.startDate)}
                       </div>
                     )}
                     
@@ -164,7 +175,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                     {!isEditing && (
                       <div className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-2 ${isActive ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
                         <CalendarX className="w-3 h-3" />
-                        {autoEnd || '—'}
+                        {formatDisplayDate(autoEnd)}
                       </div>
                     )}
                   </div>
@@ -175,7 +186,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                          <label className="text-[8px] font-black uppercase text-slate-400 tracking-widest block pl-1">End Date (Auto)</label>
                          <div className="px-3 py-1.5 bg-slate-100/50 border border-slate-200 rounded-xl text-xs text-slate-400 flex items-center gap-2">
                             <CalendarX className="w-3 h-3" />
-                            {autoEnd || '—'}
+                            {formatDisplayDate(autoEnd)}
                          </div>
                       </div>
                     </div>
