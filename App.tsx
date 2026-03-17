@@ -1940,6 +1940,7 @@ const App: React.FC = () => {
               departments={visibleDepartments}
               customConfirm={customConfirm}
               customAlert={customAlert}
+              phases={auditPhases}
             />
           )}
           {activeView === 'departments' && (
@@ -1953,6 +1954,7 @@ const App: React.FC = () => {
               onBulkUpdate={handleBulkUpdateDepts}
               onDelete={handleDeleteDept}
               isAdmin={isAdmin}
+              phases={auditPhases}
             />
           )}
           {activeView === 'locations' && (
@@ -1966,6 +1968,7 @@ const App: React.FC = () => {
               onBulkAdd={handleBulkAddLocs}
               onUpdate={handleUpdateLoc}
               onDelete={handleDeleteLoc}
+              phases={auditPhases}
             />
           )}
           {activeView === 'settings' && (
@@ -2005,7 +2008,7 @@ const App: React.FC = () => {
             />
           )}
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
-          {activeView === 'knowledge-base' && <KnowledgeBase />}
+          {activeView === 'knowledge-base' && <KnowledgeBase phases={auditPhases} />}
         </main>
       </div>
 

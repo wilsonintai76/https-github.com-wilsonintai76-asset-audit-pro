@@ -5,7 +5,8 @@ import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
 import { TierDistributionTable } from './TierDistributionTable';
-import { Sliders, GraduationCap, Filter, ChevronDown } from 'lucide-react';
+import { Sliders, GraduationCap, Filter, ChevronDown, LayoutDashboard } from 'lucide-react';
+import { PageHeader } from './PageHeader';
 
 interface OverviewDashboardProps {
   schedules: AuditSchedule[];
@@ -109,30 +110,48 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     (Object.entries(deptCounts) as [string, number][]).sort((a, b) => b[1] - a[1])
   , [deptCounts]);
 
+  const activePhase = useMemo(() => {
+    const today = new Date();
+    return (phases || []).find(p => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return today >= start && today <= end;
+    });
+  }, [phases]);
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="max-w-xl">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Institutional Dashboard</h2>
-          <p className="text-slate-500 text-lg mt-1">Real-time status of your institutional asset inspection operations.</p>
-        </div>
+      <PageHeader
+        title="Institutional Dashboard"
+        description="Real-time compliance monitoring and institutional performance stats."
+        icon={LayoutDashboard}
+        activePhase={activePhase}
+      >
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsCustomizeOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm active:scale-95"
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 ${
+              activePhase 
+                ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20' 
+                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
           >
-            <Sliders className="w-4 h-4 text-blue-500" />
+            <Sliders className={`w-4 h-4 ${activePhase ? 'text-emerald-400' : 'text-blue-500'}`} />
             Customize View
           </button>
-          <div className="text-right hidden sm:block">
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">System Status</p>
-            <p className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 justify-end">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              All Systems Operational
-            </p>
-          </div>
+          {!activePhase && (
+            <div className="text-right hidden sm:block">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">System Status</p>
+              <p className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 justify-end">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                All Systems Operational
+              </p>
+            </div>
+          )}
         </div>
-      </div>
+      </PageHeader>
 
       {/* Filters Bar */}
       <div className="bg-white rounded-[32px] p-4 border border-slate-200 shadow-sm">

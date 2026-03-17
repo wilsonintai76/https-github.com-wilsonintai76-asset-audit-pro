@@ -1,7 +1,9 @@
 
 import React, { useState } from 'react';
 import { Department, Location, User } from '../types';
-import { Plus, Layers, UserRound, Boxes, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2 } from 'lucide-react';
+import { PageHeader } from './PageHeader';
+import { AuditPhase } from '../types';
 import { DepartmentModal } from './DepartmentModal';
 
 interface DepartmentManagementProps {
@@ -12,6 +14,7 @@ interface DepartmentManagementProps {
   onUpdate: (id: string, dept: Partial<Department>) => void;
   onDelete: (id: string) => void;
   isAdmin?: boolean;
+  phases?: AuditPhase[];
 }
 
 export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ 
@@ -20,7 +23,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   onUpdate, 
   onDelete, 
   users,
-  isAdmin = true 
+  isAdmin = true,
+  phases = []
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
@@ -55,27 +59,39 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     'bg-amber-100 text-amber-600 border-amber-200', 'bg-rose-100 text-rose-600 border-rose-200'
   ];
 
+  const activePhase = React.useMemo(() => {
+    const today = new Date();
+    return (phases || []).find(p => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return today >= start && today <= end;
+    });
+  }, [phases]);
+
   return (
     <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-xl font-bold text-slate-900">Departments Registry</h3>
-          <p className="text-sm text-slate-500">Manage base department data. Grouping and pairing is handled in System Settings.</p>
-        </div>
-        
+      <PageHeader
+        title="Departments & Units"
+        icon={Building2}
+        activePhase={activePhase}
+        description="Configure institutional structure, departments, and unit heads."
+      >
         {isAdmin && (
-          <div className="flex gap-2 w-full md:w-auto">
-            <button 
-              onClick={startAdd} 
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              New Dept
-            </button>
-          </div>
+          <button 
+            onClick={startAdd} 
+            className={`px-5 py-2.5 rounded-2xl text-sm font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${
+              activePhase 
+                ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20 shadow-none' 
+                : 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-700'
+            }`}
+          >
+            <Plus className="w-4 h-4" />
+            New Dept
+          </button>
         )}
-      </div>
+      </PageHeader>
 
       {/* LIST */}
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">

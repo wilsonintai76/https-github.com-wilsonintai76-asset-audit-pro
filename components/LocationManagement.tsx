@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Location, UserRole, Department, User } from '../types';
+import { Location, UserRole, Department, User, AuditPhase } from '../types';
 import { Network, ChevronDown, MapPin, Landmark, User as UserIcon, Phone, Pencil, Trash2, MapPinned, Building2, Layers, Plus } from 'lucide-react';
 import { LocationModal } from './LocationModal';
+import { PageHeader } from './PageHeader';
 
 interface LocationManagementProps {
   locations: Location[];
@@ -12,10 +13,11 @@ interface LocationManagementProps {
   onAdd: (loc: Omit<Location, 'id'>) => void;
   onUpdate: (id: string, loc: Partial<Location>) => void;
   onDelete: (id: string) => void;
+  phases?: AuditPhase[];
 }
 
 export const LocationManagement: React.FC<LocationManagementProps> = ({ 
-  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete 
+  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [] 
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
@@ -116,26 +118,39 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
     'bg-slate-100 text-slate-600 border-slate-200'
   ];
 
+  const activePhase = useMemo(() => {
+    const today = new Date();
+    return (phases || []).find(p => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return today >= start && today <= end;
+    });
+  }, [phases]);
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-xl font-bold text-slate-900 tracking-tight">Locations</h3>
-          <p className="text-xs text-slate-500 font-medium">
-            {(isCoordinator && !isAdmin) ? `Managing locations for ${userDeptId}` : 'Institutional site mapping and asset nodes.'}
-          </p>
-        </div>
-        
+      <PageHeader
+        title="Location Nodes"
+        icon={MapPin}
+        activePhase={activePhase}
+        description={(isCoordinator && !isAdmin) ? `Managing locations for ${userDeptId}` : 'Institutional site mapping and audit execution points.'}
+      >
         {(isAdmin || (isCoordinator && !isAdmin)) && (
           <button 
             onClick={startAdd}
-            className="px-4 py-2 bg-blue-600 text-white rounded-2xl text-[13px] font-bold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+            className={`px-4 py-2 rounded-2xl text-[13px] font-bold shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap active:scale-95 ${
+              activePhase 
+                ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20 shadow-none' 
+                : 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-700'
+            }`}
           >
             <Plus className="w-4 h-4" />
             New Location
           </button>
         )}
-      </div>
+      </PageHeader>
 
       {/* FILTERS BAR */}
       <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-2 rounded-[24px] border border-slate-100 shadow-sm sm:w-fit">

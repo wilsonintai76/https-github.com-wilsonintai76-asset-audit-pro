@@ -2,11 +2,18 @@ import React, { useState } from 'react';
 import { AuditFlow } from './docs/AuditFlow';
 import { AccessMatrix } from './docs/AccessMatrix';
 import { SetupGuide } from './docs/SetupGuide';
-import { Network, Shield, Rocket, Headset, Route, Flag, Building } from 'lucide-react';
+import { Network, Shield, Rocket, Headset, Route, Flag, Building, BookOpen } from 'lucide-react';
+
+import { PageHeader } from './PageHeader';
+import { AuditPhase } from '../types';
 
 type Section = 'workflow' | 'permissions' | 'setup';
 
-export const KnowledgeBase: React.FC = () => {
+interface KnowledgeBaseProps {
+  phases?: AuditPhase[];
+}
+
+export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ phases = [] }) => {
   const [activeSection, setActiveSection] = useState<Section>('workflow');
 
   const scrollToSection = (id: Section) => {
@@ -16,6 +23,17 @@ export const KnowledgeBase: React.FC = () => {
       element.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  const activePhase = React.useMemo(() => {
+    const today = new Date();
+    return (phases || []).find(p => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return today >= start && today <= end;
+    });
+  }, [phases]);
 
   return (
     <div className="max-w-6xl mx-auto pb-20">
@@ -56,13 +74,12 @@ export const KnowledgeBase: React.FC = () => {
 
         {/* Content Area */}
         <div className="flex-grow space-y-20">
-          {/* Header */}
-          <section>
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight mb-4">System Knowledge Base</h2>
-            <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-2xl">
-              The central source of truth for Inspect-able operations. Understand how our anti-bias pairing works and how to manage institutional compliance.
-            </p>
-          </section>
+          <PageHeader
+            title="Knowledge Base"
+            icon={BookOpen}
+            activePhase={activePhase}
+            description="The central source of truth for Inspect-able operations. Understand how our anti-bias pairing works and how to manage institutional compliance."
+          />
 
           {/* WORKFLOW SECTION */}
           <section id="workflow" className="scroll-mt-32">

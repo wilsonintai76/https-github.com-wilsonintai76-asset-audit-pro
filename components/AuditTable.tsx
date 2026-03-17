@@ -21,8 +21,10 @@ import {
   RotateCcw, 
   FileText, 
   Search,
-  Filter
+  Filter,
+  Calendar
 } from 'lucide-react';
+import { PageHeader } from './PageHeader';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
 
 interface AuditTableProps {
@@ -299,8 +301,25 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     return !!(audit.date && (audit.auditor1Id || audit.auditor2Id));
   };
 
+  const activePhase = useMemo(() => {
+    const today = new Date();
+    return (auditPhases || []).find(p => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return today >= start && today <= end;
+    });
+  }, [auditPhases]);
+
   return (
     <div className="space-y-6 flex flex-col flex-1 min-h-0">
+      <PageHeader
+        title="Audit Schedules"
+        icon={Calendar}
+        activePhase={activePhase}
+        description="Plan and manage institutional audit windows and auditor assignments."
+      />
       <input 
         type="file" 
         ref={fileInputRef} 

@@ -5,6 +5,8 @@ import { User, UserRole, Department } from '../types';
 import { IssueCertificateModal } from './IssueCertificateModal';
 import { gateway } from '../services/dataGateway';
 import { Filter, Plus, User as UserIcon, Check, X, Award, Stamp, Pencil, Trash2, Key, ChevronDown } from 'lucide-react';
+import { PageHeader } from './PageHeader';
+import { AuditPhase } from '../types';
 
 interface TeamManagementProps {
   users: User[];
@@ -18,10 +20,11 @@ interface TeamManagementProps {
   departments: Department[];
   customConfirm: (title: string, message: string, onConfirm: () => void, isDestructive?: boolean) => void;
   customAlert: (message: string) => void;
+  phases?: AuditPhase[];
 }
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ 
-  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert 
+  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert, phases = [] 
 }) => {
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('All');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
@@ -194,8 +197,25 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     setIsFormOpen(true);
   };
 
+  const activePhase = useMemo(() => {
+    const today = new Date();
+    return (phases || []).find(p => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return today >= start && today <= end;
+    });
+  }, [phases]);
+
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="Team Management"
+        icon={UserIcon}
+        activePhase={activePhase}
+        description="Manage user access, roles, and institutional certification status."
+      />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h3 className="text-xl font-bold text-slate-900">Institutional Team</h3>

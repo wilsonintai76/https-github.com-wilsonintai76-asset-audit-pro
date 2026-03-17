@@ -110,7 +110,18 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                         type="date"
                         className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" 
                         value={formData.startDate} 
-                        onChange={e => setFormData({ ...formData, startDate: e.target.value })} 
+                        onChange={e => {
+                            const newStart = e.target.value;
+                            setFormData(prev => {
+                                const newFormData = { ...prev, startDate: newStart };
+                                if (prev.endDate && newStart > prev.endDate) {
+                                    newFormData.endDate = newStart;
+                                } else if (!prev.endDate) {
+                                    newFormData.endDate = newStart;
+                                }
+                                return newFormData;
+                            });
+                        }} 
                     />
                 </div>
                 <div className="space-y-1">
@@ -118,6 +129,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                     <input 
                         required 
                         type="date"
+                        min={formData.startDate}
                         className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none" 
                         value={formData.endDate} 
                         onChange={e => setFormData({ ...formData, endDate: e.target.value })} 
