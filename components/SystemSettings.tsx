@@ -129,28 +129,48 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onDeleteTier={onDeleteKPITier}
       />
 
-      {phases?.length > 0 && kpiTiers?.length > 0 && (
-        <TierDistributionTable
+      {isAdmin && (
+        <DataManagementWorkflow
           departments={departments}
-          kpiTiers={kpiTiers}
-          phases={phases}
-          schedules={schedules}
-          maxAssetsPerDay={maxAssetsPerDay}
+          departmentMappings={departmentMappings}
+          onBulkAddDepts={onBulkAddDepts}
+          onBulkActivateStaff={onBulkActivateStaff}
+          onAddDepartmentMapping={onAddDepartmentMapping}
+          onDeleteDepartmentMapping={onDeleteDepartmentMapping}
+          onSyncLocationMappings={onSyncLocationMappings}
+          onUpsertLocations={onUpsertLocations}
         />
       )}
 
-      {isAdmin && (
-        <div className="flex justify-center">
-          <button
-            onClick={onRebalanceSchedule}
-            className="group relative px-8 py-4 bg-slate-900 text-white rounded-[24px] text-sm font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative flex items-center gap-3">
-              <Zap className="w-5 h-5 text-emerald-400" />
-              Rebalance Audit Schedule
+      {(phases?.length > 0 && kpiTiers?.length > 0) && (
+        <div className="space-y-8">
+          <TierDistributionTable
+            departments={departments}
+            kpiTiers={kpiTiers}
+            phases={phases}
+            schedules={schedules}
+            maxAssetsPerDay={maxAssetsPerDay}
+          />
+          
+          {isAdmin && (
+            <div className="flex justify-center">
+              <button
+                onClick={onRebalanceSchedule}
+                className="group relative px-8 py-4 bg-slate-900 text-white rounded-[24px] text-sm font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="relative flex items-center gap-3">
+                  <Zap className="w-5 h-5 text-emerald-400" />
+                  Rebalance Audit Schedule
+                </div>
+              </button>
             </div>
-          </button>
+          )}
+
+          <AuditConstraints
+            maxAssetsPerDay={maxAssetsPerDay}
+            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
+          />
         </div>
       )}
 
@@ -164,24 +184,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateDepartment={onUpdateDepartment}
         onBulkUpdateDepartments={onBulkUpdateDepartments}
       />
-
-      <AuditConstraints
-        maxAssetsPerDay={maxAssetsPerDay}
-        onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
-      />
-
-      {isAdmin && (
-        <DataManagementWorkflow
-          departments={departments}
-          departmentMappings={departmentMappings}
-          onBulkAddDepts={onBulkAddDepts}
-          onBulkActivateStaff={onBulkActivateStaff}
-          onAddDepartmentMapping={onAddDepartmentMapping}
-          onDeleteDepartmentMapping={onDeleteDepartmentMapping}
-          onSyncLocationMappings={onSyncLocationMappings}
-          onUpsertLocations={onUpsertLocations}
-        />
-      )}
 
       {isAdmin && (
         <div className={`rounded-[32px] p-8 border-2 transition-all duration-500 ${
