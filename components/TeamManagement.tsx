@@ -126,7 +126,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
               roles: (row['Role'] || row['role'] || 'Staff').split(',').map((r: string) => r.trim() as UserRole).filter(r => ['Admin', 'Coordinator', 'Supervisor', 'Staff'].includes(r)),
               contactNumber: row['Contact'] || row['contact'] || '',
               status: 'Active',
-              lastActive: 'Just now',
+              lastActive: new Date().toISOString(),
               isVerified: true 
             });
           }
@@ -154,7 +154,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         roles: assignedRoles,
         contactNumber: formData.contactNumber,
         status: 'Active', 
-        lastActive: 'Just now',
+        lastActive: new Date().toISOString(),
         isVerified: true
       });
     }

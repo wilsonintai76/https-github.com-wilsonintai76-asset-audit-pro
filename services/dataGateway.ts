@@ -59,7 +59,13 @@ class DataGateway {
       payload.department_id = (user.departmentId && user.departmentId !== "") ? user.departmentId : null;
     }
     if (user.contactNumber !== undefined) payload.contact_number = user.contactNumber;
-    if (user.lastActive !== undefined) payload.last_active = user.lastActive;
+    if (user.lastActive !== undefined) {
+      if (user.lastActive === 'Just now') {
+        payload.last_active = new Date().toISOString();
+      } else {
+        payload.last_active = user.lastActive;
+      }
+    }
     if (user.certificationIssued !== undefined) payload.certification_issued = user.certificationIssued;
     if (user.certificationExpiry !== undefined) payload.certification_expiry = user.certificationExpiry;
     

@@ -343,7 +343,7 @@ const App: React.FC = () => {
       email: role === 'Admin' ? 'wilsonintai76@gmail.com' : `${role.toLowerCase()}@demo.com`,
       roles: inheritedRoles,
       status: 'Active',
-      lastActive: new Date().toLocaleString(),
+      lastActive: new Date().toISOString(),
       certificationExpiry: fortyFiveDaysLater.toISOString().split('T')[0],
       departmentId: role === 'Admin' ? 'dummy-dept-id' : 'dummy-dept-id',
       isVerified: true
@@ -515,7 +515,7 @@ const App: React.FC = () => {
       id: `err-${Date.now()}`,
       title,
       message,
-      timestamp: 'Just now',
+      timestamp: new Date().toISOString(),
       type: 'urgent',
       read: false
     }, ...prev]);
@@ -710,7 +710,7 @@ const App: React.FC = () => {
         id: `bulk-${Date.now()}`,
         title: 'Batch Schedule Created',
         message: `Successfully imported ${added?.length || 0} audit entries. ${newDeptIds?.length || 0} new departments, ${newLocs?.length || 0} new locations, and ${newUsersCreated.length} temporary users were added to the database.`,
-        timestamp: 'Just now',
+        timestamp: new Date().toISOString(),
         type: 'success',
         read: false
       }, ...prev]);
@@ -816,7 +816,7 @@ const App: React.FC = () => {
         id: `auto-${Date.now()}`,
         title: 'Auto-Schedule Created',
         message: `New audit schedule generated for ${loc.name}.`,
-        timestamp: 'Just now',
+        timestamp: new Date().toISOString(),
         type: 'success',
         read: false
       }, ...prev]);
@@ -851,7 +851,7 @@ const App: React.FC = () => {
           id: `bulk-loc-err-${Date.now()}`,
           title: 'Import Stopped — Unrecognised Departments',
           message: `The following department names in the CSV do not match any existing department: ${originalNames.join(', ')}. Please create mapping rules in System Settings → Department Mapping Rules to map these names to official departments, then re-import.`,
-          timestamp: 'Just now',
+          timestamp: new Date().toISOString(),
           type: 'error',
           read: false
         }, ...prev]);
@@ -978,7 +978,7 @@ const App: React.FC = () => {
         id: `bulk-loc-${Date.now()}`,
         title: 'Locations Imported',
         message: `Imported ${locsToAdd?.length || 0} new locations and updated ${locsToUpdate?.length || 0} existing locations.`,
-        timestamp: 'Just now',
+        timestamp: new Date().toISOString(),
         type: 'success',
         read: false
       }, ...prev]);
@@ -1511,7 +1511,7 @@ const App: React.FC = () => {
           id: `reset-loc-${Date.now()}`,
           title: 'Locations Reset',
           message: 'All locations and associated audit schedules have been deleted.',
-          timestamp: 'Just now',
+          timestamp: new Date().toISOString(),
           type: 'success',
           read: false
         }, ...prev]);
@@ -1544,7 +1544,7 @@ const App: React.FC = () => {
           id: `reset-ops-${Date.now()}`,
           title: 'System Reset',
           message: 'Operational data (Depts, Locs, Members) has been reset.',
-          timestamp: 'Just now',
+          timestamp: new Date().toISOString(),
           type: 'success',
           read: false
         }, ...prev]);
