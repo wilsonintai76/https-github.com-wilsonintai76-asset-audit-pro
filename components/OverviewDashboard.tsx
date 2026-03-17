@@ -7,6 +7,7 @@ import { KPIStatsWidget } from './KPIStatsWidget';
 import { TierDistributionTable } from './TierDistributionTable';
 import { Sliders, GraduationCap, Filter, ChevronDown, LayoutDashboard, Trophy } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
+import { InstitutionalConsolidationView } from './InstitutionalConsolidationView';
 import { PageHeader } from './PageHeader';
 
 interface OverviewDashboardProps {
@@ -342,6 +343,16 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               onSelect={() => {}}
               megaTargetThreshold={3000}
               minAuditors={2}
+            />
+          </div>
+
+          {/* Excel-Style Consolidation View */}
+          <div className="mt-12 bg-white rounded-[32px] border border-slate-200 shadow-sm p-8">
+            <InstitutionalConsolidationView 
+              departments={departments}
+              auditGroups={auditGroups}
+              title="Audit Consolidation Overview"
+              subtitle="Consolidated asset tracking by institutional groups (Excel Style)."
             />
           </div>
 

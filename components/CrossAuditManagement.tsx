@@ -638,7 +638,18 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                             </div>
                           )}
                           
-                          <div className="mb-4">
+                          {/* Visual Mirror of Excel Mapping */}
+                          <div className="mt-8 bg-black/20 rounded-3xl p-6 border border-white/5">
+                            <InstitutionalConsolidationView 
+                              departments={departments}
+                              auditGroups={auditGroups}
+                              title="Live Consolidation Map"
+                              subtitle="Mirror of institutional Excel grouping logic."
+                              isDark={true}
+                            />
+                          </div>
+
+                          <div className="mb-4 mt-8">
                             <div className="w-full">
                                 <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">Efficiency Threshold (Assets)</label>
                                 <div className="flex items-center gap-3 bg-black/20 rounded-xl px-4 py-3 border border-white/10">
