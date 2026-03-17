@@ -121,13 +121,18 @@ const App: React.FC = () => {
       if (phasesData.length < 3) {
         const existingNames = phasesData.map(p => p.name);
         const requiredNames = ['Phase 1', 'Phase 2', 'Phase 3'];
-        for (const name of requiredNames) {
+        const today = new Date();
+        for (let i = 0; i < requiredNames.length; i++) {
+          const name = requiredNames[i];
           if (!existingNames.includes(name)) {
-            const today = new Date().toISOString().split('T')[0];
+            const start = new Date(today);
+            start.setDate(today.getDate() + i * 30);
+            const end = new Date(start);
+            end.setDate(start.getDate() + 30);
             await gateway.addAuditPhase({
               name,
-              startDate: today,
-              endDate: today
+              startDate: start.toISOString().split('T')[0],
+              endDate: end.toISOString().split('T')[0]
             });
           }
         }
