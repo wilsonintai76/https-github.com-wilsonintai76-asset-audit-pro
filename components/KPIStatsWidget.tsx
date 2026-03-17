@@ -40,7 +40,8 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
         const deptSchedules = schedules.filter(s => s.departmentId === d.id);
         const total = deptSchedules?.length || 0;
         const completed = deptSchedules?.filter(s => s.status === 'Completed').length || 0;
-        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const isZeroAsset = (d.totalAssets || 0) === 0;
+        const percentage = isZeroAsset ? 100 : (total > 0 ? Math.round((completed / total) * 100) : 0);
         
         return {
           id: d.id,
@@ -49,7 +50,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
           totalAudits: total,
           completedAudits: completed,
           percentage,
-          status: percentage >= targetPercentage ? 'On Track' : 'At Risk'
+          status: (isZeroAsset || percentage >= targetPercentage) ? 'On Track' : 'At Risk'
         };
       }).sort((a, b) => a.percentage - b.percentage); // Sort by lowest completion first (prioritize risk)
 

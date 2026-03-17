@@ -251,6 +251,10 @@ const App: React.FC = () => {
       if (selectedPhaseId !== 'All') {
         if (s.phaseId !== selectedPhaseId) return false;
       }
+
+      // Exclude departments with zero assets from the schedule
+      if (dept && (dept.totalAssets || 0) === 0) return false;
+
       return true;
     });
   }, [schedules, selectedDept, selectedStatus, selectedPhaseId, currentUser, departmentsWithAssets]);
@@ -261,10 +265,10 @@ const App: React.FC = () => {
         const deptSchedules = schedules.filter(s => s.departmentId === dept.id);
         const total = deptSchedules.length;
         const completed = deptSchedules.filter(s => s.status === 'Completed').length;
-        const compliance = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const compliance = (dept.totalAssets || 0) === 0 ? 100 : (total > 0 ? Math.round((completed / total) * 100) : 0);
         return { name: dept.name, compliance, total };
       })
-      .filter(d => d.total > 0)
+      .filter(d => d.total > 0 || d.compliance === 100) // Keep zero-asset departments if they are at 100%
       .sort((a, b) => b.compliance - a.compliance || b.total - a.total)
       .slice(0, 3);
   }, [departmentsWithAssets, schedules]);
@@ -539,6 +543,11 @@ const App: React.FC = () => {
 
   const handleAddAudit = async (audit: Omit<AuditSchedule, 'id' | 'status' | 'auditor1Id' | 'auditor2Id'>) => {
     try {
+      const dept = departmentsWithAssets.find(d => d.id === audit.departmentId);
+      if (dept && (dept.totalAssets || 0) === 0) {
+        throw new Error(`Cannot add audit for ${dept.name} as it has zero assets.`);
+      }
+
       // Auto-assign phase based on department assets
       const phaseId = getPhaseForDepartment(audit.departmentId);
 
@@ -677,8 +686,18 @@ const App: React.FC = () => {
       const updatedLocs = await gateway.getLocations();
       setLocations(updatedLocs);
 
-      // 5. Finally add the audits
-      const added = await gateway.bulkAddAudits(processedAudits);
+      // 5. Finally add the audits (filtered by assets)
+      const assetFilteredAudits = processedAudits.filter(a => {
+        const dept = departmentsWithAssets.find(d => d.id === a.departmentId);
+        return dept && (dept.totalAssets || 0) > 0;
+      });
+
+      if (assetFilteredAudits.length === 0) {
+        showToast('No audits imported. All provided departments have zero assets.');
+        return;
+      }
+
+      const added = await gateway.bulkAddAudits(assetFilteredAudits);
       setSchedules(prev => [...prev, ...added]);
 
       setNotifications(prev => [{
@@ -1326,6 +1345,9 @@ const App: React.FC = () => {
       let createdCount = 0;
 
       for (const dept of allDepts) {
+        // Skip departments with zero assets
+        if ((dept.totalAssets || 0) === 0) continue;
+
         // 1. Find Tier
         const tier = allTiers.find(t => (dept.totalAssets || 0) >= t.minAssets && (dept.totalAssets || 0) <= t.maxAssets);
         if (!tier) continue;

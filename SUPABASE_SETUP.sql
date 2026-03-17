@@ -85,7 +85,7 @@ CREATE TABLE users (
   email                TEXT NOT NULL UNIQUE,
   roles                TEXT[]       NOT NULL DEFAULT '{Guest}'
                          CONSTRAINT chk_roles CHECK (
-                           roles <@ ARRAY['Admin','Coordinator','Supervisor','Auditor','Staff','Guest']::TEXT[]
+                           roles <@ ARRAY['Admin','Coordinator','Supervisor','Staff','Guest']::TEXT[]
                          ),
   picture              TEXT,
   department_id        UUID,        -- FK to departments(id) added via ALTER TABLE below

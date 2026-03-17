@@ -34,7 +34,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     name: '',
     email: '',
     departmentId: '',
-    role: 'Staff' as UserRole,
+    roles: ['Staff'] as UserRole[],
     designation: '' as string,
     contactNumber: ''
   });
@@ -75,17 +75,21 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     }
   };
 
-  const determineRoles = (primaryRole: string): UserRole[] => {
-    const role = primaryRole.trim();
-    switch (role) {
-      case 'Admin': return ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
-      case 'Coordinator': return ['Coordinator', 'Supervisor', 'Staff'];
-      case 'Supervisor': return ['Supervisor', 'Staff'];
-      case 'Auditor': return ['Auditor', 'Staff'];
-      case 'Staff': return ['Staff'];
-      case 'Guest': return ['Guest'];
-      default: return ['Staff'];
-    }
+  const toggleRole = (role: UserRole) => {
+    setFormData(prev => {
+      const isSelected = prev.roles.includes(role);
+      let newRoles: UserRole[];
+      
+      if (isSelected) {
+        // Don't allow removing the last role
+        if (prev.roles.length <= 1) return prev;
+        newRoles = prev.roles.filter(r => r !== role);
+      } else {
+        newRoles = [...prev.roles, role];
+      }
+      
+      return { ...prev, roles: newRoles };
+    });
   };
 
   const getCertStatus = (expiry?: string) => {
@@ -116,11 +120,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
               id,
               name, email,
               departmentId: row['Department'] || row['department'] || '',
-              roles: determineRoles(row['Role'] || row['role'] || 'Staff'),
+              roles: (row['Role'] || row['role'] || 'Staff').split(',').map((r: string) => r.trim() as UserRole).filter(r => ['Admin', 'Coordinator', 'Supervisor', 'Staff', 'Guest'].includes(r)),
               contactNumber: row['Contact'] || row['contact'] || '',
               status: 'Active',
               lastActive: 'Just now',
-              isVerified: true // Bulk import assumes trusted verification
+              isVerified: true 
             });
           }
         });
@@ -131,14 +135,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const assignedRoles = determineRoles(formData.role);
+    const assignedRoles = formData.roles;
 
     if (editingId) {
       // Editing existing user
-      const updates: any = { ...formData, roles: assignedRoles };
-      delete updates.role;    // Not a column in users table (it's 'roles')
-      
-      onUpdateMember(editingId, updates);
+      onUpdateMember(editingId, { ...formData });
       setEditingId(null);
     } else {
       onAddMember({ 
@@ -158,7 +159,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   };
 
   const resetForm = () => {
-    setFormData({ name: '', email: '', departmentId: '', role: 'Staff', designation: '', contactNumber: '' });
+    setFormData({ name: '', email: '', departmentId: '', roles: ['Staff'], designation: '', contactNumber: '' });
     setIsFormOpen(false);
     setEditingId(null);
   };
@@ -167,7 +168,6 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     if (user.roles.includes('Admin')) return 'Admin';
     if (user.roles.includes('Coordinator')) return 'Coordinator';
     if (user.roles.includes('Supervisor')) return 'Supervisor';
-    if (user.roles.includes('Auditor')) return 'Auditor';
     if (user.roles.includes('Guest')) return 'Guest';
     return 'Staff';
   };
@@ -187,7 +187,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       name: user.name || '',
       email: user.email || '',
       departmentId: user.departmentId || '',
-      role: getHighestRole(user),
+      roles: user.roles || ['Staff'],
       designation: user.designation || '',
       contactNumber: user.contactNumber || ''
     });
@@ -348,16 +348,25 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                       <option value="Staff">Staff</option>
                     </select>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Role Level (RBAC)</label>
-                    <select required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}>
-                      <option value="Guest">Guest (Viewer)</option>
-                      <option value="Auditor">Auditor</option>
-                      <option value="Staff">Staff</option>
-                      <option value="Supervisor">Supervisor</option>
-                      <option value="Coordinator">Coordinator</option>
-                      <option value="Admin">Admin</option>
-                    </select>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400">Administrative Roles (RBAC)</label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-2">
+                      {(['Admin', 'Coordinator', 'Supervisor', 'Staff', 'Guest'] as UserRole[]).map((r) => (
+                        <label key={r} className={`flex items-center gap-2 p-3 rounded-xl border transition-all cursor-pointer ${
+                          formData.roles.includes(r) 
+                          ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' 
+                          : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                        }`}>
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                            checked={formData.roles.includes(r)}
+                            onChange={() => toggleRole(r)}
+                          />
+                          <span className="text-xs font-bold">{r}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Contact</label>
