@@ -104,7 +104,7 @@ const App: React.FC = () => {
   // --- INITIAL DATA LOAD ---
   const loadAllData = useCallback(async () => {
     try {
-      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, kpiTargetsData, mappingsData, activitiesData, groupsData] = await Promise.all([
+      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, mappingsData, activitiesData, groupsData] = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
         gateway.getDepartments(),
@@ -112,11 +112,18 @@ const App: React.FC = () => {
         gateway.getPermissions(),
         gateway.getAuditPhases(),
         gateway.getKPITiers(),
-        gateway.getKPITierTargets(),
         gateway.getDepartmentMappings(),
         gateway.getActivities(),
         gateway.getAuditGroups()
       ]);
+
+      // KPI targets are optional during schema rollout; don't block the app if missing
+      let kpiTargetsData: KPITierTarget[] = [];
+      try {
+        kpiTargetsData = await gateway.getKPITierTargets();
+      } catch (targetErr) {
+        console.warn("KPI targets failed to load (non-fatal):", targetErr);
+      }
 
       setActivities(activitiesData);
       setAuditGroups(groupsData);
@@ -190,7 +197,11 @@ const App: React.FC = () => {
       setDepartmentMappings(mappingsData);
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
-      setConnectionErrorMessage("Failed to load application data. Please refresh.");
+      const raw = (e as any)?.message ? String((e as any).message) : String(e);
+      const hint = raw.toLowerCase().includes('does not exist')
+        ? `Database schema mismatch: ${raw}. Please run the latest SUPABASE_SETUP.sql in Supabase.`
+        : "Failed to load application data. Please refresh.";
+      setConnectionErrorMessage(hint);
     } finally {
       setIsInitialLoading(false);
     }

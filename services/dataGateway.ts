@@ -629,10 +629,32 @@ class DataGateway {
   // --- KPI TIERS ---
   async getKPITiers(): Promise<KPITier[]> {
     if (supabase) {
-      const { data, error } = await supabase
+      // Prefer joined targets when the relationship exists (new schema).
+      // Fallback to plain select when the join/table doesn't exist yet in the deployed DB.
+      let data: any[] | null = null;
+      let error: any = null;
+      const joined = await supabase
         .from('kpi_tiers')
         .select('*, kpi_tier_targets(phase_id, target_percentage)');
-      if (error) throw error;
+      data = joined.data as any;
+      error = joined.error as any;
+
+      if (error) {
+        const msg = String(error?.message || error);
+        const hint = String(error?.hint || '');
+        const details = String(error?.details || '');
+        const combined = `${msg} ${hint} ${details}`.toLowerCase();
+
+        // Common cases during rollout: missing table, missing relationship, legacy schema
+        if (combined.includes('kpi_tier_targets') || combined.includes('does not exist') || combined.includes('relationship')) {
+          const fallback = await supabase.from('kpi_tiers').select('*');
+          if (fallback.error) throw fallback.error;
+          data = fallback.data as any;
+        } else {
+          throw error;
+        }
+      }
+
       return (data || []).map((t: any) => ({
         ...t,
         minAssets: t.min_assets,
@@ -685,7 +707,13 @@ class DataGateway {
   async getKPITierTargets(): Promise<KPITierTarget[]> {
     if (supabase) {
       const { data, error } = await supabase.from('kpi_tier_targets').select('*');
-      if (error) throw error;
+      if (error) {
+        const msg = String(error?.message || error).toLowerCase();
+        // Allow app to load on DBs that haven't deployed the new table yet
+        if (msg.includes('kpi_tier_targets') && msg.includes('does not exist')) return [];
+        if (String(error?.code || '') === '42P01') return []; // undefined_table
+        throw error;
+      }
       return (data || []).map((t: any) => ({
         id: t.id,
         tierId: t.tier_id,
@@ -703,7 +731,13 @@ class DataGateway {
         phase_id: phaseId,
         target_percentage: percentage
       }, { onConflict: 'tier_id,phase_id' });
-      if (error) throw error;
+      if (error) {
+        const msg = String(error?.message || error).toLowerCase();
+        if ((msg.includes('kpi_tier_targets') && msg.includes('does not exist')) || String(error?.code || '') === '42P01') {
+          throw new Error("KPI targets table is not deployed yet. Please run the latest SUPABASE_SETUP.sql (kpi_tier_targets).");
+        }
+        throw error;
+      }
       return;
     }
     throw new Error("Supabase client not initialized");
