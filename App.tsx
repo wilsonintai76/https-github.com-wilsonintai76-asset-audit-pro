@@ -1602,9 +1602,31 @@ const App: React.FC = () => {
   const handleDeleteAuditGroup = async (id: string) => {
     if (confirm("Delete this group? Departments will be unassigned.")) {
       try {
+        // Find the group to get its name
+        const groupToDelete = auditGroups.find(g => g.id === id);
+        
+        if (groupToDelete) {
+          // Find all departments belonging to this group
+          const departmentsToUpdate = departments.filter(d => 
+            d.auditGroupId === id || d.auditGroup === groupToDelete.name
+          );
+          
+          if (departmentsToUpdate.length > 0) {
+            const updates = departmentsToUpdate.map(d => ({
+              id: d.id,
+              data: { auditGroup: "", auditGroupId: null }
+            }));
+            
+            // Unassign departments first
+            const updatePromises = updates.map(u => gateway.updateDepartment(u.id, u.data));
+            await Promise.all(updatePromises);
+          }
+        }
+
         await gateway.deleteAuditGroup(id);
+        
         setAuditGroups(await gateway.getAuditGroups());
-        setDepartments(await gateway.getDepartments()); // Refresh depts as they might have been affected
+        setDepartments(await gateway.getDepartments()); // Refresh depts
         showToast('Group removed');
       } catch (e) {
         showError(e, 'Delete failed');
