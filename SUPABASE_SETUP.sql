@@ -404,17 +404,21 @@ BEGIN
     -- 1. Case-insensitive email check to prevent duplicate key errors
     -- We match using LOWER() and update existing records to avoid unique constraint violations
     IF EXISTS (SELECT 1 FROM public.users WHERE LOWER(email) = LOWER(new.email)) THEN
+        -- Match found! Link the auth ID to the existing profile.
+        -- Cascading FKs will handle the ID update throughout the system.
         UPDATE public.users 
         SET id = new.id,
             email = LOWER(new.email),
-            name = COALESCE(new.raw_user_meta_data->>'name', name)
+            name = COALESCE(new.raw_user_meta_data->>'name', name),
+            last_active = NOW()
         WHERE LOWER(email) = LOWER(new.email);
     ELSE
         -- 2. Check if ID already exists
         IF EXISTS (SELECT 1 FROM public.users WHERE id = new.id) THEN
             UPDATE public.users
             SET email = LOWER(new.email),
-                name = COALESCE(new.raw_user_meta_data->>'name', name)
+                name = COALESCE(new.raw_user_meta_data->>'name', name),
+                last_active = NOW()
             WHERE id = new.id;
         ELSE
             -- 3. Insert new record
@@ -424,7 +428,8 @@ BEGIN
                 name,
                 roles,
                 status,
-                is_verified
+                is_verified,
+                last_active
             )
             VALUES (
                 new.id,
@@ -432,7 +437,8 @@ BEGIN
                 COALESCE(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
                 ARRAY['Guest']::TEXT[],
                 'Pending',
-                false
+                false,
+                NOW()
             );
         END IF;
     END IF;
