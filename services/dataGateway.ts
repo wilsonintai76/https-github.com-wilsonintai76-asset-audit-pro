@@ -1,5 +1,5 @@
 
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, DepartmentMapping, SystemActivity, AuditGroup } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, DepartmentMapping, SystemActivity, AuditGroup } from '../types';
 import { supabase } from './supabase';
 import { localDB } from './localDB'; 
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
@@ -14,7 +14,6 @@ class DataGateway {
     if (dept.name !== undefined) payload.name = dept.name;
     if (dept.abbr !== undefined) payload.abbr = dept.abbr;
     if (dept.description !== undefined) payload.description = dept.description;
-    if (dept.auditGroup !== undefined) payload.audit_group = dept.auditGroup;
     if (dept.auditGroupId !== undefined) payload.audit_group_id = dept.auditGroupId;
     if (dept.totalAssets !== undefined) payload.total_assets = dept.totalAssets;
     if (dept.headOfDeptId !== undefined) {
@@ -282,7 +281,6 @@ class DataGateway {
       return (data || []).map((d: any) => ({
         ...d,
         headOfDeptId: d.head_of_dept_id,
-        auditGroup: d.audit_group,
         auditGroupId: d.audit_group_id,
         totalAssets: d.total_assets
       })) as Department[];
@@ -300,7 +298,6 @@ class DataGateway {
       return {
         ...result,
         headOfDeptId: result.head_of_dept_id,
-        auditGroup: result.audit_group,
         auditGroupId: result.audit_group_id,
         totalAssets: result.total_assets
       } as Department;
@@ -632,12 +629,18 @@ class DataGateway {
   // --- KPI TIERS ---
   async getKPITiers(): Promise<KPITier[]> {
     if (supabase) {
-      const { data, error } = await supabase.from('kpi_tiers').select('*');
+      const { data, error } = await supabase
+        .from('kpi_tiers')
+        .select('*, kpi_tier_targets(phase_id, target_percentage)');
       if (error) throw error;
       return (data || []).map((t: any) => ({
         ...t,
         minAssets: t.min_assets,
         maxAssets: t.max_assets,
+        targets: (t.kpi_tier_targets || []).reduce((acc: Record<string, number>, row: any) => {
+          if (row?.phase_id) acc[row.phase_id] = row.target_percentage ?? 0;
+          return acc;
+        }, {})
       })) as KPITier[];
     }
     return [];
@@ -672,6 +675,43 @@ class DataGateway {
   async deleteKPITier(id: string) {
     if (supabase) {
       const { error } = await supabase.from('kpi_tiers').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  // --- KPI TIER TARGETS ---
+  async getKPITierTargets(): Promise<KPITierTarget[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('kpi_tier_targets').select('*');
+      if (error) throw error;
+      return (data || []).map((t: any) => ({
+        id: t.id,
+        tierId: t.tier_id,
+        phaseId: t.phase_id,
+        targetPercentage: t.target_percentage
+      })) as KPITierTarget[];
+    }
+    return [];
+  }
+
+  async setKPITierTarget(tierId: string, phaseId: string, percentage: number): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('kpi_tier_targets').upsert({
+        tier_id: tierId,
+        phase_id: phaseId,
+        target_percentage: percentage
+      }, { onConflict: 'tier_id,phase_id' });
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async deleteKPITierTarget(id: string): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('kpi_tier_targets').delete().eq('id', id);
       if (error) throw error;
       return;
     }

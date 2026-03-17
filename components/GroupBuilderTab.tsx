@@ -5,7 +5,7 @@ import { Boxes, Check, ArrowRight, Loader2, Zap, Trash2, Plus } from 'lucide-rea
 interface GroupBuilderTabProps {
   departments: Department[];
   auditGroups: AuditGroup[];
-  onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
+  onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<AuditGroup | null>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
   onBulkUpdateDepartments: (updates: { id: string, data: Partial<Department> }[]) => void;
   isProcessing: boolean;
@@ -26,11 +26,8 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   const [builderSelectedDepts, setBuilderSelectedDepts] = useState<string[]>([]);
 
   const generateNextGroupName = useCallback(() => {
-    // Collect all existing group names from the auditGroups array and existing department group strings
-    const existingNames = new Set([
-      ...auditGroups.map(g => g.name),
-      ...departments.map(d => d.auditGroup).filter(Boolean) as string[]
-    ]);
+    // Only check actual Registry groups since strings in departments are now legacy/unreliable
+    const existingNames = new Set(auditGroups.map(g => g.name));
 
     // Simple A, B, C... pattern
     for (let i = 0; i < 26; i++) {
@@ -68,20 +65,21 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     setIsProcessing(true);
     try {
       if (onAddAuditGroup) {
-        await onAddAuditGroup({ name: newGroupName.trim() });
+        const createdGroup = await onAddAuditGroup({ name: newGroupName.trim() });
         
-        const updates = builderSelectedDepts.map(id => ({
-          id,
-          data: { auditGroup: newGroupName.trim() }
-        }));
-        await onBulkUpdateDepartments(updates);
+        if (createdGroup) {
+          const updates = builderSelectedDepts.map(id => ({
+            id,
+            data: { auditGroupId: createdGroup.id }
+          }));
+          await onBulkUpdateDepartments(updates);
+        }
         
         setBuilderSelectedDepts([]);
         if (shouldOpenNext) {
           // Calculate next name immediately
           const taken = new Set([
             ...auditGroups.map(g => g.name),
-            ...departments.map(d => d.auditGroup).filter(Boolean) as string[],
             newGroupName.trim() // Include the one we just made
           ]);
           

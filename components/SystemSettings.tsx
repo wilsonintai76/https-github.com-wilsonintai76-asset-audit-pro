@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { CrossAuditPermission, Department, User, AuditPhase, KPITier, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup } from '../types';
+import { CrossAuditPermission, Department, User, AuditPhase, KPITier, KPITierTarget, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup } from '../types';
 import { CrossAuditManagement } from './CrossAuditManagement';
 import { AuditConstraints } from './AuditConstraints';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
@@ -15,6 +15,7 @@ interface SystemSettingsProps {
   permissions: CrossAuditPermission[];
   phases: AuditPhase[];
   kpiTiers: KPITier[];
+  kpiTierTargets: KPITierTarget[];
   userRoles: UserRole[];
   onAddPermission: (auditorDept: string, targetDept: string, isMutual: boolean) => Promise<void>;
   onRemovePermission: (id: string) => Promise<void>;
@@ -27,6 +28,7 @@ interface SystemSettingsProps {
   onAddKPITier: (tier: Omit<KPITier, 'id'>) => void;
   onUpdateKPITier: (id: string, updates: Partial<KPITier>) => void;
   onDeleteKPITier: (id: string) => void;
+  onUpdateKPITierTarget: (tierId: string, phaseId: string, percentage: number) => void;
   onResetLocations: () => void;
   onResetOperationalData: () => void;
   isSystemLocked: boolean;
@@ -66,6 +68,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onAddKPITier,
   onUpdateKPITier,
   onDeleteKPITier,
+  onUpdateKPITierTarget,
   onResetLocations,
   onResetOperationalData,
   isSystemLocked,
@@ -84,7 +87,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   auditGroups,
   onAddAuditGroup,
   onUpdateAuditGroup,
-  onDeleteAuditGroup
+  onDeleteAuditGroup,
+  kpiTierTargets
 }) => {
   const isAdmin = userRoles.includes('Admin');
 
@@ -132,9 +136,11 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       <KPISettings
         tiers={kpiTiers}
         phases={phases}
+        tierTargets={kpiTierTargets}
         onAddTier={onAddKPITier}
         onUpdateTier={onUpdateKPITier}
         onDeleteTier={onDeleteKPITier}
+        onUpdateTarget={onUpdateKPITierTarget}
       />
 
       {isAdmin && (

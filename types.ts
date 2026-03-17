@@ -3,10 +3,10 @@ export interface AuditSchedule {
   id: string;
   departmentId: string;
   locationId: string;
-  supervisorId: string;
+  supervisorId: string | null;
   auditor1Id: string | null;
   auditor2Id: string | null;
-  date: string;
+  date: string | null;
   status: 'Pending' | 'In Progress' | 'Completed';
   phaseId: string;
 }
@@ -43,8 +43,7 @@ export interface Department {
   headOfDeptId: string | null;
   headName?: string | null;
   description: string;
-  auditGroupId?: string | null; // ID of the AuditGroup
-  auditGroup?: string; // Name of the group for backward compatibility/display
+  auditGroupId: string | null; // UUID of the AuditGroup (Normalized)
   totalAssets?: number;
 }
 
@@ -63,7 +62,7 @@ export interface Location {
   building: string;
   level?: string;
   description: string;
-  supervisorId: string;
+  supervisorId: string | null;
   contact: string;
   totalAssets?: number;
   isActive?: boolean;
@@ -74,6 +73,7 @@ export interface DashboardConfig {
   showTrends: boolean;
   showUpcoming: boolean;
   showDeptDistribution: boolean;
+  showCertification?: boolean;
 }
 
 export interface AppNotification {
@@ -110,8 +110,14 @@ export interface KPITier {
   name: string;
   minAssets: number;
   maxAssets: number;
-  // Key is phase.id, Value is percentage target (0-100)
-  targets: Record<string, number>;
+  targets?: Record<string, number>; // phaseId -> target %
+}
+
+export interface KPITierTarget {
+  id: string;
+  tierId: string;
+  phaseId: string;
+  targetPercentage: number;
 }
 
 export interface DepartmentMapping {

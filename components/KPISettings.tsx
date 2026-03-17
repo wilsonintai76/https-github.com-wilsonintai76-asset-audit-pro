@@ -1,22 +1,35 @@
 
-import React, { useState } from 'react';
-import { KPITier, AuditPhase } from '../types';
+import React, { useMemo, useState } from 'react';
+import { KPITier, AuditPhase, KPITierTarget } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Lock, Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
 
 interface KPISettingsProps {
   tiers: KPITier[];
   phases: AuditPhase[];
+  tierTargets: KPITierTarget[];
   onAddTier: (tier: Omit<KPITier, 'id'>) => void;
   onUpdateTier: (id: string, updates: Partial<KPITier>) => void;
   onDeleteTier: (id: string) => void;
+  onUpdateTarget: (tierId: string, phaseId: string, percentage: number) => void;
 }
 
-export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTier, onUpdateTier, onDeleteTier }) => {
+export const KPISettings: React.FC<KPISettingsProps> = ({
+  tiers,
+  phases,
+  tierTargets,
+  onAddTier,
+  onUpdateTier,
+  onDeleteTier,
+  onUpdateTarget
+}) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tierToDelete, setTierToDelete] = useState<string | null>(null);
-  const [formData, setFormData] = useState<{name: string, minAssets: number, maxAssets: number, targets: Record<string, number>}>({
-    name: '', minAssets: 0, maxAssets: 0, targets: {}
+  const [formData, setFormData] = useState<{ name: string; minAssets: number; maxAssets: number; targets: Record<string, number> }>({
+    name: '',
+    minAssets: 0,
+    maxAssets: 0,
+    targets: {}
   });
 
   const sortedPhases = [...phases].sort((a,b) => a.startDate.localeCompare(b.startDate));
@@ -25,6 +38,17 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
     return a.maxAssets - b.maxAssets;
   });
 
+  const targetsByTier = useMemo(() => {
+    // Source of truth is the relational table; this keeps UI consistent even if tiers[] is stale.
+    const map = new Map<string, Record<string, number>>();
+    for (const row of tierTargets || []) {
+      const current = map.get(row.tierId) || {};
+      current[row.phaseId] = row.targetPercentage ?? 0;
+      map.set(row.tierId, current);
+    }
+    return map;
+  }, [tierTargets]);
+
   const startEdit = (tier: KPITier) => {
     setEditingId(tier.id);
     
@@ -32,11 +56,12 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
     const tierIndex = sortedTiers.findIndex(t => t.id === tier.id);
     const calculatedMin = tierIndex > 0 ? sortedTiers[tierIndex - 1].maxAssets + 1 : 0;
 
+    const currentTargets = targetsByTier.get(tier.id) || tier.targets || {};
     setFormData({
       name: tier.name || '',
       minAssets: calculatedMin, // Force continuity
       maxAssets: tier.maxAssets || 0,
-      targets: { ...tier.targets }
+      targets: { ...currentTargets }
     });
   };
 
@@ -45,26 +70,22 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
     setFormData({ name: '', minAssets: 0, maxAssets: 0, targets: {} });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingId) {
-      onUpdateTier(editingId, formData);
-    } else {
-      onAddTier(formData);
+  const handleTargetChange = (phaseId: string, raw: string) => {
+    const value = raw === '' ? 0 : Math.max(0, Math.min(100, Number(raw)));
+    setFormData(prev => ({ ...prev, targets: { ...prev.targets, [phaseId]: value } }));
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    onUpdateTier(editingId, { maxAssets: formData.maxAssets });
+    for (const phase of sortedPhases) {
+      const pct = formData.targets[phase.id] ?? 0;
+      onUpdateTarget(editingId, phase.id, pct);
     }
     resetForm();
   };
 
-  const handleTargetChange = (phaseId: string, value: string) => {
-    const numVal = Math.min(100, Math.max(0, parseInt(value) || 0));
-    setFormData(prev => ({
-      ...prev,
-      targets: {
-        ...prev.targets,
-        [phaseId]: numVal
-      }
-    }));
-  };
+
 
   const handleDeleteClick = (id: string) => {
     setTierToDelete(id);
@@ -167,8 +188,8 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                          </div>
                        ) : (
                          <div className="flex items-center justify-center gap-1">
-                            <span className={`text-xs font-black ${tier.targets[phase.id] ? 'text-slate-700' : 'text-slate-300'}`}>
-                              {tier.targets[phase.id] ?? 0}%
+                            <span className={`text-xs font-black ${(targetsByTier.get(tier.id)?.[phase.id] ?? tier.targets?.[phase.id] ?? 0) ? 'text-slate-700' : 'text-slate-300'}`}>
+                              {targetsByTier.get(tier.id)?.[phase.id] ?? tier.targets?.[phase.id] ?? 0}%
                             </span>
                          </div>
                        )}
@@ -179,7 +200,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                   <td className="px-6 py-4 text-right">
                     {isEditing ? (
                       <div className="flex justify-end gap-2">
-                        <button onClick={handleSubmit} className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-lg shadow-blue-500/20">
+                        <button onClick={saveEdit} className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-lg shadow-blue-500/20">
                           <Check className="w-4 h-4" />
                         </button>
                         <button onClick={resetForm} className="w-8 h-8 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-300">

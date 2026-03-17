@@ -4,7 +4,7 @@ import { gateway } from './services/dataGateway';
 import { supabase } from './services/supabase';
 import { authService } from './services/auth';
 import { ItemNotFoundError } from './services/localDB';
-import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, DepartmentMapping, SystemActivity, AuditGroup } from './types';
+import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, DepartmentMapping, SystemActivity, AuditGroup } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -44,6 +44,7 @@ const App: React.FC = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [auditPhases, setAuditPhases] = useState<AuditPhase[]>([]);
   const [kpiTiers, setKpiTiers] = useState<KPITier[]>([]);
+  const [kpiTierTargets, setKpiTierTargets] = useState<KPITierTarget[]>([]);
   const [departmentMappings, setDepartmentMappings] = useState<DepartmentMapping[]>([]);
   const [auditGroups, setAuditGroups] = useState<AuditGroup[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -103,7 +104,7 @@ const App: React.FC = () => {
   // --- INITIAL DATA LOAD ---
   const loadAllData = useCallback(async () => {
     try {
-      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, mappingsData, activitiesData, groupsData] = await Promise.all([
+      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, kpiTargetsData, mappingsData, activitiesData, groupsData] = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
         gateway.getDepartments(),
@@ -111,6 +112,7 @@ const App: React.FC = () => {
         gateway.getPermissions(),
         gateway.getAuditPhases(),
         gateway.getKPITiers(),
+        gateway.getKPITierTargets(),
         gateway.getDepartmentMappings(),
         gateway.getActivities(),
         gateway.getAuditGroups()
@@ -158,15 +160,14 @@ const App: React.FC = () => {
         }
       }
       if (kpiData.length < 3) {
-        const refreshed = await gateway.getKPITiers();
-        const existingNames = refreshed.map((t: KPITier) => t.name);
+        const refreshedData = await gateway.getKPITiers();
+        const existingNames = refreshedData.map((t: KPITier) => t.name);
         for (let i = 0; i < requiredTierNames.length; i++) {
           if (!existingNames.includes(requiredTierNames[i])) {
             await gateway.addKPITier({
               name: requiredTierNames[i],
               minAssets: defaultTierRanges[i].min,
-              maxAssets: defaultTierRanges[i].max,
-              targets: {}
+              maxAssets: defaultTierRanges[i].max
             });
           }
         }
@@ -176,6 +177,8 @@ const App: React.FC = () => {
         finalKpiTiers = await gateway.getKPITiers();
       }
 
+      const finalKpiTargets = await gateway.getKPITierTargets();
+
       setSchedules(auditsData);
       setUsers(usersData);
       setDepartments(deptsData);
@@ -183,6 +186,7 @@ const App: React.FC = () => {
       setCrossAuditPermissions(permsData);
       setAuditPhases(finalPhases);
       setKpiTiers(finalKpiTiers);
+      setKpiTierTargets(finalKpiTargets);
       setDepartmentMappings(mappingsData);
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
@@ -650,7 +654,8 @@ const App: React.FC = () => {
             name: `Imported Dept ${id}`,
             abbr: `IMP-${id.substring(0, 3)}`,
             headOfDeptId: 'dummy-user-id',
-            description: `Imported department: ${id}`
+            description: `Imported department: ${id}`,
+            auditGroupId: null
           };
           await gateway.addDepartment(newDept);
         }
@@ -1140,7 +1145,7 @@ const App: React.FC = () => {
         finalHeadId = null;
       }
       
-      const createdDept = await gateway.addDepartment({ ...dept, headOfDeptId: finalHeadId });
+      const createdDept = await gateway.addDepartment({ ...dept, headOfDeptId: finalHeadId, auditGroupId: null });
       // Link temp user to the newly created department
       if (finalHeadId && finalHeadId !== dept.headOfDeptId && createdDept?.id) {
         await gateway.updateUser(finalHeadId, { departmentId: createdDept.id });
@@ -1211,7 +1216,7 @@ const App: React.FC = () => {
             await gateway.updateUser(newTempUserId, { departmentId: existingDept.id });
           }
         } else {
-          const createdDept = await gateway.addDepartment({ ...d, headOfDeptId: finalHeadId });
+          const createdDept = await gateway.addDepartment({ ...d, headOfDeptId: finalHeadId, auditGroupId: null });
           // Link temp user to the newly created department
           if (newTempUserId && createdDept?.id) {
             await gateway.updateUser(newTempUserId, { departmentId: createdDept.id });
@@ -1487,6 +1492,15 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateKPITierTarget = async (tierId: string, phaseId: string, percentage: number) => {
+    try {
+      await gateway.setKPITierTarget(tierId, phaseId, percentage);
+      setKpiTierTargets(await gateway.getKPITierTargets());
+    } catch (e) {
+      showError(e, 'Failed to update target');
+    }
+  };
+
   const handleDeleteKPITier = async (id: string) => {
     customConfirm("Delete KPI Tier", "Are you sure you want to delete this KPI Tier?", async () => {
       try {
@@ -1581,11 +1595,13 @@ const App: React.FC = () => {
   // --- AUDIT GROUPS ---
   const handleAddAuditGroup = async (group: Omit<AuditGroup, 'id'>) => {
     try {
-      await gateway.addAuditGroup(group);
+      const created = await gateway.addAuditGroup(group);
       setAuditGroups(await gateway.getAuditGroups());
       showToast('Audit Group created');
+      return created;
     } catch (e) {
       showError(e, 'Failed to create group');
+      return null;
     }
   };
 
@@ -1602,31 +1618,12 @@ const App: React.FC = () => {
   const handleDeleteAuditGroup = async (id: string) => {
     if (confirm("Delete this group? Departments will be unassigned.")) {
       try {
-        // Find the group to get its name
-        const groupToDelete = auditGroups.find(g => g.id === id);
-        
-        if (groupToDelete) {
-          // Find all departments belonging to this group
-          const departmentsToUpdate = departments.filter(d => 
-            d.auditGroupId === id || d.auditGroup === groupToDelete.name
-          );
-          
-          if (departmentsToUpdate.length > 0) {
-            const updates = departmentsToUpdate.map(d => ({
-              id: d.id,
-              data: { auditGroup: "", auditGroupId: null }
-            }));
-            
-            // Unassign departments first
-            const updatePromises = updates.map(u => gateway.updateDepartment(u.id, u.data));
-            await Promise.all(updatePromises);
-          }
-        }
-
+        // The DB-level SET NULL on the audit_group_id FK handles the department unassignment automatically!
+        // We just need to delete the group record.
         await gateway.deleteAuditGroup(id);
         
         setAuditGroups(await gateway.getAuditGroups());
-        setDepartments(await gateway.getDepartments()); // Refresh depts
+        setDepartments(await gateway.getDepartments()); // Refresh depts to see the NULL reset
         showToast('Group removed');
       } catch (e) {
         showError(e, 'Delete failed');
@@ -2047,6 +2044,7 @@ const App: React.FC = () => {
               onAddKPITier={handleAddKPITier}
               onUpdateKPITier={handleUpdateKPITier}
               onDeleteKPITier={handleDeleteKPITier}
+              onUpdateKPITierTarget={handleUpdateKPITierTarget}
               onResetLocations={handleResetLocations}
               onResetOperationalData={handleResetOperationalData}
               isSystemLocked={isSystemLocked}
@@ -2066,6 +2064,7 @@ const App: React.FC = () => {
               onAddAuditGroup={handleAddAuditGroup}
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}
+              kpiTierTargets={kpiTierTargets}
             />
           )}
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}

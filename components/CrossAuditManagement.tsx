@@ -88,21 +88,21 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   // 2. Compute "Audit Entities" (Merged Groups + Standalone)
   const entities = useMemo(() => {
-    const map = new Map<string, { assets: number, auditors: number, memberCount: number, members: any[], id?: string }>(); 
+    const map = new Map<string, { name: string, assets: number, auditors: number, memberCount: number, members: any[], id?: string }>(); 
 
     deptStats.forEach(d => {
-      // Prioritize explicit auditGroupId (now manual)
-      const groupName = d.auditGroupId 
-        ? auditGroups.find(g => g.id === d.auditGroupId)?.name || 'Unknown Group'
-        : d.auditGroup;
-
-      const entityName = groupName || d.name;
-      const entityId = d.auditGroupId || (groupName ? `group_${groupName}` : `dept_${d.id}`);
+      // Use the normalized auditGroupId to identify the group.
+      // If none, it is a standalone department.
+      const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
       
-      const current = map.get(entityName) || { assets: 0, auditors: 0, memberCount: 0, members: [] };
+      const entityName = group ? group.name : d.name;
+      const entityId = group ? group.id : `dept_${d.id}`;
+      
+      const current = map.get(entityId) || { name: entityName, assets: 0, auditors: 0, memberCount: 0, members: [], id: entityId };
       const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
 
-      map.set(entityName, { 
+      map.set(entityId, { 
+        name: entityName,
         assets: current.assets + safeAssets,
         auditors: current.auditors + d.auditorCount,
         memberCount: current.memberCount + 1,
@@ -111,11 +111,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       });
     });
 
-    return Array.from(map.entries()).map(([name, stats]) => {
-      // It is a group if it contains multiple members OR its name is a known audit group
-      const constitutesGroup = stats.memberCount > 1 || auditGroups.some(g => g.name === name);
+    return Array.from(map.values()).map(stats => {
+      // It is a group if it contains multiple members OR it maps to an official Registry group
+      const constitutesGroup = stats.memberCount > 1 || auditGroups.some(g => g.id === stats.id);
       return { 
-        name, 
         ...stats, 
         isJoint: constitutesGroup,
         isGroup: constitutesGroup 
@@ -155,8 +154,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
       // 2. Clear Department Groups (Database)
       const updates = departments
-        .filter(d => d.auditGroup)
-        .map(d => ({ id: d.id, data: { auditGroup: "" } }));
+        .filter(d => d.auditGroupId)
+        .map(d => ({ id: d.id, data: { auditGroupId: null } }));
 
       if (updates?.length > 0) {
         await onBulkUpdateDepartments(updates);
@@ -270,7 +269,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     });
 
     const updates: { id: string, data: Partial<Department> }[] = [];
-    standalones.forEach(d => updates.push({ id: d.id, data: { auditGroup: "" } }));
+    standalones.forEach(d => updates.push({ id: d.id, data: { auditGroupId: null } }));
 
     pool.sort((a, b) => {
         const assetsA = typeof a.totalAssets === 'string' ? parseInt(a.totalAssets) : (a.totalAssets || 0);
@@ -291,19 +290,20 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
         if (currentAssets >= assetThreshold && currentAuditors >= minAuditors) {
              const groupName = `Group ${String.fromCharCode(64 + groupIndex)}`;
-             currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroup: groupName } }));
+             const group = auditGroups.find(g => g.name === groupName);
+             currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroupId: group ? group.id : null } }));
              currentGroup = [];
              currentAssets = 0;
              currentAuditors = 0;
              groupIndex++;
         }
     });
-
     if (currentGroup?.length > 0) {
         const targetName = groupIndex > 1 
             ? `Group ${String.fromCharCode(64 + groupIndex - 1)}`
             : `Group A`;
-        currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroup: targetName } }));
+        const group = auditGroups.find(g => g.name === targetName);
+        currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroupId: group ? group.id : null } }));
     }
 
     await onBulkUpdateDepartments(updates);

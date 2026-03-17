@@ -44,6 +44,7 @@ CREATE TABLE audit_groups (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT NOT NULL UNIQUE,
   description TEXT,
+  color       TEXT,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -70,7 +71,7 @@ CREATE TABLE departments (
   abbr            TEXT NOT NULL,
   head_of_dept_id UUID,          -- FK to users(id) added via ALTER TABLE below
   description     TEXT,
-  audit_group     TEXT,
+  audit_group_id  UUID REFERENCES audit_groups(id) ON DELETE SET NULL ON UPDATE CASCADE,
   total_assets    INTEGER DEFAULT 0
 );
 
@@ -83,6 +84,7 @@ CREATE TABLE users (
   id                   UUID PRIMARY KEY, -- Linked to auth.users.id
   name                 TEXT NOT NULL,
   email                TEXT NOT NULL UNIQUE,
+  pin                  TEXT,
   roles                TEXT[]       NOT NULL DEFAULT '{Staff}'
                          CONSTRAINT chk_roles CHECK (
                            roles <@ ARRAY['Admin','Coordinator','Supervisor','Staff']::TEXT[]
@@ -100,6 +102,7 @@ CREATE TABLE users (
   status               TEXT NOT NULL DEFAULT 'Active'
                          CONSTRAINT chk_user_status CHECK (status IN ('Active','Inactive','Suspended','Pending')),
   is_verified          BOOLEAN NOT NULL DEFAULT false,
+  must_change_pin      BOOLEAN NOT NULL DEFAULT false,
   CONSTRAINT chk_department_required CHECK (
     ('Admin' = ANY(roles)) OR (status = 'Pending') OR (department_id IS NOT NULL) OR (is_verified = false)
   ),
@@ -145,7 +148,8 @@ CREATE TABLE locations (
   supervisor_id UUID
                   REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
   contact       TEXT,
-  total_assets  INTEGER NOT NULL DEFAULT 0 CONSTRAINT chk_total_assets CHECK (total_assets >= 0)
+  total_assets  INTEGER NOT NULL DEFAULT 0 CONSTRAINT chk_total_assets CHECK (total_assets >= 0),
+  is_active     BOOLEAN NOT NULL DEFAULT true
 );
 
 -- =============================================================
@@ -201,12 +205,27 @@ CREATE TABLE kpi_tiers (
   name       TEXT    NOT NULL,
   min_assets INTEGER NOT NULL CONSTRAINT chk_min_assets CHECK (min_assets >= 0),
   max_assets INTEGER NOT NULL,
-  targets    JSONB   NOT NULL DEFAULT '{}',
   CONSTRAINT chk_asset_range CHECK (max_assets >= min_assets)
 );
 
 -- =============================================================
+-- 8. KPI TIER TARGETS
+--    Relational mapping for phase targets rather than JSONB.
+-- =============================================================
+CREATE TABLE kpi_tier_targets (
+  id                UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  tier_id           UUID    NOT NULL REFERENCES kpi_tiers(id) ON DELETE CASCADE,
+  phase_id          UUID    NOT NULL REFERENCES audit_phases(id) ON DELETE CASCADE,
+  target_percentage INTEGER NOT NULL CONSTRAINT chk_percentage CHECK (target_percentage >= 0 AND target_percentage <= 100),
+  CONSTRAINT uq_tier_phase UNIQUE(tier_id, phase_id)
+);
+
+-- =============================================================
 -- 8. DEPARTMENT MAPPINGS
+--    Used to map names from imported CSVs to official department IDs
+-- =============================================================
+-- =============================================================
+-- 9. DEPARTMENT MAPPINGS
 --    Used to map names from imported CSVs to official department IDs
 -- =============================================================
 CREATE TABLE department_mappings (
@@ -242,6 +261,7 @@ ALTER TABLE locations    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audits       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cross_audits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kpi_tiers    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kpi_tier_targets    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE department_mappings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE system_activities   ENABLE ROW LEVEL SECURITY;
 
@@ -254,6 +274,7 @@ CREATE POLICY "Public Access" ON locations    FOR ALL USING (true) WITH CHECK (t
 CREATE POLICY "Public Access" ON audits       FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON cross_audits FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON kpi_tiers    FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON kpi_tier_targets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON department_mappings FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON system_activities   FOR ALL USING (true) WITH CHECK (true);
 
@@ -282,6 +303,8 @@ BEGIN
   DELETE FROM locations WHERE department_id = dept_id;
   -- Delete users (except those who might be needed elsewhere, but schema says SET NULL for head_of_dept)
   DELETE FROM users WHERE department_id = dept_id;
+  -- Remove any department mappings
+  DELETE FROM department_mappings WHERE target_department_id = dept_id;
   -- Delete the department
   DELETE FROM departments WHERE id = dept_id;
 END;
@@ -321,7 +344,8 @@ BEGIN
   -- 3. Remove structural data
   DELETE FROM department_mappings WHERE true;
   DELETE FROM departments WHERE true;
-  -- Note: audit_groups and audit_phases are NOT cleared as they are system configuration
+  DELETE FROM audit_groups WHERE true; -- Also clear groups when clearing departments
+  -- Note: audit_phases and kpi_tiers are NOT cleared as they are system configuration
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
