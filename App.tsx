@@ -1753,9 +1753,9 @@ const App: React.FC = () => {
           }
         }}
         onShowKnowledgeBase={() => setViewState('docs')}
-        totalAssets={!isInitialLoading ? totalAssets : undefined}
-        totalPhases={!isInitialLoading ? auditPhases.length : undefined}
-        complianceProgress={!isInitialLoading ? complianceProgress : undefined}
+        totalAssets={totalAssets}
+        totalPhases={auditPhases.length}
+        complianceProgress={complianceProgress}
         phases={auditPhases}
         activities={activities}
         topDepartments={topDepartments}
