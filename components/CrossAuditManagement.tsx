@@ -5,6 +5,7 @@ import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
+import { InstitutionalConsolidationView } from './InstitutionalConsolidationView';
 
 interface StrategicPair {
   target: { name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
