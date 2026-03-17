@@ -165,34 +165,41 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     }, 0);
   }, [builderSelectedDepts, departments]);
 
-  const handleSaveBatchGroup = async () => {
-    if (!newGroupName || builderSelectedDepts.length === 0) return;
+  const handleSaveBatchGroup = async (shouldOpenNext: boolean = false) => {
+    if (!newGroupName.trim() || builderSelectedDepts.length === 0) return;
     setIsProcessing(true);
     try {
-      // 1. Create the Audit Group object
       if (onAddAuditGroup) {
-        await onAddAuditGroup({ name: newGroupName });
-        
-        // Wait active state update? Usually App.tsx handles this.
-        // We need to find the ID of the new group, but App handles the refetch.
-        // For now, if we can't get the ID immediately, we might rely on naming
-        // or wait for the next render cycle.
-        // A better way is to update the departments with the group name string first
-        // as a temporary fallback, or assume the user will pick it manually.
-        // HOWEVER, the user said "ADMIN CREATE GROUP... THEN ADMIN PICK DEPARTMENT".
-        
-        // Let's refine: The prompt implies a combined action.
-        // We'll update the departments with the string for now, 
-        // and if a group object exists with that name, the mapping logic already 
-        // priorities the object in my previous `entities` calculation.
+        await onAddAuditGroup({ name: newGroupName.trim() });
         
         const updates = builderSelectedDepts.map(id => ({
           id,
-          data: { auditGroup: newGroupName }
+          data: { auditGroup: newGroupName.trim() }
         }));
         await onBulkUpdateDepartments(updates);
+        
+        setBuilderSelectedDepts([]);
+        if (shouldOpenNext) {
+          // Calculate next name immediately
+          const taken = new Set([
+            ...auditGroups.map(g => g.name),
+            ...departments.map(d => d.auditGroup).filter(Boolean) as string[],
+            newGroupName.trim() // Include the one we just made
+          ]);
+          
+          let nextName = '';
+          for (let i = 0; i < 26; i++) {
+            const n = `Group ${String.fromCharCode(65 + i)}`;
+            if (!taken.has(n)) {
+              nextName = n;
+              break;
+            }
+          }
+          setNewGroupName(nextName || `Group ${auditGroups.length + 2}`);
+        } else {
+          setIsGroupBuilderOpen(false);
+        }
       }
-      setIsGroupBuilderOpen(false);
     } catch (e) {
       alert("Failed to save group.");
     } finally {
@@ -553,9 +560,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                   <label className="text-[10px] font-bold text-slate-400 block mb-3 uppercase tracking-widest">Select Departments to Consolidate</label>
                                   <div className="max-h-48 overflow-y-auto space-y-1.5 pr-2 scrollbar-thin scrollbar-thumb-white/10">
                                     {departments
-                                      .filter(d => !d.auditGroupId && !d.auditGroup)
                                       .map(dept => {
                                         const isChecked = builderSelectedDepts.includes(dept.id);
+                                        const currentGroupName = dept.auditGroupId 
+                                          ? auditGroups.find(g => g.id === dept.auditGroupId)?.name 
+                                          : (dept.auditGroup || null);
+
                                         return (
                                           <label 
                                             key={dept.id} 
@@ -565,20 +575,29 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                 : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'
                                             }`}
                                           >
-                                            <div className="flex items-center gap-3">
-                                              <input 
-                                                type="checkbox"
-                                                className="w-4 h-4 rounded border-white/20 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0"
-                                                checked={isChecked}
-                                                onChange={() => {
-                                                  if (isChecked) {
-                                                    setBuilderSelectedDepts(builderSelectedDepts.filter(id => id !== dept.id));
-                                                  } else {
-                                                    setBuilderSelectedDepts([...builderSelectedDepts, dept.id]);
-                                                  }
-                                                }}
-                                              />
-                                              <span className="text-xs font-bold">{dept.name}</span>
+                                            <div className="flex flex-col">
+                                              <div className="flex items-center gap-3">
+                                                <input 
+                                                  type="checkbox"
+                                                  className="w-4 h-4 rounded border-white/20 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0"
+                                                  checked={isChecked}
+                                                  onChange={() => {
+                                                    if (isChecked) {
+                                                      setBuilderSelectedDepts(builderSelectedDepts.filter(id => id !== dept.id));
+                                                    } else {
+                                                      setBuilderSelectedDepts([...builderSelectedDepts, dept.id]);
+                                                    }
+                                                  }}
+                                                />
+                                                <span className="text-xs font-bold">{dept.name}</span>
+                                              </div>
+                                              {currentGroupName && !isChecked && (
+                                                <div className="ml-7 mt-1">
+                                                  <span className="text-[9px] font-black uppercase tracking-tighter text-slate-500 bg-white/5 px-1.5 py-0.5 rounded">
+                                                    In {currentGroupName}
+                                                  </span>
+                                                </div>
+                                              )}
                                             </div>
                                             <span className="text-[10px] font-mono opacity-50">{(dept.totalAssets || 0).toLocaleString()}</span>
                                           </label>
@@ -604,13 +623,24 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                   </div>
                                 </div>
 
-                                <button 
-                                  onClick={handleSaveBatchGroup}
-                                  disabled={!newGroupName || builderSelectedDepts.length === 0 || isProcessing}
-                                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-500/20 active:scale-95"
-                                >
-                                  {isProcessing ? 'Saving Consolidation...' : 'Finalize Group Consolidation'}
-                                </button>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <button 
+                                    onClick={() => handleSaveBatchGroup(false)}
+                                    disabled={isProcessing || !newGroupName || builderSelectedDepts.length === 0}
+                                    className="h-14 bg-white/5 hover:bg-white/10 disabled:opacity-30 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 border border-white/10 transition-all active:scale-95"
+                                  >
+                                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                    Finalize & Close
+                                  </button>
+                                  <button 
+                                    onClick={() => handleSaveBatchGroup(true)}
+                                    disabled={isProcessing || !newGroupName || builderSelectedDepts.length === 0}
+                                    className="h-14 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-800 disabled:opacity-50 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 transition-all active:scale-95"
+                                  >
+                                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-yellow-300 fill-current" />}
+                                    Finalize & Next Group
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           )}
