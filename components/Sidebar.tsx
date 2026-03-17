@@ -59,9 +59,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
   const showAuditorDashboard = isCertified;
   
   const canAccessSchedule = isAdmin || isCoordinator || isSupervisor || isStaff;
-  const canAccessLocations = isAdmin;
-  const canAccessTeam = isAdmin;
-  const canAccessDepartments = isAdmin;
+  const canAccessLocations = isAdmin || isCoordinator;
+  const canAccessTeam = isAdmin || isCoordinator;
+  const canAccessDepartments = isAdmin || isCoordinator;
   const canAccessAdminSettings = isAdmin;
 
   return (

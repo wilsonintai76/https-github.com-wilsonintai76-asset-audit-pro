@@ -91,8 +91,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
   // Permission Logic for Management Actions (Not self-assign)
   const canAddAudit = isAdmin;
-  const canManageAssignments = isAdmin || isSupervisor;
-  const canToggleStatus = isAdmin || isSupervisor;
+  const canManageAssignments = isAdmin || isCoordinator || isSupervisor;
+  const canToggleStatus = isAdmin || isCoordinator || isSupervisor;
 
   const hasPhases = auditPhases?.length > 0;
   const todayStr = new Date().toISOString().split('T')[0];

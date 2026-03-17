@@ -188,6 +188,11 @@ const App: React.FC = () => {
     loadAllData();
   }, [loadAllData]);
 
+  // --- ROLE CHECKS ---
+  const isAdmin = currentUser?.roles.includes('Admin') || false;
+  const isCoordinator = currentUser?.roles.includes('Coordinator') || false;
+  const isSupervisor = currentUser?.roles.includes('Supervisor') || false;
+
   // --- COMPUTED VALUES ---
   const departmentsWithAssets = useMemo(() => {
     return departments.map(dept => {
@@ -255,9 +260,12 @@ const App: React.FC = () => {
       // Exclude departments with zero assets from the schedule
       if (dept && (dept.totalAssets || 0) === 0) return false;
 
+      // Limit visibility to own department for non-admins
+      if (!isAdmin && s.departmentId !== currentUser.departmentId) return false;
+
       return true;
     });
-  }, [schedules, selectedDept, selectedStatus, selectedPhaseId, currentUser, departmentsWithAssets]);
+  }, [schedules, selectedDept, selectedStatus, selectedPhaseId, currentUser, departmentsWithAssets, isAdmin]);
 
   const topDepartments = useMemo(() => {
     return departmentsWithAssets
@@ -1799,9 +1807,6 @@ const App: React.FC = () => {
       </div>
     );
   }
-
-  const isAdmin = currentUser.roles.includes('Admin');
-  const isCoordinator = currentUser.roles.includes('Coordinator');
 
   const visibleUsers = isAdmin ? users : users.filter(u => u.departmentId === currentUser.departmentId);
   const visibleDepartments = isAdmin ? departmentsWithAssets : departmentsWithAssets.filter(d => d.id === currentUser?.departmentId);
