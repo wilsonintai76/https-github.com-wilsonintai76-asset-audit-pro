@@ -81,56 +81,6 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
         </div>
       </div>
 
-      {/* Inline Edit Form */}
-      {editingId && (
-        <form onSubmit={handleSubmit} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 mb-6 animate-in fade-in slide-in-from-top-2">
-          <h4 className="text-sm font-bold text-slate-900 mb-6">
-            Edit Phase
-          </h4>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">Phase Name</label>
-              <input
-                readOnly
-                type="text"
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 cursor-not-allowed outline-none"
-                value={editingPhase?.name || ''}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">Start Date</label>
-              <div className="relative group">
-                <input
-                  required
-                  type="date"
-                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all cursor-pointer hover:bg-slate-50"
-                  value={startDate}
-                  onChange={e => handleStartDateChange(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">End Date</label>
-              <input
-                readOnly
-                type="date"
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 cursor-not-allowed outline-none"
-                value={startDate ? addDays(startDate, PHASE_DURATION_DAYS) : ''}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95 leading-none">
-              Update Phase
-            </button>
-            <button type="button" onClick={resetForm} className="px-6 py-2.5 bg-white text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-all border border-slate-200 active:scale-95 leading-none">
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
       {(!phases || phases.length === 0) ? (
         <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
           <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-slate-400">
@@ -143,17 +93,23 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sortedPhases.map(phase => {
             const isActive = checkIsActive(phase);
-            const autoEnd = phase.startDate ? addDays(phase.startDate, PHASE_DURATION_DAYS) : phase.endDate;
+            const isEditing = editingId === phase.id;
+            // Use local state if editing, otherwise use phase's values
+            const displayStart = isEditing ? startDate : phase.startDate;
+            const autoEnd = displayStart ? addDays(displayStart, PHASE_DURATION_DAYS) : phase.endDate;
+
             return (
               <div
                 key={phase.id}
                 className={`p-5 rounded-3xl border-2 transition-all duration-300 relative overflow-hidden group ${
-                  isActive
+                  isEditing 
+                    ? 'bg-blue-50/30 border-blue-500 shadow-xl shadow-blue-500/10 scale-[1.02] z-10'
+                    : isActive
                     ? 'bg-emerald-50/40 border-emerald-500 shadow-lg shadow-emerald-500/10'
                     : 'bg-white border-slate-100 hover:border-slate-200'
                 }`}
               >
-                {isActive && (
+                {isActive && !isEditing && (
                   <div className="absolute top-0 right-0 p-2">
                     <span className="flex h-3 w-3 relative">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -163,11 +119,11 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                 )}
 
                 <div className="flex justify-between items-start mb-4">
-                  <h4 className={`font-black text-lg tracking-tight ${isActive ? 'text-emerald-900' : 'text-slate-900'}`}>
+                  <h4 className={`font-black text-lg tracking-tight ${isEditing ? 'text-blue-900' : isActive ? 'text-emerald-900' : 'text-slate-900'}`}>
                     {phase.name}
                   </h4>
                   <div className="flex gap-1">
-                    {isAdmin && (
+                    {isAdmin && !isEditing && (
                       <button
                         onClick={() => startEdit(phase)}
                         className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
@@ -183,33 +139,87 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 text-xs font-bold mb-2 flex-wrap">
-                  <div className={`px-2 py-1 rounded-lg border flex items-center gap-2 ${isActive ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
-                    <CalendarCheck className="w-3 h-3" />
-                    {phase.startDate || '—'}
+                <div className={`space-y-4 ${isEditing ? 'animate-in fade-in zoom-in-95' : ''}`}>
+                  <div className="flex items-center gap-3 text-xs font-bold flex-wrap">
+                    {isEditing ? (
+                      <div className="flex-grow space-y-1">
+                        <label className="text-[8px] font-black uppercase text-blue-400 tracking-widest block pl-1">Start Date</label>
+                        <input
+                          autoFocus
+                          type="date"
+                          className="w-full px-3 py-1.5 bg-white border-2 border-blue-200 rounded-xl text-xs font-bold focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
+                          value={startDate}
+                          onChange={e => handleStartDateChange(e.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      <div className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-2 ${isActive ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+                        <CalendarCheck className="w-3 h-3" />
+                        {phase.startDate || '—'}
+                      </div>
+                    )}
+                    
+                    {!isEditing && <ChevronRight className={`w-3 h-3 ${isActive ? 'text-emerald-300' : 'text-slate-300'}`} />}
+                    
+                    {!isEditing && (
+                      <div className={`px-2.5 py-1.5 rounded-lg border flex items-center gap-2 ${isActive ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
+                        <CalendarX className="w-3 h-3" />
+                        {autoEnd || '—'}
+                      </div>
+                    )}
                   </div>
-                  <ChevronRight className={`w-3 h-3 ${isActive ? 'text-emerald-300' : 'text-slate-300'}`} />
-                  <div className={`px-2 py-1 rounded-lg border flex items-center gap-2 ${isActive ? 'bg-white border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-100 text-slate-500'}`}>
-                    <CalendarX className="w-3 h-3" />
-                    {autoEnd || '—'}
-                  </div>
-                </div>
 
-                <div className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-3">
-                  30-day window
-                </div>
+                  {isEditing && (
+                    <div className="flex items-center gap-3 text-xs font-bold pt-1 border-t border-blue-100/50">
+                      <div className="flex-grow space-y-1">
+                         <label className="text-[8px] font-black uppercase text-slate-400 tracking-widest block pl-1">End Date (Auto)</label>
+                         <div className="px-3 py-1.5 bg-slate-100/50 border border-slate-200 rounded-xl text-xs text-slate-400 flex items-center gap-2">
+                            <CalendarX className="w-3 h-3" />
+                            {autoEnd || '—'}
+                         </div>
+                      </div>
+                    </div>
+                  )}
 
-                {isActive ? (
-                  <div className="flex items-center gap-2 py-2 px-3 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest w-fit animate-pulse">
-                    <Zap className="w-3 h-3" />
-                    Live Operation Window
+                  <div className="flex items-center justify-between">
+                    <div className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
+                      30-day window
+                    </div>
+                    {isEditing && (
+                      <div className="flex gap-1.5">
+                        <button 
+                          onClick={handleSubmit} 
+                          disabled={!startDate}
+                          className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center hover:bg-blue-700 shadow-md shadow-blue-500/20 active:scale-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Save Changes"
+                        >
+                          <Zap className="w-3 h-3 fill-current" />
+                        </button>
+                        <button 
+                          onClick={resetForm}
+                          className="w-8 h-8 bg-white text-slate-400 border border-slate-200 rounded-lg flex items-center justify-center hover:bg-slate-50 active:scale-90 transition-all"
+                          title="Cancel"
+                        >
+                          <CalendarX className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <History className="w-3 h-3" />
-                    Standard Window
-                  </div>
-                )}
+
+                  {!isEditing && (
+                    isActive ? (
+                      <div className="flex items-center gap-2 py-2 px-3 bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest w-fit animate-pulse">
+                        <Zap className="w-3 h-3" />
+                        Live Operation Window
+                      </div>
+                    ) : (
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <History className="w-3 h-3" />
+                        Standard Window
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             );
           })}
