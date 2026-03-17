@@ -114,9 +114,9 @@ export const KPISettings: React.FC<KPISettingsProps> = ({ tiers, phases, onAddTi
                   <td className="px-6 py-4">
                     {isEditing ? (
                        <input 
-                         className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:ring-2 focus:ring-blue-500/20"
+                         readOnly
+                         className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-400 cursor-not-allowed outline-none"
                          value={formData.name}
-                         onChange={e => setFormData({...formData, name: e.target.value})}
                        />
                     ) : (
                        <span className="font-bold text-slate-900 text-xs">{tier.name}</span>
