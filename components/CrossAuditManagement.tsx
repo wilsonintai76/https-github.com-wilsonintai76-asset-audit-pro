@@ -111,7 +111,16 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       });
     });
 
-    return Array.from(map.entries()).map(([name, stats]) => ({ name, ...stats, isJoint: stats.memberCount > 1 }));
+    return Array.from(map.entries()).map(([name, stats]) => {
+      // It is a group if it contains multiple members OR its name is a known audit group
+      const constitutesGroup = stats.memberCount > 1 || auditGroups.some(g => g.name === name);
+      return { 
+        name, 
+        ...stats, 
+        isJoint: constitutesGroup,
+        isGroup: constitutesGroup 
+      };
+    });
   }, [deptStats, auditGroups]);
 
   // Group manual permissions by auditor for the table view
@@ -634,7 +643,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
       {/* ENTITIES LIST */}
       <ActiveEntitiesList 
-        entities={entities}
+        entities={entities.filter(e => !e.isGroup)}
         selectedEntity={selectedAuditor}
         onSelect={setSelectedAuditor}
         megaTargetThreshold={megaTargetThreshold}

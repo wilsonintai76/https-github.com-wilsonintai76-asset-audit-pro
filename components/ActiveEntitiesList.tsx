@@ -57,7 +57,6 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
               >
                 <div className="flex justify-between w-full mb-2">
                   <span className={`text-[10px] uppercase font-bold tracking-wider ${isSelected ? 'text-slate-400' : 'text-slate-400'}`}>Rank #{idx + 1}</span>
-                  {isMega && <span className="text-[9px] bg-amber-400 text-amber-900 px-1.5 rounded uppercase tracking-wider font-black">MEGA</span>}
                 </div>
                 <span className="truncate w-full text-left mb-3 text-base">{entity.name}</span>
 
