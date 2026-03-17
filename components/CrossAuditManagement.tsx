@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus } from 'lucide-react';
+import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
@@ -69,6 +69,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   // Confirmation & State Control
   const [isApplied, setIsApplied] = useState(false);
   const [activeModal, setActiveModal] = useState<'apply' | 'reset' | null>(null);
+  const [isGroupBuilderOpen, setIsGroupBuilderOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [builderSelectedDepts, setBuilderSelectedDepts] = useState<string[]>([]);
 
   // 1. Compute Stats for Each Department
   const deptStats = useMemo(() => {
@@ -129,6 +132,72 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       setSelectedAuditor(entities[0].name);
     }
   }, [entities, selectedAuditor]);
+
+  const generateNextGroupName = React.useCallback(() => {
+    // Collect all existing group names from the auditGroups array and existing department group strings
+    const existingNames = new Set([
+      ...auditGroups.map(g => g.name),
+      ...departments.map(d => d.auditGroup).filter(Boolean) as string[]
+    ]);
+
+    // Simple A, B, C... pattern
+    for (let i = 0; i < 26; i++) {
+      const name = `Group ${String.fromCharCode(65 + i)}`;
+      if (!existingNames.has(name)) return name;
+    }
+    
+    // Fallback if A-Z are taken
+    return `Group ${auditGroups.length + 1}`;
+  }, [auditGroups, departments]);
+
+  const handleStartGroupBuilder = () => {
+    setNewGroupName(generateNextGroupName());
+    setBuilderSelectedDepts([]);
+    setIsGroupBuilderOpen(true);
+  };
+
+  const accumulatedAssets = useMemo(() => {
+    return builderSelectedDepts.reduce((sum, id) => {
+      const dept = departments.find(d => d.id === id);
+      const safeAssets = typeof dept?.totalAssets === 'string' ? parseInt(dept.totalAssets) : (dept?.totalAssets || 0);
+      return sum + safeAssets;
+    }, 0);
+  }, [builderSelectedDepts, departments]);
+
+  const handleSaveBatchGroup = async () => {
+    if (!newGroupName || builderSelectedDepts.length === 0) return;
+    setIsProcessing(true);
+    try {
+      // 1. Create the Audit Group object
+      if (onAddAuditGroup) {
+        await onAddAuditGroup({ name: newGroupName });
+        
+        // Wait active state update? Usually App.tsx handles this.
+        // We need to find the ID of the new group, but App handles the refetch.
+        // For now, if we can't get the ID immediately, we might rely on naming
+        // or wait for the next render cycle.
+        // A better way is to update the departments with the group name string first
+        // as a temporary fallback, or assume the user will pick it manually.
+        // HOWEVER, the user said "ADMIN CREATE GROUP... THEN ADMIN PICK DEPARTMENT".
+        
+        // Let's refine: The prompt implies a combined action.
+        // We'll update the departments with the string for now, 
+        // and if a group object exists with that name, the mapping logic already 
+        // priorities the object in my previous `entities` calculation.
+        
+        const updates = builderSelectedDepts.map(id => ({
+          id,
+          data: { auditGroup: newGroupName }
+        }));
+        await onBulkUpdateDepartments(updates);
+      }
+      setIsGroupBuilderOpen(false);
+    } catch (e) {
+      alert("Failed to save group.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleResetClick = () => {
     setActiveModal('reset');
@@ -454,15 +523,96 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                           <div className="flex items-center justify-between mb-4">
                             <h4 className="text-lg font-bold text-white">Unit Consolidation</h4>
                             <button 
-                              onClick={() => {
-                                const name = prompt('Enter Group Name:');
-                                if (name && onAddAuditGroup) onAddAuditGroup({ name });
-                              }}
-                              className="text-[10px] bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded font-black flex items-center gap-1"
+                              onClick={handleStartGroupBuilder}
+                              className="text-[10px] bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-xl font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all"
                             >
-                              <Plus className="w-3 h-3" /> New Group
+                              <Plus className="w-3.5 h-3.5" /> Group Builder
                             </button>
                           </div>
+
+                          {isGroupBuilderOpen && (
+                            <div className="mb-6 bg-white/5 border border-white/10 rounded-3xl p-6 animate-in zoom-in-95 duration-200">
+                              <div className="flex items-center justify-between mb-6">
+                                <h5 className="text-sm font-black uppercase text-blue-400 tracking-widest">New Consolidation Group</h5>
+                                <button onClick={() => setIsGroupBuilderOpen(false)} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                              </div>
+
+                              <div className="space-y-6">
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 block mb-2 uppercase tracking-widest">Group Identity</label>
+                                  <input 
+                                    className="w-full bg-black/20 border border-white/10 rounded-2xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-blue-500/50 outline-none"
+                                    value={newGroupName}
+                                    onChange={e => setNewGroupName(e.target.value)}
+                                    placeholder="e.g. Group C"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 block mb-3 uppercase tracking-widest">Select Departments to Consolidate</label>
+                                  <div className="max-h-48 overflow-y-auto space-y-1.5 pr-2 scrollbar-thin scrollbar-thumb-white/10">
+                                    {departments
+                                      .filter(d => !d.auditGroupId && !d.auditGroup)
+                                      .map(dept => {
+                                        const isChecked = builderSelectedDepts.includes(dept.id);
+                                        return (
+                                          <label 
+                                            key={dept.id} 
+                                            className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                                              isChecked 
+                                                ? 'bg-blue-500/20 border-blue-500/50 text-blue-100' 
+                                                : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-3">
+                                              <input 
+                                                type="checkbox"
+                                                className="w-4 h-4 rounded border-white/20 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0"
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                  if (isChecked) {
+                                                    setBuilderSelectedDepts(builderSelectedDepts.filter(id => id !== dept.id));
+                                                  } else {
+                                                    setBuilderSelectedDepts([...builderSelectedDepts, dept.id]);
+                                                  }
+                                                }}
+                                              />
+                                              <span className="text-xs font-bold">{dept.name}</span>
+                                            </div>
+                                            <span className="text-[10px] font-mono opacity-50">{(dept.totalAssets || 0).toLocaleString()}</span>
+                                          </label>
+                                        );
+                                      })
+                                    }
+                                  </div>
+                                </div>
+
+                                <div className="bg-blue-600/10 border border-blue-600/20 rounded-2xl p-4 flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                                      <Boxes className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest leading-none mb-1">Accumulated Assets</p>
+                                      <p className="text-lg font-black text-white leading-none">{accumulatedAssets.toLocaleString()}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Units</p>
+                                    <p className="text-lg font-black text-white leading-none">{builderSelectedDepts.length}</p>
+                                  </div>
+                                </div>
+
+                                <button 
+                                  onClick={handleSaveBatchGroup}
+                                  disabled={!newGroupName || builderSelectedDepts.length === 0 || isProcessing}
+                                  className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-500/20 active:scale-95"
+                                >
+                                  {isProcessing ? 'Saving Consolidation...' : 'Finalize Group Consolidation'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Group Registry List */}
                           {auditGroups.length > 0 && (
