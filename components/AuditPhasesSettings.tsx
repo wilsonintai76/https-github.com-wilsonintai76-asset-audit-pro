@@ -84,38 +84,47 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
       {/* Inline Edit Form */}
       {editingId && (
         <form onSubmit={handleSubmit} className="bg-slate-50 p-6 rounded-3xl border border-slate-200 mb-6 animate-in fade-in slide-in-from-top-2">
-          <h4 className="text-sm font-black text-slate-700 mb-1 uppercase tracking-widest">
-            Edit — {editingPhase?.name}
+          <h4 className="text-sm font-bold text-slate-900 mb-6">
+            Edit Phase
           </h4>
-          <p className="text-xs text-slate-400 mb-4">
-            End date will be automatically set to <strong>30 days</strong> from the start date.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">Start Date</label>
+              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">Phase Name</label>
               <input
-                required
-                type="date"
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
-                value={startDate}
-                onChange={e => handleStartDateChange(e.target.value)}
+                readOnly
+                type="text"
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 cursor-not-allowed outline-none"
+                value={editingPhase?.name || ''}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400">End Date (Auto)</label>
+              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">Start Date</label>
+              <div className="relative group">
+                <input
+                  required
+                  type="date"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all cursor-pointer hover:bg-slate-50"
+                  value={startDate}
+                  onChange={e => handleStartDateChange(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest block">End Date</label>
               <input
                 readOnly
                 type="date"
-                className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed"
+                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 cursor-not-allowed outline-none"
                 value={startDate ? addDays(startDate, PHASE_DURATION_DAYS) : ''}
               />
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/10 hover:bg-blue-700 transition-colors">
+            <button type="submit" className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95 leading-none">
               Update Phase
             </button>
-            <button type="button" onClick={resetForm} className="px-6 py-2 bg-white text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-colors border border-slate-200">
+            <button type="button" onClick={resetForm} className="px-6 py-2.5 bg-white text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-100 transition-all border border-slate-200 active:scale-95 leading-none">
               Cancel
             </button>
           </div>
