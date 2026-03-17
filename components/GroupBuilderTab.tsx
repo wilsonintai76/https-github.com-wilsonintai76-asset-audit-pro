@@ -42,6 +42,13 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     return `Group ${auditGroups.length + 1}`;
   }, [auditGroups, departments]);
 
+  // Auto-generate name on mount or when tab changes back to 1 if empty
+  React.useEffect(() => {
+    if (builderTab === 1 && !newGroupName) {
+        setNewGroupName(generateNextGroupName());
+    }
+  }, [builderTab, newGroupName, generateNextGroupName]);
+
   const handleStartGroupBuilder = () => {
     setNewGroupName(generateNextGroupName());
     setBuilderSelectedDepts([]);
@@ -150,13 +157,17 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                  <h4 className="text-lg font-black text-slate-900 mb-6">Create New Group</h4>
                  <div className="space-y-4">
                     <label className="text-[10px] font-bold text-slate-400 block uppercase tracking-widest">Group Identity</label>
-                    <input 
-                      className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-4 text-lg font-bold text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm"
-                      value={newGroupName}
-                      onChange={e => setNewGroupName(e.target.value)}
-                      placeholder="e.g. Group C"
-                      autoFocus
-                    />
+                    <div className="relative">
+                      <input 
+                        className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-5 py-4 text-lg font-bold text-slate-500 outline-none shadow-inner opacity-80 cursor-not-allowed"
+                        value={newGroupName}
+                        disabled
+                        readOnly
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-blue-100 text-blue-600 px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-lg">
+                        Auto-Generated
+                      </div>
+                    </div>
                  </div>
                  <div className="mt-8">
                    <button 
