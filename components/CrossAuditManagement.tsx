@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Department, CrossAuditPermission, User } from '../types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off } from 'lucide-react';
+import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
+import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
@@ -26,6 +26,10 @@ interface CrossAuditManagementProps {
   onRemovePermission?: (id: string) => Promise<void>;
   onUpdateDepartment: (id: string, updates: Partial<Department>) => void;
   onBulkUpdateDepartments: (updates: { id: string, data: Partial<Department> }[]) => void;
+  auditGroups?: AuditGroup[];
+  onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
+  onUpdateAuditGroup?: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
+  onDeleteAuditGroup?: (id: string) => Promise<void>;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -36,7 +40,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onAddPermission,
   onRemovePermission,
   onUpdateDepartment,
-  onBulkUpdateDepartments
+  onBulkUpdateDepartments,
+  auditGroups = [],
+  onAddAuditGroup,
+  onUpdateAuditGroup,
+  onDeleteAuditGroup
 }) => {
   // --- STATE ---
   const [mgmtMode, setMgmtMode] = useState<ManagementMode>('auto');
@@ -80,10 +88,17 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   // 2. Compute "Audit Entities" (Merged Groups + Standalone)
   const entities = useMemo(() => {
-    const map = new Map<string, { assets: number, auditors: number, memberCount: number, members: any[] }>(); 
+    const map = new Map<string, { assets: number, auditors: number, memberCount: number, members: any[], id?: string }>(); 
 
     deptStats.forEach(d => {
-      const entityName = d.auditGroup || d.name;
+      // Prioritize explicit auditGroupId (now manual)
+      const groupName = d.auditGroupId 
+        ? auditGroups.find(g => g.id === d.auditGroupId)?.name || 'Unknown Group'
+        : d.auditGroup;
+
+      const entityName = groupName || d.name;
+      const entityId = d.auditGroupId || (groupName ? `group_${groupName}` : `dept_${d.id}`);
+      
       const current = map.get(entityName) || { assets: 0, auditors: 0, memberCount: 0, members: [] };
       const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
 
@@ -91,12 +106,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         assets: current.assets + safeAssets,
         auditors: current.auditors + d.auditorCount,
         memberCount: current.memberCount + 1,
-        members: [...current.members, d]
+        members: [...current.members, d],
+        id: entityId
       });
     });
 
     return Array.from(map.entries()).map(([name, stats]) => ({ name, ...stats, isJoint: stats.memberCount > 1 }));
-  }, [deptStats]);
+  }, [deptStats, auditGroups]);
 
   // Group manual permissions by auditor for the table view
   const groupedPermissions = useMemo(() => {
@@ -282,6 +298,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     }
 
     await onBulkUpdateDepartments(updates);
+    
+    // Also, if we auto-created "Group A", "Group B", etc. and they don't exist in audit_groups table,
+    // we should probably add them. But since this is "Optimization Engine" (old logic), 
+    // it uses strings. The user specifically asked for MANUAL groups too.
+    // I'll leave the string-based auto-grouping as a fallback "Optimized Group" display,
+    // while encouraging the Registry for permanent manual groups.
+    
     setIsProcessing(false);
     setWorkflowStep('pairing');
   };
@@ -428,7 +451,42 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                   <div className={`transition-all duration-500 ${workflowStep === 'grouping' ? 'opacity-100' : 'opacity-50 grayscale'}`}>
                       <div className="bg-white/5 p-6 rounded-3xl border border-white/10 relative group hover:border-white/20 transition-all">
                           <div className="absolute top-4 right-4 text-slate-500 text-[10px] font-black uppercase tracking-widest bg-white/5 px-2 py-1 rounded">Step 1</div>
-                          <h4 className="text-lg font-bold text-white mb-4">Unit Consolidation</h4>
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-lg font-bold text-white">Unit Consolidation</h4>
+                            <button 
+                              onClick={() => {
+                                const name = prompt('Enter Group Name:');
+                                if (name && onAddAuditGroup) onAddAuditGroup({ name });
+                              }}
+                              className="text-[10px] bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded font-black flex items-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" /> New Group
+                            </button>
+                          </div>
+
+                          {/* Group Registry List */}
+                          {auditGroups.length > 0 && (
+                            <div className="mb-6 space-y-2">
+                              <label className="text-[9px] font-bold text-slate-400 block uppercase tracking-widest">Group Registry</label>
+                              <div className="flex flex-wrap gap-2">
+                                {auditGroups.map(g => (
+                                  <div key={g.id} className="bg-white/10 px-3 py-1.5 rounded-xl border border-white/5 flex items-center gap-2 group/g">
+                                    <span className="text-xs font-bold text-blue-300">{g.name}</span>
+                                    <button 
+                                      onClick={() => {
+                                        if (confirm(`Delete group "${g.name}"? This will unassign all departments in this group.`) && onDeleteAuditGroup) {
+                                          onDeleteAuditGroup(g.id);
+                                        }
+                                      }}
+                                      className="opacity-0 group-hover/g:opacity-100 transition-opacity text-rose-400 hover:text-rose-300"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           
                           <div className="mb-4">
                             <div className="w-full">

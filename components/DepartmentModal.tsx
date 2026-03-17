@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Department, User } from '../types';
-import { X, Building2, User as UserIcon, FileText, Search, ChevronDown, Boxes } from 'lucide-react';
+import { Department, User, AuditGroup } from '../types';
+import { X, Building2, User as UserIcon, FileText, Search, ChevronDown, Boxes, Layers } from 'lucide-react';
 
 interface DepartmentModalProps {
   isOpen: boolean;
@@ -10,6 +10,7 @@ interface DepartmentModalProps {
   initialData?: Department | null;
   users: User[];
   isAdmin: boolean;
+  auditGroups?: AuditGroup[];
 }
 
 export const DepartmentModal: React.FC<DepartmentModalProps> = ({
@@ -18,14 +19,16 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
   onSave,
   initialData,
   users,
-  isAdmin
+  isAdmin,
+  auditGroups = []
 }) => {
   const [formData, setFormData] = useState({
     name: '',
     abbr: '',
     headOfDeptId: '',
     description: '',
-    totalAssets: 0
+    totalAssets: 0,
+    auditGroupId: ''
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,7 +41,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
         abbr: initialData.abbr || '',
         headOfDeptId: initialData.headOfDeptId || '',
         description: initialData.description || '',
-        totalAssets: initialData.totalAssets || 0
+        totalAssets: initialData.totalAssets || 0,
+        auditGroupId: initialData.auditGroupId || ''
       });
     } else {
       setFormData({
@@ -46,7 +50,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
         abbr: '',
         headOfDeptId: '',
         description: '',
-        totalAssets: 0
+        totalAssets: 0,
+        auditGroupId: ''
       });
     }
     setSearchQuery('');
@@ -127,6 +132,25 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
                   value={formData.abbr}
                   onChange={e => setFormData({ ...formData, abbr: e.target.value.toUpperCase() })}
                 />
+              </div>
+            </div>
+            
+            {/* Audit Group Selection */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Consolidation Group (Audit Group)</label>
+              <div className="relative">
+                <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
+                <select 
+                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all appearance-none font-bold"
+                  value={formData.auditGroupId}
+                  onChange={e => setFormData({ ...formData, auditGroupId: e.target.value })}
+                >
+                  <option value="">No Group (Independent Unit)</option>
+                  {auditGroups.map(group => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
               </div>
             </div>
 

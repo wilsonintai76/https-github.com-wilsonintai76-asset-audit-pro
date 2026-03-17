@@ -4,7 +4,7 @@ import { gateway } from './services/dataGateway';
 import { supabase } from './services/supabase';
 import { authService } from './services/auth';
 import { ItemNotFoundError } from './services/localDB';
-import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, DepartmentMapping, SystemActivity } from './types';
+import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, DepartmentMapping, SystemActivity, AuditGroup } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -45,6 +45,7 @@ const App: React.FC = () => {
   const [auditPhases, setAuditPhases] = useState<AuditPhase[]>([]);
   const [kpiTiers, setKpiTiers] = useState<KPITier[]>([]);
   const [departmentMappings, setDepartmentMappings] = useState<DepartmentMapping[]>([]);
+  const [auditGroups, setAuditGroups] = useState<AuditGroup[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -102,7 +103,7 @@ const App: React.FC = () => {
   // --- INITIAL DATA LOAD ---
   const loadAllData = useCallback(async () => {
     try {
-      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, mappingsData, activitiesData] = await Promise.all([
+      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, mappingsData, activitiesData, groupsData] = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
         gateway.getDepartments(),
@@ -111,10 +112,12 @@ const App: React.FC = () => {
         gateway.getAuditPhases(),
         gateway.getKPITiers(),
         gateway.getDepartmentMappings(),
-        gateway.getActivities()
+        gateway.getActivities(),
+        gateway.getAuditGroups()
       ]);
 
       setActivities(activitiesData);
+      setAuditGroups(groupsData);
 
       // Ensure 3 phases exist
       let finalPhases = phasesData;
@@ -1575,6 +1578,40 @@ const App: React.FC = () => {
     }
   };
 
+  // --- AUDIT GROUPS ---
+  const handleAddAuditGroup = async (group: Omit<AuditGroup, 'id'>) => {
+    try {
+      await gateway.addAuditGroup(group);
+      setAuditGroups(await gateway.getAuditGroups());
+      showToast('Audit Group created');
+    } catch (e) {
+      showError(e, 'Failed to create group');
+    }
+  };
+
+  const handleUpdateAuditGroup = async (id: string, updates: Partial<AuditGroup>) => {
+    try {
+      await gateway.updateAuditGroup(id, updates);
+      setAuditGroups(await gateway.getAuditGroups());
+      showToast('Group updated');
+    } catch (e) {
+      showError(e, 'Update failed');
+    }
+  };
+
+  const handleDeleteAuditGroup = async (id: string) => {
+    if (confirm("Delete this group? Departments will be unassigned.")) {
+      try {
+        await gateway.deleteAuditGroup(id);
+        setAuditGroups(await gateway.getAuditGroups());
+        setDepartments(await gateway.getDepartments()); // Refresh depts as they might have been affected
+        showToast('Group removed');
+      } catch (e) {
+        showError(e, 'Delete failed');
+      }
+    }
+  };
+
   const handleUpsertLocations = async (newLocs: Omit<Location, 'id'>[]) => {
     try {
       const existingMap = new Map<string, Location>(locations.map(l => [`${l.name.toUpperCase()}|${l.departmentId}`, l]));
@@ -1881,6 +1918,7 @@ const App: React.FC = () => {
               currentUser={currentUser}
               activities={activities}
               maxAssetsPerDay={maxAssetsPerDay}
+              auditGroups={auditGroups}
             />
           )}
           {activeView === 'auditor-dashboard' && (
@@ -1948,6 +1986,10 @@ const App: React.FC = () => {
               onDelete={handleDeleteDept}
               isAdmin={isAdmin}
               phases={auditPhases}
+              auditGroups={auditGroups}
+              onAddGroup={handleAddAuditGroup}
+              onUpdateGroup={handleUpdateAuditGroup}
+              onDeleteGroup={handleDeleteAuditGroup}
             />
           )}
           {activeView === 'locations' && (
@@ -1998,6 +2040,10 @@ const App: React.FC = () => {
               onDeleteDepartmentMapping={handleDeleteDepartmentMapping}
               onSyncLocationMappings={handleSyncLocationMappings}
               onUpsertLocations={handleUpsertLocations}
+              auditGroups={auditGroups}
+              onAddAuditGroup={handleAddAuditGroup}
+              onUpdateAuditGroup={handleUpdateAuditGroup}
+              onDeleteAuditGroup={handleDeleteAuditGroup}
             />
           )}
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}

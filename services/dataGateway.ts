@@ -1,5 +1,5 @@
 
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, DepartmentMapping, SystemActivity } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, DepartmentMapping, SystemActivity, AuditGroup } from '../types';
 import { supabase } from './supabase';
 import { localDB } from './localDB'; 
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
@@ -15,6 +15,7 @@ class DataGateway {
     if (dept.abbr !== undefined) payload.abbr = dept.abbr;
     if (dept.description !== undefined) payload.description = dept.description;
     if (dept.auditGroup !== undefined) payload.audit_group = dept.auditGroup;
+    if (dept.auditGroupId !== undefined) payload.audit_group_id = dept.auditGroupId;
     if (dept.totalAssets !== undefined) payload.total_assets = dept.totalAssets;
     if (dept.headOfDeptId !== undefined) {
       payload.head_of_dept_id = (dept.headOfDeptId && dept.headOfDeptId !== "") ? dept.headOfDeptId : null;
@@ -282,6 +283,7 @@ class DataGateway {
         ...d,
         headOfDeptId: d.head_of_dept_id,
         auditGroup: d.audit_group,
+        auditGroupId: d.audit_group_id,
         totalAssets: d.total_assets
       })) as Department[];
     }
@@ -299,6 +301,7 @@ class DataGateway {
         ...result,
         headOfDeptId: result.head_of_dept_id,
         auditGroup: result.audit_group,
+        auditGroupId: result.audit_group_id,
         totalAssets: result.total_assets
       } as Department;
     }
@@ -669,6 +672,43 @@ class DataGateway {
   async deleteKPITier(id: string) {
     if (supabase) {
       const { error } = await supabase.from('kpi_tiers').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  // --- AUDIT GROUPS ---
+  async getAuditGroups(): Promise<AuditGroup[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('audit_groups').select('*').order('name');
+      if (error) throw error;
+      return data || [];
+    }
+    return [];
+  }
+
+  async addAuditGroup(group: Omit<AuditGroup, 'id'>): Promise<AuditGroup> {
+    if (supabase) {
+      const { data, error } = await supabase.from('audit_groups').insert([group]).select().single();
+      if (error) throw error;
+      return data;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async updateAuditGroup(id: string, updates: Partial<AuditGroup>): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('audit_groups').update(updates).eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async deleteAuditGroup(id: string): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('audit_groups').delete().eq('id', id);
       if (error) throw error;
       return;
     }

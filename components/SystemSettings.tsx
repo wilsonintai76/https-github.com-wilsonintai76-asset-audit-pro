@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { CrossAuditPermission, Department, User, AuditPhase, KPITier, UserRole, Location, AuditSchedule, DepartmentMapping } from '../types';
+import { CrossAuditPermission, Department, User, AuditPhase, KPITier, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup } from '../types';
 import { CrossAuditManagement } from './CrossAuditManagement';
 import { AuditConstraints } from './AuditConstraints';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
@@ -42,6 +42,10 @@ interface SystemSettingsProps {
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
+  auditGroups: AuditGroup[];
+  onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
+  onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
+  onDeleteAuditGroup: (id: string) => Promise<void>;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -77,6 +81,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onDeleteDepartmentMapping,
   onSyncLocationMappings,
   onUpsertLocations,
+  auditGroups,
+  onAddAuditGroup,
+  onUpdateAuditGroup,
+  onDeleteAuditGroup
 }) => {
   const isAdmin = userRoles.includes('Admin');
 
@@ -179,10 +187,13 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         users={users}
         permissions={permissions}
         onTogglePermission={handlePermissionChange}
-        onAddPermission={onAddPermission}
         onRemovePermission={onRemovePermission}
         onUpdateDepartment={onUpdateDepartment}
         onBulkUpdateDepartments={onBulkUpdateDepartments}
+        auditGroups={auditGroups}
+        onAddAuditGroup={onAddAuditGroup}
+        onUpdateAuditGroup={onUpdateAuditGroup}
+        onDeleteAuditGroup={onDeleteAuditGroup}
       />
 
       {isAdmin && (

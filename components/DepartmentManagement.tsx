@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Department, Location, User } from '../types';
+import { Department, Location, User, AuditGroup } from '../types';
 import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
@@ -15,6 +15,10 @@ interface DepartmentManagementProps {
   onDelete: (id: string) => void;
   isAdmin?: boolean;
   phases?: AuditPhase[];
+  auditGroups?: AuditGroup[];
+  onAddGroup?: (group: Omit<AuditGroup, 'id'>) => void;
+  onUpdateGroup?: (id: string, group: Partial<AuditGroup>) => void;
+  onDeleteGroup?: (id: string) => void;
 }
 
 export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ 
@@ -24,7 +28,11 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   onDelete, 
   users,
   isAdmin = true,
-  phases = []
+  phases = [],
+  auditGroups = [],
+  onAddGroup,
+  onUpdateGroup,
+  onDeleteGroup
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
@@ -150,10 +158,13 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                             Tier Detected
                           </div>
                         )}
-                        {dept.auditGroup && (
-                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-[9px] text-indigo-600 border border-indigo-100 font-bold flex items-center gap-1" title="Optimized Group Assignment">
+                        {(dept.auditGroupId || dept.auditGroup) && (
+                          <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-[9px] text-indigo-600 border border-indigo-100 font-bold flex items-center gap-1" title="Consolidated Audit Group">
                             <Layers className="w-3 h-3" />
-                            {dept.auditGroup}
+                            {dept.auditGroupId 
+                              ? auditGroups.find(g => g.id === dept.auditGroupId)?.name || 'Unknown Group'
+                              : dept.auditGroup
+                            }
                           </span>
                         )}
                       </div>
@@ -184,6 +195,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
         initialData={editingDept}
         users={users}
         isAdmin={isAdmin}
+        auditGroups={auditGroups}
       />
     </div>
   );

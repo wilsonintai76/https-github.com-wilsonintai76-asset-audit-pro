@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditGroup, SystemActivity } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
 import { TierDistributionTable } from './TierDistributionTable';
-import { Sliders, GraduationCap, Filter, ChevronDown, LayoutDashboard } from 'lucide-react';
+import { Sliders, GraduationCap, Filter, ChevronDown, LayoutDashboard, Trophy } from 'lucide-react';
+import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { PageHeader } from './PageHeader';
 
 interface OverviewDashboardProps {
@@ -17,6 +18,9 @@ interface OverviewDashboardProps {
   departments?: Department[];
   locations?: Location[];
   currentUser: User;
+  auditGroups?: AuditGroup[];
+  activities?: SystemActivity[];
+  maxAssetsPerDay?: number;
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
@@ -27,7 +31,10 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   kpiTiers = [],
   departments = [],
   locations = [],
-  currentUser
+  currentUser,
+  auditGroups = [],
+  activities = [],
+  maxAssetsPerDay = 500
 }) => {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState('All');
@@ -109,6 +116,34 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   const sortedDepts = useMemo(() => 
     (Object.entries(deptCounts) as [string, number][]).sort((a, b) => b[1] - a[1])
   , [deptCounts]);
+
+  const activeEntities = useMemo(() => {
+    // This logic mimics CrossAuditManagement's entity calculation
+    // but simplified for the dashboard's "Ranked by Assets" view.
+    const groupedDepts: Record<string, Department[]> = {};
+    
+    departments.forEach(dept => {
+      const key = dept.auditGroupId || 'unassigned_' + dept.id;
+      if (!groupedDepts[key]) groupedDepts[key] = [];
+      groupedDepts[key].push(dept);
+    });
+
+    return Object.entries(groupedDepts).map(([groupId, depts]) => {
+      const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+      const name = groupId.startsWith('unassigned_') 
+        ? depts[0].name 
+        : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
+      
+      return {
+        name,
+        assets: totalAssets,
+        auditors: 1, // Placeholder
+        memberCount: 2, // Placeholder
+        isJoint: depts.length > 1,
+        id: groupId
+      };
+    }).sort((a, b) => b.assets - a.assets);
+  }, [departments, auditGroups]);
 
   const activePhase = useMemo(() => {
     const today = new Date();
@@ -290,6 +325,26 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
 
         <div className="space-y-8">
+          {/* Active Entities Ranked by Assets */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Trophy className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Active Entities</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Ranked by Total Assets</p>
+              </div>
+            </div>
+            <ActiveEntitiesList 
+              entities={activeEntities.slice(0, 10)} 
+              selectedEntity=""
+              onSelect={() => {}}
+              megaTargetThreshold={3000}
+              minAuditors={2}
+            />
+          </div>
+
           {config.showUpcoming && (
             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Upcoming Audits</h3>

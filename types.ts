@@ -43,8 +43,16 @@ export interface Department {
   headOfDeptId: string | null;
   headName?: string | null;
   description: string;
-  auditGroup?: string;
+  auditGroupId?: string | null; // ID of the AuditGroup
+  auditGroup?: string; // Name of the group for backward compatibility/display
   totalAssets?: number;
+}
+
+export interface AuditGroup {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
 }
 
 export interface Location {
