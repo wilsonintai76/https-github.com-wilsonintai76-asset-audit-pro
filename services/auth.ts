@@ -99,14 +99,15 @@ export const authService = {
 
         // Auto-create profile if it doesn't exist
         const isMasterAdmin = authUser.email === 'wilsonintai76@gmail.com';
+        const isInstitutionalUser = userEmail.endsWith(`@${allowedDomain}`);
         
         const newProfile = {
           id: authUser.id,
           email: authUser.email,
           name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'User',
-          roles: isMasterAdmin ? ['Admin', 'Coordinator', 'Supervisor', 'Staff'] : ['Guest'],
-          status: isMasterAdmin ? 'Active' : 'Pending',
-          is_verified: isMasterAdmin,
+          roles: isMasterAdmin ? ['Admin', 'Coordinator', 'Supervisor', 'Staff'] : (isInstitutionalUser ? ['Staff'] : ['Guest']),
+          status: (isMasterAdmin || isInstitutionalUser) ? 'Active' : 'Pending',
+          is_verified: isMasterAdmin || isInstitutionalUser,
           department_id: defaultDeptId
         };
         
