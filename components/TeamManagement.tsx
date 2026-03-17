@@ -142,7 +142,9 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
     if (editingId) {
       // Editing existing user
-      onUpdateMember(editingId, { ...formData });
+      // Pass the current state to ensure email is included for the gateway fallback logic
+      const currentUserState = users.find(u => u.id === editingId);
+      onUpdateMember(editingId, { ...formData, email: formData.email || currentUserState?.email });
       setEditingId(null);
     } else {
       onAddMember({ 
@@ -219,6 +221,10 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         <div>
           <h3 className="text-xl font-bold text-slate-900">Institutional Team</h3>
           <p className="text-sm text-slate-500">Manage credentials, certification status, and access levels.</p>
+          <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 w-fit">
+            <Key className="w-3 h-3" />
+            <span>Login accounts are automatically created upon first Google sign-in.</span>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">

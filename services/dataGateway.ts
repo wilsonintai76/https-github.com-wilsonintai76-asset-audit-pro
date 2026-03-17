@@ -202,7 +202,8 @@ class DataGateway {
     if (supabase) {
       const payload = this.mapUserToDB(user);
       
-      const { data, error } = await supabase.from('users').upsert([payload]).select().single();
+      // Use upsert with email as the conflict target to handle potential ID changes/clashes
+      const { data, error } = await supabase.from('users').upsert([payload], { onConflict: 'email' }).select().single();
       if (error) throw error;
       
       const result = data as any;
@@ -223,8 +224,16 @@ class DataGateway {
   async updateUser(id: string, updates: Partial<User>) {
     if (supabase) {
       const payload = this.mapUserToDB(updates);
-      const { error } = await supabase.from('users').update(payload).eq('id', id);
-      if (error) throw error;
+      // Try updating by ID first
+      const { data, error } = await supabase.from('users').update(payload).eq('id', id).select();
+      
+      // If no rows were affected and we have an email, try updating by email as a fallback
+      // (This handles cases where the user's ID changed but email remained the same)
+      if (!error && (!data || data.length === 0) && updates.email) {
+        await supabase.from('users').update(payload).eq('email', updates.email);
+      } else if (error) {
+        throw error;
+      }
       return;
     }
     throw new Error("Supabase client not initialized");
