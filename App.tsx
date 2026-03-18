@@ -1642,12 +1642,29 @@ const App: React.FC = () => {
 
   const handleAutoConsolidate = async (threshold: number, excludedIds: string[]) => {
     try {
-      const eligible = departmentsWithAssets
-        .filter(d => !d.auditGroupId && !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0)
+      // Step 1: Clear all previously auto-generated "Consolidated Unit" groups
+      const prevAutoGroups = auditGroups.filter(g => g.name?.startsWith('Consolidated Unit'));
+      if (prevAutoGroups.length > 0) {
+        for (const group of prevAutoGroups) {
+          // Unassign all departments from this group before deleting it
+          const groupDepts = departmentsWithAssets.filter(d => d.auditGroupId === group.id);
+          for (const dept of groupDepts) {
+            await gateway.updateDepartment(dept.id, { auditGroupId: null });
+          }
+          await gateway.deleteAuditGroup(group.id);
+        }
+      }
+
+      // Step 2: Re-fetch fresh state after clearing
+      const freshDepts = await gateway.getDepartments();
+      const eligible = freshDepts
+        .filter(d => !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0)
         .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
 
       if (eligible.length === 0) {
-        customAlert('No eligible departments to group. They may already be assigned to groups or excluded.');
+        customAlert('No eligible departments to group. All may have been excluded.');
+        setAuditGroups(await gateway.getAuditGroups());
+        setDepartments(freshDepts);
         return;
       }
 

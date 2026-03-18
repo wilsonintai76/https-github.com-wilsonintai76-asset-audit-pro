@@ -49,12 +49,17 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
         {groupedData.groups.map((group, idx) => (
           <div key={group.id} className={`flex border-2 border-slate-900 rounded-lg overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-white'} shadow-sm hover:shadow-md transition-shadow`}>
             {/* Group Label Side */}
-            <div className={`w-24 ${isDark ? 'bg-slate-700' : 'bg-white'} border-r-2 border-slate-900 flex items-center justify-center`}>
-              <span className={`text-6xl font-black ${isDark ? 'text-blue-400' : 'text-slate-900'}`}>{group.name.replace('Group ', '')}</span>
+            <div className={`w-16 shrink-0 ${isDark ? 'bg-slate-700' : 'bg-slate-50'} border-r-2 border-slate-900 flex items-center justify-center py-6`}>
+              <span 
+                className={`text-lg tracking-widest uppercase font-black text-center ${isDark ? 'text-blue-400' : 'text-slate-900'}`}
+                style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+              >
+                {group.name}
+              </span>
             </div>
 
             {/* Table side */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-w-0">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-yellow-400 border-b-2 border-slate-900">
@@ -88,10 +93,15 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
 
         {groupedData.unassignedDepts.length > 0 && (
           <div className="flex border-2 border-dashed border-slate-300 rounded-lg overflow-hidden bg-slate-50 text-slate-400">
-            <div className="w-24 border-r-2 border-dashed border-slate-300 flex items-center justify-center opacity-50">
-               <span className="text-4xl font-black italic">?</span>
+            <div className="w-16 shrink-0 border-r-2 border-dashed border-slate-300 flex items-center justify-center py-6 opacity-50 bg-slate-100">
+               <span 
+                 className="text-lg font-black uppercase tracking-widest"
+                 style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+               >
+                 Unassigned
+               </span>
             </div>
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-w-0">
                <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-200 border-b-2 border-dashed border-slate-300">
