@@ -194,7 +194,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 onClick={onEnter}
                 className="group flex items-center justify-center gap-4 px-10 py-5 bg-slate-900 text-white rounded-2xl text-lg font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95"
               >
-                Launch Console
+                Institutional Google ID
                 <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
               </button>
               <button
