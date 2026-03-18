@@ -104,6 +104,7 @@ const App: React.FC = () => {
   // --- INITIAL DATA LOAD ---
   const loadAllData = useCallback(async () => {
     try {
+      console.log('[APP DEBUG] Starting loadAllData...');
       const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, mappingsData, activitiesData, groupsData] = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
@@ -116,6 +117,7 @@ const App: React.FC = () => {
         gateway.getActivities(),
         gateway.getAuditGroups()
       ]);
+      console.log('[APP DEBUG] loadAllData Promise.all completed successfully');
 
       // KPI targets are optional during schema rollout; don't block the app if missing
       let kpiTargetsData: KPITierTarget[] = [];
