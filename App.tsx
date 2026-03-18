@@ -2133,7 +2133,7 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-4">
             <span className="font-mono">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</span>
-            <span>© {new Date().getFullYear()} SMK St. Thomas. All rights reserved.</span>
+            <span>© {new Date().getFullYear()} Politeknik Kuching Sarawak. All rights reserved.</span>
           </div>
         </footer>
       </div>
