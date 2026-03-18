@@ -630,36 +630,43 @@ class DataGateway {
   async getKPITiers(): Promise<KPITier[]> {
     if (supabase) {
       try {
-        // Get basic tier data first
+        console.log('[DEBUG] Starting getKPITiers - using separate queries approach');
+        
+        // Get basic tier data first - NO RELATIONSHIPS
         const { data: tiersData, error: tiersError } = await supabase
           .from('kpi_tiers')
           .select('*');
         
         if (tiersError) {
-          console.error('Error fetching KPI tiers:', tiersError);
+          console.error('[ERROR] Error fetching KPI tiers:', tiersError);
           throw tiersError;
         }
         
-        // Get targets separately and combine manually
+        console.log('[DEBUG] Successfully fetched tiers:', tiersData?.length || 0);
+        
+        // Get targets separately - COMPLETELY INDEPENDENT QUERY
         let targetsData: any[] = [];
         try {
+          console.log('[DEBUG] Fetching targets from kpi_tier_targets table...');
           const { data: targets, error: targetsError } = await supabase
             .from('kpi_tier_targets')
             .select('*');
           
           if (targetsError) {
-            console.warn('KPI targets table not available or error:', targetsError);
+            console.warn('[WARN] KPI targets table error:', targetsError);
+            console.warn('[WARN] This is expected during initial setup or if table doesn\'t exist');
             // Continue without targets - this is expected during initial setup
           } else {
             targetsData = targets || [];
+            console.log('[DEBUG] Successfully fetched targets:', targetsData.length);
           }
         } catch (targetErr) {
-          console.warn("KPI targets failed to load (non-fatal):", targetErr);
+          console.warn("[WARN] KPI targets failed to load (non-fatal):", targetErr);
           // Continue without targets
         }
 
-        // Combine tiers with their targets manually
-        return (tiersData || []).map((tier: any) => {
+        // Combine tiers with their targets manually - NO DATABASE RELATIONSHIPS
+        const result = (tiersData || []).map((tier: any) => {
           const tierTargets = targetsData.filter(t => t.tier_id === tier.id);
           return {
             ...tier,
@@ -671,8 +678,17 @@ class DataGateway {
             }, {})
           };
         });
+        
+        console.log('[DEBUG] Successfully processed KPI tiers with targets:', result.length);
+        return result;
       } catch (error) {
-        console.error('Critical error in getKPITiers:', error);
+        console.error('[CRITICAL] Critical error in getKPITiers:', error);
+        console.error('[CRITICAL] Error details:', {
+          message: error?.message,
+          hint: error?.hint,
+          details: error?.details,
+          code: error?.code
+        });
         throw error;
       }
     }
