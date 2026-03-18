@@ -58,7 +58,12 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
                 <div className="flex justify-between w-full mb-2">
                   <span className={`text-[10px] uppercase font-bold tracking-wider ${isSelected ? 'text-slate-400' : 'text-slate-400'}`}>Rank #{idx + 1}</span>
                 </div>
-                <span className="truncate w-full text-left mb-3 text-base">{entity.name}</span>
+                <span className={`truncate w-full text-left text-base ${entity.isJoint && entity.members?.length > 0 ? 'mb-1' : 'mb-3'}`}>{entity.name}</span>
+                {entity.isJoint && entity.members && entity.members.length > 0 && (
+                  <span className={`truncate w-full text-left mb-3 text-[9px] font-black uppercase tracking-wider ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                    {entity.members.map((m: any) => m.abbr).filter(Boolean).join(', ')}
+                  </span>
+                )}
 
                 <div className={`flex gap-4 w-full border-t pt-3 ${isSelected ? 'border-white/10' : 'border-slate-100'}`}>
                   <div className="flex flex-col">

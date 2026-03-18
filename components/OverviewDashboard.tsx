@@ -138,12 +138,13 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       return {
         name,
         assets: totalAssets,
-        auditors: 1, // Placeholder
-        memberCount: 2, // Placeholder
+        auditors: 0, // System currently relies on assets for ranking
+        memberCount: depts.length,
         isJoint: depts.length > 1,
-        id: groupId
+        id: groupId,
+        members: depts
       };
-    }).sort((a, b) => b.assets - a.assets);
+    }).filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
   }, [departments, auditGroups]);
 
   const activePhase = useMemo(() => {
