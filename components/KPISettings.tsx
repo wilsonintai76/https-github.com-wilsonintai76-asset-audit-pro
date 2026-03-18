@@ -1,8 +1,8 @@
 
 import React, { useMemo, useState } from 'react';
-import { KPITier, AuditPhase, KPITierTarget } from '../types';
+import { KPITier, AuditPhase, KPITierTarget, Department } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Lock, Plus, Check, X, Pencil, Trash2 } from 'lucide-react';
+import { Lock, Plus, Check, X, Pencil, Trash2, Boxes } from 'lucide-react';
 
 interface KPISettingsProps {
   tiers: KPITier[];
@@ -104,6 +104,30 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
 
 
 
+  const autoBalanceTiers = () => {
+    let maxGlobalAssets = 0;
+    const validDepts = departments.filter(d => (d.totalAssets || 0) > 0);
+    validDepts.forEach(d => {
+      if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
+    });
+
+    if (maxGlobalAssets === 0 || sortedTiers.length < 3) return;
+
+    validDepts.sort((a,b) => (a.totalAssets || 0) - (b.totalAssets || 0));
+    const idx33 = Math.floor(validDepts.length * 0.33);
+    const idx66 = Math.floor(validDepts.length * 0.66);
+    
+    const val33 = validDepts[idx33]?.totalAssets || 0;
+    const val66 = validDepts[idx66]?.totalAssets || 0;
+    
+    const p33 = Math.max(1, Math.round((val33 / maxGlobalAssets) * 100));
+    const p66 = Math.max(p33 + 1, Math.round((val66 / maxGlobalAssets) * 100));
+    
+    // Save to database
+    onUpdateTier(sortedTiers[1].id, { minAssets: p33 });
+    onUpdateTier(sortedTiers[2].id, { minAssets: p66 });
+  };
+
   const handleDeleteClick = (id: string) => {
     setTierToDelete(id);
   };
@@ -121,10 +145,16 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
         <div>
           <h3 className="text-xl font-bold text-slate-900">Completion KPI Targets</h3>
           <p className="text-sm text-slate-500">
-            Asset tiers are automatically created when you add an audit phase.
+            Set percentage boundaries to group your departments into Small, Medium, and Large.
           </p>
         </div>
-
+        <button 
+          onClick={autoBalanceTiers}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-100/50 hover:bg-slate-100 text-slate-700 rounded-xl font-bold text-[13px] transition-colors border border-slate-200 shadow-sm"
+        >
+          <Boxes className="w-4 h-4 text-blue-600" />
+          Auto-Balance Tiers
+        </button>
       </div>
 
       <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
