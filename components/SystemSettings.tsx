@@ -137,6 +137,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         tiers={kpiTiers}
         phases={phases}
         tierTargets={kpiTierTargets}
+        departments={departments}
         onAddTier={onAddKPITier}
         onUpdateTier={onUpdateKPITier}
         onDeleteTier={onDeleteKPITier}

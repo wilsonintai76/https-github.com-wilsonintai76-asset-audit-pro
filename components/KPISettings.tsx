@@ -12,12 +12,14 @@ interface KPISettingsProps {
   onUpdateTier: (id: string, updates: Partial<KPITier>) => void;
   onDeleteTier: (id: string) => void;
   onUpdateTarget: (tierId: string, phaseId: string, percentage: number) => void;
+  departments: Department[];
 }
 
 export const KPISettings: React.FC<KPISettingsProps> = ({
   tiers,
   phases,
   tierTargets,
+  departments,
   onAddTier,
   onUpdateTier,
   onDeleteTier,
@@ -162,6 +164,18 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                          <div className="flex items-center justify-center">
                            <input 
                               type="number"
+                    // Calculate asset count for each tier
+                    const tierAssetCounts = useMemo(() => {
+                      return sortedTiers.map((tier, idx) => {
+                        const nextTier = sortedTiers[idx + 1];
+                        const min = tier.minAssets;
+                        const max = nextTier ? nextTier.minAssets - 1 : Infinity;
+                        const count = departments
+                          .filter(d => (d.totalAssets || 0) >= min && (d.totalAssets || 0) <= max)
+                          .reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                        return count;
+                      });
+                    }, [departments, sortedTiers]);
                               min="0"
                               max="100"
                               className="w-12 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center focus:ring-2 focus:ring-blue-500/20"
