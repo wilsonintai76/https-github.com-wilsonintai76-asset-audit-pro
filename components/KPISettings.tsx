@@ -140,7 +140,8 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden p-8 mt-8">
+    <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden mt-8 max-w-full">
+      <div className="p-8 pb-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h3 className="text-xl font-bold text-slate-900">Completion KPI Targets</h3>
@@ -290,6 +291,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
         onCancel={() => setTierToDelete(null)}
         variant="danger"
       />
+      </div>
     </div>
   );
 };
