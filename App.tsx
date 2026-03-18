@@ -421,7 +421,7 @@ const App: React.FC = () => {
       if (savedSession) {
         try {
           const user = JSON.parse(savedSession);
-          if (user.email?.toLowerCase() === 'wilsonintai76@gmail.com') {
+          if (user.email?.toLowerCase() === 'wilsonintai76@gmail.com' || user.email?.toLowerCase() === 'wilsonintai@gmail.com') {
             user.roles = ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
             user.status = 'Active';
             user.isVerified = true;

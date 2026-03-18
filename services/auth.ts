@@ -69,7 +69,7 @@ export const authService = {
       
       console.log("[Auth] Validating email:", userEmail);
       
-      const isAllowedEmail = userEmail.endsWith(`@${allowedDomain}`) || userEmail === 'wilsonintai76@gmail.com';
+      const isAllowedEmail = userEmail.endsWith(`@${allowedDomain}`) || userEmail === 'wilsonintai76@gmail.com' || userEmail === 'wilsonintai@gmail.com';
 
       if (!isAllowedEmail) {
         console.warn("[Auth] Domain not allowed:", userEmail);
@@ -102,7 +102,7 @@ export const authService = {
         const defaultDeptId = depts && depts.length > 0 ? depts[0].id : null;
 
         // Auto-create profile if it doesn't exist
-        const isMasterAdmin = authUser.email === 'wilsonintai76@gmail.com';
+        const isMasterAdmin = authUser.email === 'wilsonintai76@gmail.com' || authUser.email === 'wilsonintai@gmail.com';
         const isInstitutionalUser = userEmail.endsWith(`@${allowedDomain}`);
         
         const newProfile = {
