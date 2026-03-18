@@ -219,9 +219,9 @@ const App: React.FC = () => {
   }, [loadAllData]);
 
   // --- ROLE CHECKS ---
-  const isAdmin = currentUser?.roles.includes('Admin') || false;
-  const isCoordinator = currentUser?.roles.includes('Coordinator') || false;
-  const isSupervisor = currentUser?.roles.includes('Supervisor') || false;
+  const isAdmin = (currentUser?.roles || []).includes('Admin');
+  const isCoordinator = (currentUser?.roles || []).includes('Coordinator');
+  const isSupervisor = (currentUser?.roles || []).includes('Supervisor');
 
   // --- COMPUTED VALUES ---
   const departmentsWithAssets = useMemo(() => {
@@ -318,7 +318,7 @@ const App: React.FC = () => {
 
     // Default view logic
     const isCertified = finalUser.certificationExpiry && new Date(finalUser.certificationExpiry) > new Date();
-    const isAdmin = finalUser.roles.includes('Admin');
+    const isAdmin = (finalUser.roles || []).includes('Admin');
 
     if (finalUser.mustChangePIN) {
       setViewState('app');
@@ -329,7 +329,7 @@ const App: React.FC = () => {
     } else if (!isAdmin && isCertified) {
       setViewState('app');
       setActiveView('auditor-dashboard');
-    } else if (!isAdmin && !finalUser.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+    } else if (!isAdmin && !(finalUser.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
       setViewState('app');
       setActiveView('profile');
     } else {
@@ -430,12 +430,12 @@ const App: React.FC = () => {
           setCurrentUser(user);
           setViewState('app');
           const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
-          const isAdmin = user.roles.includes('Admin');
+          const isAdmin = (user.roles || []).includes('Admin');
           if (user.status === 'Pending') {
             setActiveView('profile');
           } else if (!isAdmin && isCertified) {
             setActiveView('auditor-dashboard');
-          } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+          } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
             setActiveView('profile');
           } else {
             setActiveView('overview');
@@ -480,10 +480,10 @@ const App: React.FC = () => {
               setActiveView('profile');
             } else {
               const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
-              const isAdmin = user.roles.includes('Admin');
+              const isAdmin = (user.roles || []).includes('Admin');
               if (!isAdmin && isCertified) {
                 setActiveView('auditor-dashboard');
-              } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+              } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
                 setActiveView('profile');
               } else {
                 setActiveView('overview');
