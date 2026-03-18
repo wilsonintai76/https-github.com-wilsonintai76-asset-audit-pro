@@ -145,6 +145,9 @@ export const authService = {
 function mapProfileToUser(profile: any): User {
   const result = { ...profile };
   
+  // Always ensure roles is a valid array — DB can return null for new users
+  result.roles = Array.isArray(result.roles) && result.roles.length > 0 ? result.roles : ['Staff'];
+
   if (result.contact_number) result.contactNumber = result.contact_number;
   if (result.is_verified !== undefined) result.isVerified = result.is_verified;
   if (result.last_active) result.lastActive = result.last_active;
