@@ -789,10 +789,9 @@ const App: React.FC = () => {
       if (schedule && isAuditLocked(schedule) && (updates.phaseId || updates.departmentId || updates.locationId)) {
         throw new Error("Locked audits cannot have their phase, department, or location changed.");
       }
-        // Only update the selected tier's minAssets
-        await gateway.updateKPITier(id, updates);
-        setKpiTiers(await gateway.getKPITiers());
-        showToast('KPI Tier updated');
+        await gateway.updateAudit(id, updates);
+        setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+        showToast('Audit updated successfully');
     } catch (e) {
       showError(e, 'Audit Update Failed');
     }
@@ -1474,8 +1473,16 @@ const App: React.FC = () => {
       const updatedTiers = [...currentTiers];
       updatedTiers[tierIndex] = { ...updatedTiers[tierIndex], ...updates };
 
-      // Cascading logic: Adjust subsequent tiers
-      for (let i = tierIndex; i < updatedTiers.length - 1; i++) {
+      if (tierIndex > 0 && updates.minAssets !== undefined) {
+        // Adjust the previous tier's maxAssets to connect to this new minAssets
+        updatedTiers[tierIndex - 1] = {
+           ...updatedTiers[tierIndex - 1],
+           maxAssets: Math.max(0, updates.minAssets - 1)
+        };
+      }
+
+      // Cascading logic: Adjust subsequent tiers to ensure contiguity
+      for (let i = 0; i < updatedTiers.length - 1; i++) {
         const currentTier = updatedTiers[i];
         const nextTier = updatedTiers[i + 1];
         
