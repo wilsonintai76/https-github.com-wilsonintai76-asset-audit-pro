@@ -169,7 +169,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                   <span className="text-[9px] font-normal opacity-70">Target %</span>
                 </th>
               ))}
-              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Actions</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right sticky right-0 bg-slate-50/80">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -247,7 +247,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                   ))}
 
                   {/* Actions */}
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 text-right sticky right-0 bg-white">
                     {isEditing ? (
                       <div className="flex justify-end gap-2">
                         <button onClick={saveEdit} className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-lg shadow-blue-500/20">

@@ -38,11 +38,11 @@ interface DepartmentManagementProps {
   onAutoConsolidate?: (threshold: number, excludedIds: string[]) => Promise<void>;
 }
 
-export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ 
-  departments, 
-  onAdd, 
-  onUpdate, 
-  onDelete, 
+export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
+  departments,
+  onAdd,
+  onUpdate,
+  onDelete,
   users,
   isAdmin = true,
   phases = [],
@@ -104,7 +104,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     const eligible = departments
       .filter(d => !excludedIds.includes(d.id) && !d.auditGroupId && (d.totalAssets || 0) > 0)
       .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
-    
+
     let groups = 0, running = 0;
     for (const d of eligible) {
       running += d.totalAssets || 0;
@@ -146,13 +146,12 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
         description="Configure institutional structure, departments, and unit heads."
       >
         {isAdmin && (
-          <button 
-            onClick={startAdd} 
-            className={`px-5 py-2.5 rounded-2xl text-sm font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${
-              activePhase 
-                ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20 shadow-none' 
+          <button
+            onClick={startAdd}
+            className={`px-5 py-2.5 rounded-2xl text-sm font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${activePhase
+                ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20 shadow-none'
                 : 'bg-blue-600 text-white shadow-blue-500/20 hover:bg-blue-700'
-            }`}
+              }`}
           >
             <Plus className="w-4 h-4" />
             New Dept
@@ -231,7 +230,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                 const colorClass = AVATAR_COLORS[getColorIndex(dept.name) % AVATAR_COLORS.length];
                 const headUser = users.find(u => u.id === dept.headOfDeptId);
                 const isExcluded = excludedIds.includes(dept.id);
-                
+
                 return (
                   <tr key={dept.id} className={`hover:bg-slate-50/50 transition-colors ${isExcluded ? 'opacity-60' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -289,11 +288,10 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                           <button
                             onClick={() => toggleExclude(dept.id)}
                             title={isExcluded ? 'Click to include in auto-grouping' : 'Click to exclude from auto-grouping'}
-                            className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-colors ${
-                              isExcluded 
-                                ? 'bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100' 
+                            className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-colors ${isExcluded
+                                ? 'bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100'
                                 : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200'
-                            }`}
+                              }`}
                           >
                             <Ban className="w-4 h-4" />
                           </button>
