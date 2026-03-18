@@ -1919,7 +1919,7 @@ const App: React.FC = () => {
   const visibleLocations = isAdmin ? locations : locations.filter(l => l.departmentId === currentUser.departmentId);
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -1931,7 +1931,7 @@ const App: React.FC = () => {
         userStatus={currentUser.status}
       />
 
-      <div className="flex-grow lg:pl-72 flex flex-col min-h-screen w-full overflow-x-hidden">
+      <div className="flex-grow lg:pl-72 flex flex-col h-full min-w-0">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600">
@@ -1970,7 +1970,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className={`flex-grow p-4 md:p-8 w-full flex flex-col min-h-0`}>
+        <main className={`flex-grow p-4 md:p-8 w-full flex flex-col min-h-0 overflow-y-auto`}>
           {connectionErrorMessage && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="w-5 h-5 shrink-0" />
