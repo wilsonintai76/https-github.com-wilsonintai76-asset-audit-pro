@@ -225,7 +225,16 @@ class DataGateway {
     if (supabase) {
       const payload = this.mapUserToDB(updates);
       // Try updating by ID first
-      const { data, error } = await supabase.from('users').update(payload).eq('id', id).select();
+      let { data, error } = await supabase.from('users').update(payload).eq('id', id).select();
+      
+      // Handle Supabase Schema Cache Staleness (PGRST204) for 'roles' column
+      if (error && String(error.code) === 'PGRST204' && String(error.message).includes('roles')) {
+        console.warn("[DataGateway] Supabase schema cache stale for 'roles'. Retrying without roles...");
+        delete payload.roles;
+        const retry = await supabase.from('users').update(payload).eq('id', id).select();
+        data = retry.data;
+        error = retry.error;
+      }
       
       // If no rows were affected and we have an email, try updating by email as a fallback
       // (This handles cases where the user's ID changed but email remained the same)
