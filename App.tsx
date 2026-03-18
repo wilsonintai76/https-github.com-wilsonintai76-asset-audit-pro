@@ -509,11 +509,30 @@ const App: React.FC = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase?.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        const user = await authService.getCurrentUser();
-        if (user) {
-          setCurrentUser(user);
-          setViewState('app');
-        } else {
+        try {
+          const user = await authService.getCurrentUser();
+          if (user) {
+            setCurrentUser(user);
+            setViewState('app');
+            // Route to the correct view based on user state
+            if (user.status === 'Pending') {
+              setActiveView('profile');
+            } else {
+              const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
+              const isAdmin = user.roles.includes('Admin');
+              if (!isAdmin && isCertified) {
+                setActiveView('auditor-dashboard');
+              } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+                setActiveView('profile');
+              } else {
+                setActiveView('overview');
+              }
+            }
+          } else {
+            fallbackToLocalSession();
+          }
+        } catch (err) {
+          console.error('[Auth] SIGNED_IN handler failed:', err);
           fallbackToLocalSession();
         }
       } else if (event === 'SIGNED_OUT') {
