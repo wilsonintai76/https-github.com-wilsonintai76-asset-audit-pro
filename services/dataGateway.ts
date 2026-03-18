@@ -629,43 +629,40 @@ class DataGateway {
   // --- KPI TIERS ---
   async getKPITiers(): Promise<KPITier[]> {
     if (supabase) {
-      // Prefer joined targets when the relationship exists (new schema).
-      // Fallback to plain select when the join/table doesn't exist yet in the deployed DB.
-      let data: any[] | null = null;
-      let error: any = null;
-      const joined = await supabase
+      // Get basic tier data first
+      const { data: tiersData, error: tiersError } = await supabase
         .from('kpi_tiers')
-        .select('*, kpi_tier_targets(phase_id, target_percentage)');
-      data = joined.data as any;
-      error = joined.error as any;
-
-      if (error) {
-        const msg = String(error?.message || error);
-        const hint = String(error?.hint || '');
-        const details = String(error?.details || '');
-        const combined = `${msg} ${hint} ${details}`.toLowerCase();
-
-        // Common cases during rollout: missing table, missing relationship, legacy schema
-        if (combined.includes('kpi_tier_targets') || combined.includes('does not exist') || combined.includes('relationship')) {
-          const fallback = await supabase.from('kpi_tiers').select('*');
-          if (fallback.error) throw fallback.error;
-          data = fallback.data as any;
-        } else {
-          throw error;
-        }
+        .select('*');
+      
+      if (tiersError) throw tiersError;
+      
+      // Get targets separately and combine manually
+      let targetsData: any[] = [];
+      try {
+        const { data: targets } = await supabase
+          .from('kpi_tier_targets')
+          .select('*');
+        targetsData = targets || [];
+      } catch (targetErr) {
+        console.warn("KPI targets failed to load (non-fatal):", targetErr);
+        // Continue without targets
       }
 
-      return (data || []).map((t: any) => ({
-        ...t,
-        minAssets: t.min_assets,
-        maxAssets: t.max_assets,
-        targets: (t.kpi_tier_targets || []).reduce((acc: Record<string, number>, row: any) => {
-          if (row?.phase_id) acc[row.phase_id] = row.target_percentage ?? 0;
-          return acc;
-        }, {})
-      })) as KPITier[];
+      // Combine tiers with their targets manually
+      return (tiersData || []).map((tier: any) => {
+        const tierTargets = targetsData.filter(t => t.tier_id === tier.id);
+        return {
+          ...tier,
+          minAssets: tier.min_assets,
+          maxAssets: tier.max_assets,
+          targets: tierTargets.reduce((acc: Record<string, number>, row: any) => {
+            if (row?.phase_id) acc[row.phase_id] = row.target_percentage ?? 0;
+            return acc;
+          }, {})
+        };
+      });
     }
-    return [];
+    throw new Error("Supabase client not initialized");
   }
 
   async addKPITier(tier: Omit<KPITier, 'id'>) {
