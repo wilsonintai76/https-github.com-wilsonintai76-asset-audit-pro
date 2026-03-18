@@ -2123,6 +2123,19 @@ const App: React.FC = () => {
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
           {activeView === 'knowledge-base' && <KnowledgeBase phases={auditPhases} />}
         </main>
+
+        {/* Global Footer */}
+        <footer className="shrink-0 border-t border-slate-100 bg-white/80 backdrop-blur-sm px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+            <span className="font-semibold text-slate-500">Inspect-<span className="text-blue-500">able</span></span>
+            <span className="hidden sm:inline">— Institutional Asset Audit Platform</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="font-mono">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</span>
+            <span>© {new Date().getFullYear()} SMK St. Thomas. All rights reserved.</span>
+          </div>
+        </footer>
       </div>
 
       {/* Custom Confirm Modal */}
