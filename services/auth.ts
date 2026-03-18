@@ -49,13 +49,17 @@ export const authService = {
       if (!supabase) return null;
       
       console.log("[Auth] Checking current auth user...");
-      const { data: { user: authUser }, error: userError } = await Promise.race([
-        supabase.auth.getUser(),
-        timeout(60000)
+      // Use getSession() instead of getUser() — getSession reads from local storage
+      // and does NOT make a blocking network call (avoids Cloudflare Workers timeout).
+      const { data: { session }, error: sessionError } = await Promise.race([
+        supabase.auth.getSession(),
+        timeout(8000)
       ]) as any;
 
-      if (userError || !authUser) {
-        console.log("[Auth] No authenticated user found");
+      const authUser = session?.user ?? null;
+
+      if (sessionError || !authUser) {
+        console.log("[Auth] No authenticated session found");
         return null;
       }
 
