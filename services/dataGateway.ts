@@ -630,80 +630,73 @@ class DataGateway {
   async getKPITiers(): Promise<KPITier[]> {
     if (supabase) {
       try {
-        console.log('[DEBUG] Starting getKPITiers - trying fallback view first');
+        console.log('[DEBUG] Starting getKPITiers - emergency approach');
         
-        // Try the fallback view first (bypasses all relationship issues)
+        // EMERGENCY: Try the simplest possible approach first
         try {
-          const { data: viewData, error: viewError } = await supabase
-            .from('kpi_tiers_with_targets')
+          const { data: simpleData, error: simpleError } = await supabase
+            .from('kpi_tiers_simple')
             .select('*');
           
-          if (!viewError && viewData) {
-            console.log('[DEBUG] Successfully used fallback view:', viewData.length);
-            return viewData.map((tier: any) => ({
+          if (!simpleError && simpleData) {
+            console.log('[DEBUG] Successfully used simple view:', simpleData.length);
+            // Get targets separately and combine
+            try {
+              const { data: targets, error: targetsError } = await supabase
+                .from('kpi_tier_targets')
+                .select('*');
+              
+              if (!targetsError && targets) {
+                return simpleData.map((tier: any) => {
+                  const tierTargets = targets.filter(t => t.tier_id === tier.id);
+                  return {
+                    ...tier,
+                    minAssets: tier.min_assets,
+                    maxAssets: tier.max_assets,
+                    targets: tierTargets.reduce((acc: Record<string, number>, row: any) => {
+                      if (row?.phase_id) acc[row.phase_id] = row.target_percentage ?? 0;
+                      return acc;
+                    }, {})
+                  };
+                });
+              }
+            } catch (targetErr) {
+              console.warn('[WARN] Could not fetch targets, returning tiers only:', targetErr);
+            }
+            
+            // Return tiers without targets if targets fail
+            return simpleData.map((tier: any) => ({
               ...tier,
               minAssets: tier.min_assets,
               maxAssets: tier.max_assets,
-              targets: tier.targets || {}
+              targets: {}
             }));
           }
-        } catch (viewErr) {
-          console.warn('[WARN] Fallback view not available, trying separate queries:', viewErr);
+        } catch (simpleErr) {
+          console.warn('[WARN] Simple view not available:', simpleErr);
         }
         
-        console.log('[DEBUG] Fallback to separate queries approach');
-        
-        // Get basic tier data first - NO RELATIONSHIPS
-        const { data: tiersData, error: tiersError } = await supabase
+        // ULTIMATE FALLBACK: Get only basic tiers, no targets at all
+        console.log('[DEBUG] Ultimate fallback - basic tiers only');
+        const { data: basicData, error: basicError } = await supabase
           .from('kpi_tiers')
-          .select('*');
+          .select('id, name, min_assets, max_assets');
         
-        if (tiersError) {
-          console.error('[ERROR] Error fetching KPI tiers:', tiersError);
-          throw tiersError;
+        if (basicError) {
+          console.error('[ERROR] Even basic query failed:', basicError);
+          throw basicError;
         }
         
-        console.log('[DEBUG] Successfully fetched tiers:', tiersData?.length || 0);
+        console.log('[DEBUG] Successfully fetched basic tiers:', basicData?.length || 0);
+        return (basicData || []).map((tier: any) => ({
+          ...tier,
+          minAssets: tier.min_assets,
+          maxAssets: tier.max_assets,
+          targets: {}  // Empty targets object
+        }));
         
-        // Get targets separately - COMPLETELY INDEPENDENT QUERY
-        let targetsData: any[] = [];
-        try {
-          console.log('[DEBUG] Fetching targets from kpi_tier_targets table...');
-          const { data: targets, error: targetsError } = await supabase
-            .from('kpi_tier_targets')
-            .select('*');
-          
-          if (targetsError) {
-            console.warn('[WARN] KPI targets table error:', targetsError);
-            console.warn('[WARN] This is expected during initial setup or if table doesn\'t exist');
-            // Continue without targets - this is expected during initial setup
-          } else {
-            targetsData = targets || [];
-            console.log('[DEBUG] Successfully fetched targets:', targetsData.length);
-          }
-        } catch (targetErr) {
-          console.warn("[WARN] KPI targets failed to load (non-fatal):", targetErr);
-          // Continue without targets
-        }
-
-        // Combine tiers with their targets manually - NO DATABASE RELATIONSHIPS
-        const result = (tiersData || []).map((tier: any) => {
-          const tierTargets = targetsData.filter(t => t.tier_id === tier.id);
-          return {
-            ...tier,
-            minAssets: tier.min_assets,
-            maxAssets: tier.max_assets,
-            targets: tierTargets.reduce((acc: Record<string, number>, row: any) => {
-              if (row?.phase_id) acc[row.phase_id] = row.target_percentage ?? 0;
-              return acc;
-            }, {})
-          };
-        });
-        
-        console.log('[DEBUG] Successfully processed KPI tiers with targets:', result.length);
-        return result;
       } catch (error) {
-        console.error('[CRITICAL] Critical error in getKPITiers:', error);
+        console.error('[CRITICAL] All approaches failed in getKPITiers:', error);
         console.error('[CRITICAL] Error details:', {
           message: error?.message,
           hint: error?.hint,
