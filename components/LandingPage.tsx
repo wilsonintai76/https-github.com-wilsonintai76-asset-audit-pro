@@ -145,7 +145,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Knowledge Base
             </button>
             <div className="hidden lg:block h-6 w-px bg-slate-200"></div>
-            <span className="hidden lg:block text-[10px] font-black uppercase text-slate-400 tracking-widest">v2.5 Institutional Edition</span>
+            <span className="hidden lg:block text-[10px] font-black uppercase text-slate-400 tracking-widest">v{import.meta.env.VITE_APP_VERSION || '1.0.0'} Institutional Edition</span>
           </div>
         </div>
       </nav>
