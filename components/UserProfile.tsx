@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { User, Department } from '../types';
+import { User, Department, UserRole } from '../types';
 import { Mail, CheckCircle2, User as UserIcon, Phone, Info, Loader2, Award, AlertCircle, RotateCw, Shield, KeyRound } from 'lucide-react';
 
 interface UserProfileProps {
@@ -13,10 +13,23 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
   const [formData, setFormData] = useState({
     name: user.name || '',
     contactNumber: user.contactNumber || '',
-    departmentId: user.departmentId || ''
+    departmentId: user.departmentId || '',
+    designation: user.designation || 'Staff',
   });
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // If department and contact are filled, the user has completed their profile
+  const isProfileComplete = Boolean(user.departmentId && user.contactNumber);
+
+  const getRolesForDesignation = (designation: string) => {
+    switch (designation) {
+      case 'Head Of Department': return ['Staff'];
+      case 'Coordinator': return ['Coordinator'];
+      case 'Supervisor': return ['Supervisor'];
+      case 'Staff': default: return ['Staff'];
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +37,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
     setIsSaving(true);
     
     try {
-      const updates: Partial<User> = { ...formData };
+      const updates: Partial<User> = { 
+        ...formData,
+        roles: getRolesForDesignation(formData.designation) as UserRole[] 
+      };
       
       if (user.status === 'Pending') {
         updates.status = 'Active';
@@ -75,14 +91,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
         </div>
 
         <div className="pt-16 pb-8 px-8">
-          {user.status === 'Pending' && (
+          {user.status === 'Pending' && !isProfileComplete && (
             <div className="mb-6 flex items-start gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
               <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
                 <Info className="w-5 h-5" />
               </div>
               <div>
                 <p className="text-sm font-black text-amber-800">Account Pending Approval</p>
-                <p className="text-xs text-amber-700 mt-0.5">Your account is currently pending administrator approval. You can update your profile details in the meantime.</p>
+                <p className="text-xs text-amber-700 mt-0.5">Your account is currently pending administrator approval. Please complete your profile details below to continue.</p>
               </div>
             </div>
           )}
@@ -93,6 +109,12 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                 <Mail className="w-3 h-3 text-blue-500" />
                 {user.email}
               </p>
+              {isProfileComplete && (
+                <p className="text-slate-500 font-medium flex items-center gap-2 mt-1">
+                  <Phone className="w-3 h-3 text-blue-500" />
+                  {user.contactNumber}
+                </p>
+              )}
             </div>
             <div className="px-3 py-1 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
               <CheckCircle2 className="w-3 h-3" />
@@ -102,91 +124,139 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
 
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Official Display Name</label>
-                    <div className="relative group">
-                      <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
-                      <input 
-                        required
-                        type="text"
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-                        placeholder="Enter your full legal name"
-                        value={formData.name}
-                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                      />
+              {!isProfileComplete ? (
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Official Display Name</label>
+                      <div className="relative group">
+                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
+                        <input 
+                          required
+                          type="text"
+                          className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+                          placeholder="Enter your full legal name"
+                          value={formData.name}
+                          onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Personal Contact Number</label>
+                      <div className="relative group">
+                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
+                        <input 
+                          required
+                          type="tel"
+                          className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+                          placeholder="+1 (555) 000-0000"
+                          value={formData.contactNumber}
+                          onChange={e => setFormData({ ...formData, contactNumber: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Designation</label>
+                      <div className="relative group">
+                        <select 
+                          required
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all appearance-none"
+                          value={formData.designation}
+                          onChange={e => setFormData({ ...formData, designation: e.target.value })}
+                        >
+                          <option value="Staff">Staff</option>
+                          <option value="Supervisor">Supervisor</option>
+                          <option value="Coordinator">Coordinator</option>
+                          <option value="Head Of Department">Head Of Department</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Department</label>
+                      <div className="relative group">
+                        <select 
+                          required
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all appearance-none"
+                          value={formData.departmentId}
+                          onChange={e => setFormData({ ...formData, departmentId: e.target.value })}
+                        >
+                          <option value="">Select Department</option>
+                          {departments.map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Personal Contact Number</label>
-                    <div className="relative group">
-                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
-                      <input 
-                        required
-                        type="tel"
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
-                        placeholder="+1 (555) 000-0000"
-                        value={formData.contactNumber}
-                        onChange={e => setFormData({ ...formData, contactNumber: e.target.value })}
-                      />
+                  <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100/50 flex items-start gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                      <Info className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-blue-900 mb-1">Account Metadata</h4>
+                      <p className="text-[10px] text-blue-700/70 leading-relaxed font-medium">
+                        Assigned Department: <strong>{departments.find(d => d.id === user.departmentId)?.name || 'General'}</strong><br/>
+                        Designation: <strong>{user.designation || 'Staff'}</strong><br/>
+                        Roles: <strong>{user.roles.join(', ')}</strong><br/>
+                        Last Login: <strong>{user.lastActive}</strong>
+                      </p>
                     </div>
                   </div>
 
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Department</label>
-                    <div className="relative group">
-                      <select 
-                        required
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all appearance-none"
-                        value={formData.departmentId}
-                        onChange={e => setFormData({ ...formData, departmentId: e.target.value })}
-                      >
-                        <option value="">Select Department</option>
-                        {departments.map(d => (
-                          <option key={d.id} value={d.id}>{d.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100/50 flex items-start gap-4">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                    <Info className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-blue-900 mb-1">Account Metadata</h4>
-                    <p className="text-[10px] text-blue-700/70 leading-relaxed font-medium">
-                      Assigned Department: <strong>{departments.find(d => d.id === user.departmentId)?.name || 'General'}</strong><br/>
-                      Roles: <strong>{user.roles.join(', ')}</strong><br/>
-                      Last Login: <strong>{user.lastActive}</strong>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
-                  <button 
-                    type="submit"
-                    disabled={isSaving}
-                    className="flex items-center gap-3 px-8 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95 disabled:opacity-50"
-                  >
-                    {isSaving ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
-                    ) : (
-                      <>Save Changes</>
+                  <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
+                    <button 
+                      type="submit"
+                      disabled={isSaving}
+                      className="flex items-center gap-3 px-8 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95 disabled:opacity-50"
+                    >
+                      {isSaving ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+                      ) : (
+                        <>Complete Profile Setup</>
+                      )}
+                    </button>
+                    
+                    {showSuccess && (
+                      <div className="flex items-center gap-2 text-emerald-600 text-sm font-bold animate-in fade-in slide-in-from-left-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Profile updated successfully
+                      </div>
                     )}
-                  </button>
-                  
-                  {showSuccess && (
-                    <div className="flex items-center gap-2 text-emerald-600 text-sm font-bold animate-in fade-in slide-in-from-left-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Profile updated successfully
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-6">
+                  <div className="bg-emerald-50/80 rounded-2xl p-6 border border-emerald-100/80 flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+                      <CheckCircle2 className="w-5 h-5" />
                     </div>
-                  )}
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-900 mb-2">Profile Completed</h4>
+                      <p className="text-xs text-emerald-700/80 leading-relaxed font-medium mb-4">
+                        Your profile has been fully set up. If you need to change your Official Name, Department, or Designation, please contact the system administrator.
+                      </p>
+                      <div className="grid grid-cols-2 gap-4 text-[11px]">
+                        <div>
+                          <span className="text-emerald-600/60 font-bold uppercase tracking-wider block mb-1">Department</span>
+                          <span className="font-semibold text-emerald-900">{departments.find(d => d.id === user.departmentId)?.name || 'General'}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-600/60 font-bold uppercase tracking-wider block mb-1">Designation</span>
+                          <span className="font-semibold text-emerald-900">{user.designation || 'Staff'}</span>
+                        </div>
+                        <div>
+                          <span className="text-emerald-600/60 font-bold uppercase tracking-wider block mb-1">System Roles</span>
+                          <span className="font-semibold text-emerald-900">{user.roles.join(', ')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </form>
+              )}
             </div>
 
             <div className="space-y-6">
@@ -215,17 +285,21 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                       </div>
                     </div>
 
-                    <button 
-                      onClick={handleRenew}
-                      className="w-full py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all"
-                    >
-                      <RotateCw className="w-4 h-4 mr-2 inline-block" />
-                      Self-Renew Cert
-                    </button>
+                    {user.roles.includes('Admin') && (
+                      <>
+                        <button 
+                          onClick={handleRenew}
+                          className="w-full py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all"
+                        >
+                          <RotateCw className="w-4 h-4 mr-2 inline-block" />
+                          Self-Renew Cert
+                        </button>
 
-                    <p className="text-[9px] text-slate-400 font-medium leading-relaxed italic text-center">
-                      Manual renewal adds 1 year of validity from today.
-                    </p>
+                        <p className="text-[9px] text-slate-400 font-medium leading-relaxed italic text-center">
+                          Manual renewal adds 1 year of validity from today.
+                        </p>
+                      </>
+                    )}
                   </div>
                </div>
             </div>

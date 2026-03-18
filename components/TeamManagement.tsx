@@ -478,6 +478,22 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                             >
                               <Stamp className="w-4 h-4" />
                             </button>
+                            {user.certificationExpiry && (
+                              <button 
+                                onClick={() => {
+                                  customConfirm(
+                                    'Revoke Certification',
+                                    `Are you sure you want to revoke the institutional certification for ${user.name}? This action cannot be undone.`,
+                                    () => onUpdateMember(user.id, { certificationIssued: null as any, certificationExpiry: null as any }),
+                                    true
+                                  );
+                                }}
+                                className="w-9 h-9 flex items-center justify-center bg-rose-50 text-rose-600 border border-rose-100 rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                                title="Revoke Certification"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
                           </>
                         )}
                         {isAdmin && (
