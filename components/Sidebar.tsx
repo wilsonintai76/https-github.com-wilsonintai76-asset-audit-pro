@@ -178,10 +178,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
                 <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full w-full bg-emerald-500"></div>
                 </div>
-                <p className="text-[10px] text-emerald-300 mt-2 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                  Cloud Instance
-                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-[10px] text-emerald-300 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                    Cloud Instance
+                  </p>
+                  <span className="text-[10px] text-slate-500 font-mono font-medium">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</span>
+                </div>
               </div>
               <Database className="absolute -right-4 -bottom-4 text-white/5 w-24 h-24" />
             </div>
