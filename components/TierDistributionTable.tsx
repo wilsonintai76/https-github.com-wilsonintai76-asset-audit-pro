@@ -20,8 +20,16 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
   const sortedTiers = useMemo(() => [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets), [kpiTiers]);
 
   const tableData = useMemo(() => {
+    let maxGlobalAssets = 0;
+    for (const d of departments) {
+      if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
+    }
+
     return departments.map(dept => {
-      const tier = sortedTiers.find(t => (dept.totalAssets || 0) >= t.minAssets && (dept.totalAssets || 0) <= t.maxAssets);
+      const deptPercentage = maxGlobalAssets > 0 ? ((dept.totalAssets || 0) / maxGlobalAssets) * 100 : 0;
+      const tier = sortedTiers
+        .filter(t => deptPercentage >= t.minAssets)
+        .sort((a,b) => b.minAssets - a.minAssets)[0];
       const deptAudits = schedules.filter(s => s.departmentId === dept.id);
       
       const phaseStatus = sortedPhases.map(phase => {

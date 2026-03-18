@@ -109,7 +109,6 @@ export interface KPITier {
   id: string;
   name: string;
   minAssets: number;
-  maxAssets: number;
   targets?: Record<string, number>; // phaseId -> target %
 }
 

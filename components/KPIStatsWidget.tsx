@@ -27,11 +27,21 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
   const tierStats = useMemo(() => {
     if (!activePhase || !kpiTiers || kpiTiers.length === 0) return [];
 
-    return kpiTiers.map(tier => {
-      // Find departments in this tier based on asset count range
-      const deptsInTier = departments.filter(d => 
-        (d.totalAssets >= tier.minAssets) && (d.totalAssets <= tier.maxAssets)
-      );
+    let maxGlobalAssets = 0;
+    for (const d of departments) {
+      if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
+    }
+    
+    const sortedTiers = [...kpiTiers].sort((a,b) => a.minAssets - b.minAssets);
+
+    return sortedTiers.map((tier, idx) => {
+      const deptsInTier = departments.filter(d => {
+        const deptPercentage = maxGlobalAssets > 0 ? ((d.totalAssets || 0) / maxGlobalAssets) * 100 : 0;
+        const assignedTier = sortedTiers
+          .filter(t => deptPercentage >= t.minAssets)
+          .sort((a,b) => b.minAssets - a.minAssets)[0];
+        return assignedTier?.id === tier.id;
+      });
       
       const targetPercentage = activePhase ? (tier.targets[activePhase.id] || 0) : 0;
 
@@ -61,6 +71,8 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
       
       return {
         ...tier,
+        isHighestTier: idx === sortedTiers.length - 1,
+        nextMin: sortedTiers[idx + 1]?.minAssets || 100,
         departments: deptDetails,
         deptCount: deptsInTier?.length || 0,
         actualPercentage,
@@ -107,7 +119,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                      <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                    </div>
                    <span className="text-[10px] text-slate-400 font-medium">
-                     {stat.minAssets} - {stat.maxAssets > 1000000 ? '∞' : stat.maxAssets} Assets • {stat.deptCount} Departments
+                     {stat.minAssets}% - {stat.isHighestTier ? '100' : stat.nextMin - 1}% Size Threshold • {stat.deptCount} Departments
                    </span>
                  </div>
                  <div className="text-right">

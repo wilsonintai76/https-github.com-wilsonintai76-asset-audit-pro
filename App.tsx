@@ -173,20 +173,19 @@ const App: React.FC = () => {
           if (!existingNames.includes(requiredTierNames[i])) {
             await gateway.addKPITier({
               name: requiredTierNames[i],
-              minAssets: defaultTierRanges[i].min,
-              maxAssets: defaultTierRanges[i].max
+              minAssets: defaultTierRanges[i].min
             });
           }
         }
         finalKpiTiers = await gateway.getKPITiers();
       } else {
         // Migration: If any tier has minAssets > 100, they are using raw asset counts instead of percentages.
-        const needsMigration = kpiData.some(t => t.minAssets > 100 || t.maxAssets > 100);
+        const needsMigration = kpiData.some(t => t.minAssets > 100);
         if (needsMigration) {
           const sorted = [...kpiData].sort((a,b) => a.minAssets - b.minAssets);
-          if (sorted[0]) await gateway.updateKPITier(sorted[0].id, { minAssets: 0, maxAssets: 29 });
-          if (sorted[1]) await gateway.updateKPITier(sorted[1].id, { minAssets: 30, maxAssets: 69 });
-          if (sorted[2]) await gateway.updateKPITier(sorted[2].id, { minAssets: 70, maxAssets: 100 });
+          if (sorted[0]) await gateway.updateKPITier(sorted[0].id, { minAssets: 0 });
+          if (sorted[1]) await gateway.updateKPITier(sorted[1].id, { minAssets: 30 });
+          if (sorted[2]) await gateway.updateKPITier(sorted[2].id, { minAssets: 70 });
         }
         
         finalKpiTiers = await gateway.getKPITiers();
@@ -1397,7 +1396,15 @@ const App: React.FC = () => {
         if ((dept.totalAssets || 0) === 0) continue;
 
         // 1. Find Tier
-        const tier = allTiers.find(t => (dept.totalAssets || 0) >= t.minAssets && (dept.totalAssets || 0) <= t.maxAssets);
+        let maxGlobalAssets = 0;
+        for (const d of allDepts) {
+            if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
+        }
+        const deptPercentage = maxGlobalAssets > 0 ? ((dept.totalAssets || 0) / maxGlobalAssets) * 100 : 0;
+        
+        const tier = [...allTiers]
+           .filter(t => deptPercentage >= t.minAssets)
+           .sort((a,b) => b.minAssets - a.minAssets)[0];
         if (!tier) continue;
 
         // 2. Identify Required Phases (those with target > 0)
@@ -1486,51 +1493,11 @@ const App: React.FC = () => {
 
   const handleUpdateKPITier = async (id: string, updates: Partial<KPITier>) => {
     try {
-      const currentTiers = [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets);
-      const tierIndex = currentTiers.findIndex(t => t.id === id);
-      
-      if (tierIndex === -1) return;
-
-      // Prepare updates for the specific tier
-      const updatedTiers = [...currentTiers];
-      updatedTiers[tierIndex] = { ...updatedTiers[tierIndex], ...updates };
-
-      if (tierIndex > 0 && updates.minAssets !== undefined) {
-        // Adjust the previous tier's maxAssets to connect to this new minAssets
-        updatedTiers[tierIndex - 1] = {
-           ...updatedTiers[tierIndex - 1],
-           maxAssets: Math.max(0, updates.minAssets - 1)
-        };
-      }
-
-      // Cascading logic: Adjust subsequent tiers to ensure contiguity
-      for (let i = 0; i < updatedTiers.length - 1; i++) {
-        const currentTier = updatedTiers[i];
-        const nextTier = updatedTiers[i + 1];
-        
-        // Next tier MUST start at current max + 1
-        const newNextMin = currentTier.maxAssets + 1;
-        if (nextTier.minAssets !== newNextMin) {
-          updatedTiers[i + 1] = { ...nextTier, minAssets: newNextMin };
-          // Ensure next max is at least next min
-          if (updatedTiers[i+1].maxAssets < newNextMin) {
-             updatedTiers[i+1].maxAssets = newNextMin + 1;
-          }
-        }
-      }
-
-      // Chain Save: We need to save all changed tiers
-      for (const tier of updatedTiers) {
-        const original = currentTiers.find(t => t.id === tier.id);
-        if (JSON.stringify(original) !== JSON.stringify(tier)) {
-          await gateway.updateKPITier(tier.id, tier);
-        }
-      }
-
+      await gateway.updateKPITier(id, updates);
       setKpiTiers(await gateway.getKPITiers());
-      showToast('KPI Tiers synchronized');
+      showToast('KPI Tier updated successfully');
     } catch (e) {
-      showError(e, 'KPI Logic Error');
+      showError(e, 'Failed to Update KPI Tier');
     }
   };
 
