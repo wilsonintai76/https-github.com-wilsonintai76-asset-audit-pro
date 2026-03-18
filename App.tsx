@@ -1640,6 +1640,49 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAutoConsolidate = async (threshold: number, excludedIds: string[]) => {
+    try {
+      const eligible = departmentsWithAssets
+        .filter(d => !d.auditGroupId && !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0)
+        .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
+
+      if (eligible.length === 0) {
+        customAlert('No eligible departments to group. They may already be assigned to groups or excluded.');
+        return;
+      }
+
+      let groupIndex = 1;
+      let bundle: typeof eligible = [];
+      let running = 0;
+
+      const flush = async () => {
+        if (bundle.length === 0) return;
+        const newGroup = await gateway.addAuditGroup({
+          name: `Consolidated Unit ${groupIndex++}`,
+          description: `Auto-grouped: ${bundle.map(d => d.abbr).join(', ')}`
+        });
+        for (const dept of bundle) {
+          await gateway.updateDepartment(dept.id, { auditGroupId: newGroup.id });
+        }
+        bundle = [];
+        running = 0;
+      };
+
+      for (const dept of eligible) {
+        running += dept.totalAssets || 0;
+        bundle.push(dept);
+        if (running >= threshold) await flush();
+      }
+      await flush(); // flush any remaining
+
+      setAuditGroups(await gateway.getAuditGroups());
+      setDepartments(await gateway.getDepartments());
+      showToast(`Auto-consolidation complete! ${groupIndex - 1} groups created.`);
+    } catch (e) {
+      showError(e, 'Auto-Consolidation Failed');
+    }
+  };
+
   const handleUpsertLocations = async (newLocs: Omit<Location, 'id'>[]) => {
     try {
       const existingMap = new Map<string, Location>(locations.map(l => [`${l.name.toUpperCase()}|${l.departmentId}`, l]));
@@ -2018,6 +2061,7 @@ const App: React.FC = () => {
               onAddGroup={handleAddAuditGroup}
               onUpdateGroup={handleUpdateAuditGroup}
               onDeleteGroup={handleDeleteAuditGroup}
+              onAutoConsolidate={handleAutoConsolidate}
             />
           )}
           {activeView === 'locations' && (

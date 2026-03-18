@@ -1,10 +1,26 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Department, Location, User, AuditGroup } from '../types';
-import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2 } from 'lucide-react';
+import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, GitMerge, Ban, ChevronRight, Sparkles } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
 import { DepartmentModal } from './DepartmentModal';
+
+const EXCLUSION_STORAGE_KEY = 'consolidation_excluded_dept_ids';
+const THRESHOLD_STORAGE_KEY = 'consolidation_threshold';
+
+function loadExcluded(): string[] {
+  try { return JSON.parse(localStorage.getItem(EXCLUSION_STORAGE_KEY) || '[]'); } catch { return []; }
+}
+function saveExcluded(ids: string[]) {
+  localStorage.setItem(EXCLUSION_STORAGE_KEY, JSON.stringify(ids));
+}
+function loadThreshold(): number {
+  return parseInt(localStorage.getItem(THRESHOLD_STORAGE_KEY) || '1000', 10);
+}
+function saveThreshold(t: number) {
+  localStorage.setItem(THRESHOLD_STORAGE_KEY, String(t));
+}
 
 interface DepartmentManagementProps {
   departments: Department[];
@@ -16,9 +32,10 @@ interface DepartmentManagementProps {
   isAdmin?: boolean;
   phases?: AuditPhase[];
   auditGroups?: AuditGroup[];
-  onAddGroup?: (group: Omit<AuditGroup, 'id'>) => void;
+  onAddGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<AuditGroup | void>;
   onUpdateGroup?: (id: string, group: Partial<AuditGroup>) => void;
   onDeleteGroup?: (id: string) => void;
+  onAutoConsolidate?: (threshold: number, excludedIds: string[]) => Promise<void>;
 }
 
 export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ 
@@ -32,10 +49,14 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   auditGroups = [],
   onAddGroup,
   onUpdateGroup,
-  onDeleteGroup
+  onDeleteGroup,
+  onAutoConsolidate,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [excludedIds, setExcludedIds] = useState<string[]>(() => loadExcluded());
+  const [threshold, setThreshold] = useState<number>(() => loadThreshold());
+  const [isConsolidating, setIsConsolidating] = useState(false);
 
   const handleSave = (data: Omit<Department, 'id'> | Partial<Department>) => {
     if (editingDept) {
@@ -54,6 +75,44 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     setEditingDept(null);
     setIsModalOpen(true);
   };
+
+  const toggleExclude = (id: string) => {
+    setExcludedIds(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      saveExcluded(next);
+      return next;
+    });
+  };
+
+  const handleThresholdChange = (val: number) => {
+    setThreshold(val);
+    saveThreshold(val);
+  };
+
+  const handleAutoConsolidate = async () => {
+    if (!onAutoConsolidate) return;
+    setIsConsolidating(true);
+    try {
+      await onAutoConsolidate(threshold, excludedIds);
+    } finally {
+      setIsConsolidating(false);
+    }
+  };
+
+  // Preview: how many groups would be created
+  const preview = useMemo(() => {
+    const eligible = departments
+      .filter(d => !excludedIds.includes(d.id) && !d.auditGroupId && (d.totalAssets || 0) > 0)
+      .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
+    
+    let groups = 0, running = 0;
+    for (const d of eligible) {
+      running += d.totalAssets || 0;
+      if (running >= threshold) { groups++; running = 0; }
+    }
+    if (running > 0) groups++;
+    return { eligible: eligible.length, groups };
+  }, [departments, excludedIds, threshold]);
 
   // Helper for colors
   const getColorIndex = (str: string) => {
@@ -101,6 +160,59 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
         )}
       </PageHeader>
 
+      {/* AUTO-CONSOLIDATION PANEL */}
+      {isAdmin && (
+        <div className="bg-white rounded-[28px] border border-slate-200 shadow-sm p-6">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
+                <GitMerge className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">Unit Auto-Consolidation</h4>
+                <p className="text-[12px] text-slate-500 mt-0.5">
+                  Automatically groups unassigned departments together until their combined assets reach the threshold. Toggle <Ban className="inline w-3 h-3 text-rose-400" /> on any department to exclude it.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 bg-slate-50 rounded-xl border border-slate-200 px-3 py-2">
+                <Boxes className="w-4 h-4 text-slate-400 shrink-0" />
+                <input
+                  type="number"
+                  min={100}
+                  step={100}
+                  value={threshold}
+                  onChange={e => handleThresholdChange(parseInt(e.target.value) || 1000)}
+                  className="w-24 text-sm font-bold text-slate-900 bg-transparent outline-none"
+                />
+                <span className="text-xs text-slate-400 font-medium">assets/group</span>
+              </div>
+              <button
+                onClick={handleAutoConsolidate}
+                disabled={isConsolidating || !onAutoConsolidate}
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-[13px] transition-colors shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+              >
+                <Sparkles className="w-4 h-4" />
+                {isConsolidating ? 'Grouping...' : 'Auto-Group'}
+              </button>
+            </div>
+          </div>
+          {/* Preview chip */}
+          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-medium">
+            <span className="px-2 py-0.5 bg-slate-100 rounded-md font-bold text-slate-600">{preview.eligible} eligible departments</span>
+            <ChevronRight className="w-3 h-3 opacity-40" />
+            <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md font-bold border border-indigo-100">{preview.groups} groups will be created</span>
+            {excludedIds.length > 0 && (
+              <>
+                <ChevronRight className="w-3 h-3 opacity-40" />
+                <span className="px-2 py-0.5 bg-rose-50 text-rose-500 rounded-md font-bold border border-rose-100">{excludedIds.length} excluded</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* LIST */}
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
@@ -118,16 +230,20 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
               {departments.map(dept => {
                 const colorClass = AVATAR_COLORS[getColorIndex(dept.name) % AVATAR_COLORS.length];
                 const headUser = users.find(u => u.id === dept.headOfDeptId);
+                const isExcluded = excludedIds.includes(dept.id);
                 
                 return (
-                  <tr key={dept.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={dept.id} className={`hover:bg-slate-50/50 transition-colors ${isExcluded ? 'opacity-60' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black shadow-sm border ${colorClass} shrink-0`}>
                           {dept.abbr}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-bold text-slate-900 text-sm truncate">{dept.name}</div>
+                          <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
+                            {dept.name}
+                            {isExcluded && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-500 text-[9px] font-black border border-rose-100 uppercase">Excluded</span>}
+                          </div>
                           <div className="text-[11px] text-slate-500 font-medium truncate max-w-[250px]">{dept.description || 'No description provided'}</div>
                         </div>
                       </div>
@@ -152,19 +268,16 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {dept.totalAssets !== undefined && (
                           <div className="px-2 py-0.5 rounded bg-blue-50 text-[9px] text-blue-600 border border-blue-100 font-bold uppercase tracking-tighter">
                             Tier Detected
                           </div>
                         )}
-                        {(dept.auditGroupId || dept.auditGroup) && (
+                        {(dept.auditGroupId) && (
                           <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-[9px] text-indigo-600 border border-indigo-100 font-bold flex items-center gap-1" title="Consolidated Audit Group">
                             <Layers className="w-3 h-3" />
-                            {dept.auditGroupId 
-                              ? auditGroups.find(g => g.id === dept.auditGroupId)?.name || 'Unknown Group'
-                              : dept.auditGroup
-                            }
+                            {auditGroups.find(g => g.id === dept.auditGroupId)?.name || 'Unknown Group'}
                           </span>
                         )}
                       </div>
@@ -172,6 +285,18 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                     <td className="px-6 py-4 text-left align-middle">
                       {isAdmin && (
                         <div className="flex gap-1 justify-start">
+                          {/* Exclude from auto-consolidation toggle */}
+                          <button
+                            onClick={() => toggleExclude(dept.id)}
+                            title={isExcluded ? 'Click to include in auto-grouping' : 'Click to exclude from auto-grouping'}
+                            className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-colors ${
+                              isExcluded 
+                                ? 'bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100' 
+                                : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-200'
+                            }`}
+                          >
+                            <Ban className="w-4 h-4" />
+                          </button>
                           <button onClick={() => startEdit(dept)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors"><Pencil className="w-4 h-4" /></button>
                           <button onClick={() => onDelete(dept.id)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
                         </div>
