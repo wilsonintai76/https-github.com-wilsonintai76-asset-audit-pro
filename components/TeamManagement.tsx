@@ -78,21 +78,8 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
     }
   };
 
-  const toggleRole = (role: UserRole) => {
-    setFormData(prev => {
-      const isSelected = prev.roles.includes(role);
-      let newRoles: UserRole[];
-      
-      if (isSelected) {
-        // Don't allow removing the last role
-        if (prev.roles.length <= 1) return prev;
-        newRoles = prev.roles.filter(r => r !== role);
-      } else {
-        newRoles = [...prev.roles, role];
-      }
-      
-      return { ...prev, roles: newRoles };
-    });
+  const setSingleRole = (role: UserRole) => {
+    setFormData(prev => ({ ...prev, roles: [role] }));
   };
 
   const getCertStatus = (expiry?: string) => {
@@ -383,10 +370,11 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                           : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
                         }`}>
                           <input 
-                            type="checkbox" 
-                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                            type="radio" 
+                            name="userRole"
+                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-slate-300"
                             checked={formData.roles.includes(r)}
-                            onChange={() => toggleRole(r)}
+                            onChange={() => setSingleRole(r)}
                           />
                           <span className="text-xs font-bold">{r}</span>
                         </label>
