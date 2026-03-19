@@ -8,9 +8,10 @@ interface IssueCertificateModalProps {
   user: User;
   onClose: () => void;
   onIssue: (issuedDate: string, expiryDate: string) => void;
+  onRevoke?: () => void;
 }
 
-export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ user, onClose, onIssue }) => {
+export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ user, onClose, onIssue, onRevoke }) => {
   const today = new Date().toISOString().split('T')[0];
   const [validity, setValidity] = useState('12'); // Months
   const [issueDate, setIssueDate] = useState(today);
@@ -97,8 +98,22 @@ export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ us
               onClick={handleIssue}
               className="w-full py-4 bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-xl hover:bg-black transition-all active:scale-95"
             >
-              Confirm & Stamp Certificate
+              {user.certificationExpiry ? 'Update & Restamp Certificate' : 'Confirm & Stamp Certificate'}
             </button>
+            
+            {user.certificationExpiry && onRevoke && (
+                <button 
+                    onClick={() => {
+                        if (confirm(`Are you sure you want to revoke the institutional certificate for ${user.name}?`)) {
+                            onRevoke();
+                        }
+                    }}
+                    className="w-full py-4 bg-rose-50 text-rose-600 font-black text-xs uppercase tracking-widest rounded-2xl border border-rose-100 hover:bg-rose-100 transition-all active:scale-95"
+                >
+                    Revoke Institutional Certificate
+                </button>
+            )}
+
             <button 
               onClick={onClose}
               className="w-full py-4 text-slate-400 font-bold text-xs uppercase hover:text-slate-600 transition-colors"
