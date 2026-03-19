@@ -59,11 +59,18 @@ export const LocationModal: React.FC<LocationModalProps> = ({
 
   useEffect(() => {
     if (initialData) {
+      // Resolve buildingId from name if missing (legacy data)
+      let resolvedBuildingId = initialData.buildingId || '';
+      if (!resolvedBuildingId && initialData.building) {
+        const found = buildings.find(b => b.name === initialData.building);
+        if (found) resolvedBuildingId = found.id;
+      }
+
       setFormData({
          name: initialData.name || '',
         abbr: initialData.abbr || '',
         departmentId: initialData.departmentId || userDeptId || '',
-        buildingId: initialData.buildingId || '', 
+        buildingId: resolvedBuildingId, 
         building: initialData.building || '',
         level: initialData.level || '',
         description: initialData.description || '',
@@ -387,7 +394,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
               {isSupervisor ? (
                 <div className="w-full pl-11 pr-4 py-3 bg-slate-100 border border-slate-200 rounded-2xl text-sm font-bold text-slate-500 opacity-60 relative">
                   <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
-                  {selectedSupervisor ? `${selectedSupervisor.name} (${selectedSupervisor.id})` : 'Not assigned'}
+                  {selectedSupervisor ? selectedSupervisor.name : 'Not assigned'}
                 </div>
               ) : (
                 <>
@@ -398,7 +405,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                     <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
                     <div className={`w-full pl-11 pr-10 py-3 bg-slate-50 border rounded-2xl text-sm font-bold transition-all cursor-pointer flex items-center min-h-[48px] ${isSupervisorDropdownOpen ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`}>
                       {selectedSupervisor ? (
-                        <span className="text-slate-900">{selectedSupervisor.name} <span className="text-slate-400 font-medium ml-1">({selectedSupervisor.id})</span></span>
+                        <span className="text-slate-900">{selectedSupervisor.name}</span>
                       ) : (
                         <span className="text-slate-400 font-medium">Select Supervisor...</span>
                       )}
@@ -437,7 +444,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                             >
                               <div>
                                 <div className="text-sm font-bold text-slate-900 group-hover:text-blue-700">{u.name}</div>
-                                <div className="text-[10px] text-slate-400 font-medium">{u.id} • {u.roles.join(', ')}</div>
+                                <div className="text-[10px] text-slate-400 font-medium">{u.roles.join(', ')}</div>
                               </div>
                               {formData.supervisorId === u.id && (
                                 <div className="w-2 h-2 bg-blue-500 rounded-full shadow-sm shadow-blue-500/50"></div>

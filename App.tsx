@@ -10,6 +10,7 @@ import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
 import { TeamManagement } from './components/TeamManagement';
 import { OverviewDashboard } from './components/OverviewDashboard';
+import { BuildingManagement } from './components/BuildingManagement';
 import { AuditorDashboard } from './components/AuditorDashboard';
 import { SystemSettings } from './components/SystemSettings';
 import { DepartmentManagement } from './components/DepartmentManagement';
@@ -1705,17 +1706,20 @@ const App: React.FC = () => {
 
   const handleUpdateBuilding = async (building: Partial<Building>) => {
     try {
-      const saved = await gateway.updateBuilding(building);
+      const updated = await gateway.updateBuilding(building);
       setBuildings(prev => {
-        const exists = prev.find(b => b.id === saved.id);
-        if (exists) return prev.map(b => b.id === saved.id ? saved : b);
-        return [...prev, saved];
+        const index = prev.findIndex(b => b.id === updated.id);
+        if (index >= 0) {
+          const next = [...prev];
+          next[index] = updated;
+          return next;
+        }
+        return [...prev, updated];
       });
-      showToast(building.id ? "Building updated" : "Building added");
-      return saved;
-    } catch (e) {
-      showError(e, 'Failed to save building');
-      throw e;
+      showToast(building.id ? "Building updated" : "Building registered");
+      return updated;
+    } catch (e: any) {
+      showToast(e.message || "Failed to sync building", "error");
     }
   };
 
@@ -2202,6 +2206,15 @@ const App: React.FC = () => {
               phases={auditPhases}
               buildings={buildings}
               onAddBuilding={handleUpdateBuilding}
+            />
+          )}
+          {activeView === 'buildings' && (
+            <BuildingManagement 
+              buildings={buildings}
+              locations={locations}
+              onAdd={handleUpdateBuilding}
+              onUpdate={handleUpdateBuilding}
+              onDelete={handleDeleteBuilding}
             />
           )}
           {activeView === 'settings' && (

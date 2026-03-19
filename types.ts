@@ -14,7 +14,7 @@ export interface AuditSchedule {
 export type Designation = 'Head Of Department' | 'Coordinator' | 'Supervisor' | 'Staff';
 
 export type UserRole = 'Admin' | 'Coordinator' | 'Supervisor' | 'Staff';
-export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard';
+export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard' | 'buildings';
 
 export interface User {
   id: string;
