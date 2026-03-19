@@ -120,33 +120,49 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   , [deptCounts]);
 
   const activeEntities = useMemo(() => {
-    // This logic mimics CrossAuditManagement's entity calculation
-    // but simplified for the dashboard's "Ranked by Assets" view.
+    // Group departments by their Consolidated Unit (Audit Group)
     const groupedDepts: Record<string, Department[]> = {};
     
     departments.forEach(dept => {
+      // If no group, use a unique key for the individual department
       const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
       groupedDepts[key].push(dept);
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
+      const isUnassigned = groupId.startsWith('unassigned_');
+      const deptIds = depts.map(d => d.id);
+      
+      // 1. Calculate combined assets
       const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-      const name = groupId.startsWith('unassigned_') 
+      
+      // 2. Count unique auditors assigned to these departments
+      const deptSchedules = schedules.filter(s => deptIds.includes(s.departmentId));
+      const uniqueAuditors = new Set<string>();
+      deptSchedules.forEach(s => {
+        if (s.auditor1Id) uniqueAuditors.add(s.auditor1Id);
+        if (s.auditor2Id) uniqueAuditors.add(s.auditor2Id);
+      });
+
+      const name = isUnassigned 
         ? depts[0].name 
         : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
       
       return {
         name,
         assets: totalAssets,
-        auditors: 0, // System currently relies on assets for ranking
+        auditors: uniqueAuditors.size,
         memberCount: depts.length,
-        isJoint: depts.length > 1,
+        isJoint: !isUnassigned && depts.length > 0,
+        isConsolidated: !isUnassigned,
         id: groupId,
         members: depts
       };
-    }).filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
-  }, [departments, auditGroups]);
+    })
+    .filter(e => e.assets > 0 || e.auditors > 0) // Filter out dormant entities
+    .sort((a, b) => b.assets - a.assets);        // Rank by Assets
+  }, [departments, auditGroups, schedules]);
 
   const activePhase = useMemo(() => {
     const today = new Date();

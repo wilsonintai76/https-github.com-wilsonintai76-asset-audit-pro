@@ -8,6 +8,7 @@ interface Entity {
   memberCount: number;
   members: any[];
   isJoint: boolean;
+  isConsolidated?: boolean;
 }
 
 interface ActiveEntitiesListProps {
@@ -40,7 +41,7 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
 
       <div className="p-8">
         <div className="flex overflow-x-auto gap-3 pb-4 scrollbar-thin scrollbar-thumb-slate-200">
-          {entities.sort((a, b) => b.assets - a.assets).map((entity, idx) => {
+          {entities.map((entity, idx) => {
             const isMega = entity.assets >= megaTargetThreshold;
             const isSafe = entity.auditors >= minAuditors;
             const isSelected = selectedEntity === entity.name;
@@ -57,12 +58,19 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
               >
                 <div className="flex justify-between w-full mb-2">
                   <span className={`text-[10px] uppercase font-bold tracking-wider ${isSelected ? 'text-slate-400' : 'text-slate-400'}`}>Rank #{idx + 1}</span>
+                  {entity.isConsolidated && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 text-[8px] font-black uppercase tracking-tighter">Consolidated Unit</span>
+                  )}
                 </div>
-                <span className={`truncate w-full text-left text-base ${entity.isJoint && entity.members?.length > 0 ? 'mb-1' : 'mb-3'}`}>{entity.name}</span>
-                {entity.isJoint && entity.members && entity.members.length > 0 && (
-                  <span className={`truncate w-full text-left mb-3 text-[9px] font-black uppercase tracking-wider ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
-                    {entity.members.map((m: any) => m.abbr).filter(Boolean).join(', ')}
-                  </span>
+                <span className={`truncate w-full text-left text-base font-bold ${entity.members?.length > 0 ? 'mb-1' : 'mb-3'}`}>{entity.name}</span>
+                {entity.members && entity.members.length > 0 && (
+                  <div className={`flex flex-wrap gap-1 mb-3`}>
+                    {entity.members.map((m: any) => (
+                       <span key={m.id} className={`px-1 rounded-[4px] text-[9px] font-bold uppercase tracking-widest ${isSelected ? 'bg-white/10 text-white/60' : 'bg-slate-100 text-slate-400'}`}>
+                         {m.abbr}
+                       </span>
+                    ))}
+                  </div>
                 )}
 
                 <div className={`flex gap-4 w-full border-t pt-3 ${isSelected ? 'border-white/10' : 'border-slate-100'}`}>
