@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Department, User, AuditGroup } from '../types';
-import { X, Building2, User as UserIcon, FileText, Search, ChevronDown, Boxes, Layers } from 'lucide-react';
+import { X, Building2, User as UserIcon, FileText, Search, ChevronDown, Boxes, Layers, Ban } from 'lucide-react';
 
 interface DepartmentModalProps {
   isOpen: boolean;
@@ -28,7 +28,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
     headOfDeptId: '',
     description: '',
     totalAssets: 0,
-    auditGroupId: ''
+    auditGroupId: '',
+    isExempted: false
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,7 +43,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
         headOfDeptId: initialData.headOfDeptId || '',
         description: initialData.description || '',
         totalAssets: initialData.totalAssets || 0,
-        auditGroupId: initialData.auditGroupId || ''
+        auditGroupId: initialData.auditGroupId || '',
+        isExempted: initialData.isExempted || false
       });
     } else {
       setFormData({
@@ -51,7 +53,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
         headOfDeptId: '',
         description: '',
         totalAssets: 0,
-        auditGroupId: ''
+        auditGroupId: '',
+        isExempted: false
       });
     }
     setSearchQuery('');
@@ -249,6 +252,35 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Cross-Audit Exemption (Admin only) */}
+            {isAdmin && (
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Cross-Audit Exemption</h4>
+                    <p className="text-[10px] text-slate-500">Exempt this unit from institutional cross-audit calculations.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={formData.isExempted}
+                      onChange={e => setFormData({ ...formData, isExempted: e.target.checked })}
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+                {formData.isExempted && (
+                   <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2">
+                     <Ban className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                     <p className="text-[10px] text-amber-700 leading-tight">
+                       This department will be ignored by the grouping and pairing engine. Use for departments with no assets or auditors.
+                     </p>
+                   </div>
+                )}
+              </div>
+            )}
           </form>
         </div>
 

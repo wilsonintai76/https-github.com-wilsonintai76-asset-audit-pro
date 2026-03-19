@@ -72,7 +72,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   // 1. Compute Stats for Each Department
   const deptStats = useMemo(() => {
-    return departments.map(dept => {
+    return departments.filter(d => !d.isExempted).map(dept => {
       const auditorCount = users.filter(u => 
         u.department === dept.name && 
         (u.roles.includes('Staff') || u.roles.includes('Supervisor') || u.roles.includes('Coordinator') || u.roles.includes('Admin')) &&

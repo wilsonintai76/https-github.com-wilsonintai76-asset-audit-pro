@@ -123,7 +123,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     // Group departments by their Consolidated Unit (Audit Group)
     const groupedDepts: Record<string, Department[]> = {};
     
-    departments.forEach(dept => {
+    departments.filter(d => !d.isExempted).forEach(dept => {
       // If no group, use a unique key for the individual department
       const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];

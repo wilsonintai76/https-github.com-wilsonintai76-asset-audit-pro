@@ -275,20 +275,33 @@ const App: React.FC = () => {
     return departments.map(dept => {
       const deptLocations = locations.filter(l => l.departmentId === dept.id);
       const computedAssets = deptLocations.reduce((sum, loc) => sum + (loc.totalAssets || 0), 0);
-  // We use the larger of the two: manually entered or sum of locations
+      // We use the larger of the two: manually entered or sum of locations
       const finalAssets = Math.max(dept.totalAssets || 0, computedAssets);
+      
+      const auditors = users.filter(u => 
+        u.departmentId === dept.id &&
+        ['Staff', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
+        u.status === 'Active'
+      ).length;
+
+      // Auto-exempt if 0 assets and 0 active auditors, unless manually overridden
+      const isAutoExempted = finalAssets === 0 && auditors === 0;
+      const finalIsExempted = dept.isExempted || isAutoExempted;
+
       return {
         ...dept,
-        totalAssets: finalAssets
+        totalAssets: finalAssets,
+        isExempted: finalIsExempted
       };
     });
-  }, [departments, locations]);
+  }, [departments, locations, users]);
 
   const refreshDepartmentTotals = async () => {
     try {
-      console.log("[Auto-Sync] Recalculating department asset totals...");
+      console.log("[Auto-Sync] Recalculating department asset totals and exemption tags...");
       const allLocs = await gateway.getLocations();
       const allDepts = await gateway.getDepartments();
+      const allUsers = await gateway.getUsers();
 
       const deptTotals: Record<string, number> = {};
       allLocs.forEach(loc => {
@@ -297,12 +310,30 @@ const App: React.FC = () => {
         }
       });
 
-      const updates = allDepts.map(d => ({
-        id: d.id,
-        data: { totalAssets: deptTotals[d.id] || 0 }
-      })).filter(u => {
+      const updates = allDepts.map(d => {
+        const calculatedAssets = deptTotals[d.id] || 0;
+        const totalAssets = Math.max(d.totalAssets || 0, calculatedAssets);
+        const auditors = allUsers.filter(u => 
+          u.departmentId === d.id &&
+          ['Staff', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
+          u.status === 'Active'
+        ).length;
+        
+        // Auto-exempt if 0 assets and 0 active auditors
+        const shouldBeExempted = totalAssets === 0 && auditors === 0;
+
+        return {
+          id: d.id,
+          data: { 
+            totalAssets: calculatedAssets,
+            isExempted: shouldBeExempted
+          }
+        };
+      }).filter(u => {
         const d = allDepts.find(dept => dept.id === u.id);
-        return d && d.totalAssets !== u.data.totalAssets;
+        const assetsChanged = d && d.totalAssets !== u.data.totalAssets;
+        const exemptionChanged = d && d.isExempted !== u.data.isExempted;
+        return assetsChanged || exemptionChanged;
       });
 
       if (updates.length > 0) {

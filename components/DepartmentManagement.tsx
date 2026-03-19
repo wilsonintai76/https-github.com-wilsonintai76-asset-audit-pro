@@ -248,7 +248,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                         <div className="min-w-0">
                           <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
                             {dept.name}
-                            {isExcluded && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-500 text-[9px] font-black border border-rose-100 uppercase">Excluded</span>}
+                            {dept.isExempted && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[9px] font-black border border-amber-100 uppercase tracking-widest" title="Exempted from institutional cross-audits">Exempted</span>}
+                            {isExcluded && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-500 text-[9px] font-black border border-rose-100 uppercase tracking-widest">Excluded</span>}
                           </div>
                           <div className="text-[11px] text-slate-500 font-medium truncate max-w-[250px]">{dept.description || 'No description provided'}</div>
                         </div>
