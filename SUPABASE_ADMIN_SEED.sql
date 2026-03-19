@@ -7,14 +7,12 @@ INSERT INTO departments (
   id,
   name,
   abbr,
-  description,
-  audit_group
+  description
 ) VALUES (
   '00000000-0000-0000-0000-000000000000',
   'SYSTEM MANAGEMENT',
   'SYSTEM',
-  'Dedicated department for application administrators and system management.',
-  'Group A'
+  'Dedicated department for application administrators and system management.'
 ) ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   abbr = EXCLUDED.abbr;
@@ -24,14 +22,12 @@ INSERT INTO departments (
   id,
   name,
   abbr,
-  description,
-  audit_group
+  description
 ) VALUES (
   '4b12b099-2614-42f7-aad7-021017f9795f',
   'JABATAN KEJURUTERAAN MEKANIKAL',
   'JKM',
-  'Mechanical Engineering Department.',
-  'Group A'
+  'Mechanical Engineering Department.'
 ) ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   abbr = EXCLUDED.abbr;
