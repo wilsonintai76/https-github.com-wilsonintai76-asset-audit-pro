@@ -119,6 +119,12 @@ export interface KPITierTarget {
   targetPercentage: number;
 }
 
+export interface InstitutionKPITarget {
+  id: string;
+  phaseId: string;
+  targetPercentage: number;
+}
+
 export interface DepartmentMapping {
   id: string;
   sourceName: string;

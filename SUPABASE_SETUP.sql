@@ -37,6 +37,7 @@ DROP TABLE IF EXISTS audit_phases CASCADE;
 DROP TABLE IF EXISTS system_activities CASCADE;
 DROP TABLE IF EXISTS department_mappings CASCADE;
 DROP TABLE IF EXISTS allowed_domains CASCADE; -- Added
+DROP TABLE IF EXISTS institution_kpi_targets CASCADE; -- Added
 
 -- =============================================================
 -- 0. AUDIT GROUPS
@@ -218,6 +219,16 @@ CREATE TABLE kpi_tier_targets (
   phase_id          UUID    NOT NULL REFERENCES audit_phases(id) ON DELETE CASCADE,
   target_percentage INTEGER NOT NULL CONSTRAINT chk_percentage CHECK (target_percentage >= 0 AND target_percentage <= 100),
   CONSTRAINT uq_tier_phase UNIQUE(tier_id, phase_id)
+);
+
+-- =============================================================
+-- 8.1 INSTITUTION KPI TARGETS
+--    Overarching targets for the whole organization per phase.
+-- =============================================================
+CREATE TABLE institution_kpi_targets (
+  id                UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+  phase_id          UUID    NOT NULL UNIQUE REFERENCES audit_phases(id) ON DELETE CASCADE,
+  target_percentage INTEGER NOT NULL CONSTRAINT chk_inst_percentage CHECK (target_percentage >= 0 AND target_percentage <= 100)
 );
 
 -- =============================================================

@@ -1,5 +1,5 @@
 
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, DepartmentMapping, SystemActivity, AuditGroup } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup } from '../types';
 import { supabase } from './supabase';
 import { localDB } from './localDB'; 
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
@@ -806,6 +806,29 @@ class DataGateway {
       return;
     }
     throw new Error("Supabase client not initialized");
+  }
+
+  async getInstitutionKPIs(): Promise<InstitutionKPITarget[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('institution_kpi_targets').select('*');
+      if (error) throw error;
+      return (data || []).map((k: any) => ({
+        ...k,
+        phaseId: k.phase_id,
+        targetPercentage: k.target_percentage,
+      })) as InstitutionKPITarget[];
+    }
+    return [];
+  }
+
+  async updateInstitutionKPI(phaseId: string, percentage: number): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('institution_kpi_targets').upsert({
+        phase_id: phaseId,
+        target_percentage: percentage,
+      }, { onConflict: 'phase_id' });
+      if (error) throw error;
+    }
   }
 }
 
