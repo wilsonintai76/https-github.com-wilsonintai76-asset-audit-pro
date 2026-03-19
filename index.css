@@ -5,9 +5,13 @@
 }
 
 @layer base {
-  body {
+  html, body {
     @apply bg-slate-50 text-slate-900;
     font-family: var(--font-sans);
+    overflow: hidden;
+    height: 100%;
+    margin: 0;
+    padding: 0;
   }
 
   /* Remove number input spinners globally */
