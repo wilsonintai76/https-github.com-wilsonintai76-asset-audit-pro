@@ -19,7 +19,8 @@ INSERT INTO departments (
   name = EXCLUDED.name,
   abbr = EXCLUDED.abbr;
 
--- 2. Create Admin User
+-- 2. Inject Admin Roles
+-- This ensures the specified user has full admin permissions.
 INSERT INTO users (
   id,
   name,
@@ -37,7 +38,6 @@ INSERT INTO users (
   'Active',
   true
 ) ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
   roles = EXCLUDED.roles,
   status = EXCLUDED.status,
   is_verified = EXCLUDED.is_verified;
