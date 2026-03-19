@@ -166,7 +166,19 @@ const App: React.FC = () => {
           }
         }
         finalPhases = await gateway.getAuditPhases();
+        setAuditPhases(finalPhases);
       }
+
+      // Ensure 3 institutional targets exist
+      const currentInstKPIs = await gateway.getInstitutionKPIs();
+      let instNeeded = false;
+      for (const phase of finalPhases) {
+        if (!currentInstKPIs.find(k => k.phaseId === phase.id)) {
+          await gateway.updateInstitutionKPI(phase.id, 100);
+          instNeeded = true;
+        }
+      }
+      if (instNeeded) setInstitutionKPIs(await gateway.getInstitutionKPIs());
 
       // Ensure 3 KPI tiers exist (Small / Medium / Large) using percentage thresholds
       let finalKpiTiers = kpiTiersData;
@@ -177,12 +189,13 @@ const App: React.FC = () => {
         { min: 70,  max: 100 }
       ];
       // Rename legacy 'Tier 1/2/3' entries on first load after upgrade
-      const legacyNameMap: Record<string, string> = { 'Tier 1': 'Small', 'Tier 2': 'Medium', 'Tier 3': 'Large' };
       for (const tier of kpiTiersData) {
+        const legacyNameMap: Record<string, string> = { 'Tier 1': 'Small', 'Tier 2': 'Medium', 'Tier 3': 'Large' };
         if (legacyNameMap[tier.name]) {
           await gateway.updateKPITier(tier.id, { name: legacyNameMap[tier.name] });
         }
       }
+      
       if (finalKpiTiers.length < 3) {
         const existingNames = finalKpiTiers.map(p => p.name);
         for (let i = 0; i < requiredTierNames.length; i++) {
@@ -194,19 +207,35 @@ const App: React.FC = () => {
             });
           }
         }
-        setKpiTiers(await gateway.getKPITiers());
+        finalKpiTiers = await gateway.getKPITiers();
+        setKpiTiers(finalKpiTiers);
       } else {
         // Migration: If any tier has minAssets > 100, they are using raw asset counts instead of percentages.
         const needsMigration = kpiTiersData.some(t => t.minAssets > 100);
         if (needsMigration) {
           const sorted = [...kpiTiersData].sort((a,b) => a.minAssets - b.minAssets);
-          if (sorted[0]) await gateway.updateKPITier(sorted[0].id, { minAssets: 0 });
-          if (sorted[1]) await gateway.updateKPITier(sorted[1].id, { minAssets: 30 });
-          if (sorted[2]) await gateway.updateKPITier(sorted[2].id, { minAssets: 70 });
+          if (sorted.length >= 3) {
+            await gateway.updateKPITier(sorted[0].id, { minAssets: 0 });
+            await gateway.updateKPITier(sorted[1].id, { minAssets: 30 });
+            await gateway.updateKPITier(sorted[2].id, { minAssets: 70 });
+            finalKpiTiers = await gateway.getKPITiers();
+            setKpiTiers(finalKpiTiers);
+          }
         }
-        
-        finalKpiTiers = await gateway.getKPITiers();
       }
+
+      // Ensure 3 tiers have relational targets for each phase
+      const latestTargets = await gateway.getKPITierTargets();
+      let targetsNeeded = false;
+      for (const tier of finalKpiTiers) {
+        for (const phase of finalPhases) {
+          if (!latestTargets.find(t => t.tierId === tier.id && t.phaseId === phase.id)) {
+            await gateway.setKPITierTarget(tier.id, phase.id, 100);
+            targetsNeeded = true;
+          }
+        }
+      }
+      if (targetsNeeded) setKpiTierTargets(await gateway.getKPITierTargets());
 
       const finalKpiTargets = await gateway.getKPITierTargets();
 
