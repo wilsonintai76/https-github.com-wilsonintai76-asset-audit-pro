@@ -204,57 +204,65 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
         activePhase={activePhase}
         description="Manage user access, roles, and institutional certification status."
       />
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-slate-100">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Institutional Team</h3>
-          <p className="text-sm text-slate-500">Manage credentials, certification status, and access levels.</p>
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 w-fit">
-            <Key className="w-3 h-3" />
-            <span>Login accounts are automatically created upon first Google sign-in.</span>
+          <h3 className="text-2xl font-black text-slate-900 tracking-tight">Institutional Team</h3>
+          <p className="text-slate-500 text-sm mt-1">Manage credentials, certification status, and access levels.</p>
+          <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50/50 px-3 py-1.5 rounded-xl border border-blue-100/50 w-fit">
+            <Key className="w-3.5 h-3.5" />
+            <span className="uppercase tracking-tight">SSO Enabled: Accounts auto-provisioned via Google Sign-in</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative min-w-[160px]">
-            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <select
-              className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold shadow-sm appearance-none outline-none"
-              value={selectedStatusFilter}
-              onChange={(e) => setSelectedStatusFilter(e.target.value)}
-            >
-              <option value="All">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-              <option value="Pending">Pending</option>
-              <option value="Suspended">Suspended</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
-          </div>
+        {isAdmin && (
+          <button 
+            onClick={() => { resetForm(); setIsFormOpen(true); }}
+            className="group px-8 py-3.5 bg-slate-900 text-white rounded-[20px] text-xs font-black uppercase tracking-widest shadow-2xl shadow-slate-900/10 hover:bg-blue-600 hover:-translate-y-1 transition-all flex items-center gap-3 active:scale-95"
+          >
+            <div className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
+               <Plus className="w-4 h-4" />
+            </div>
+            Add Team Member
+          </button>
+        )}
+      </div>
 
-          <div className="relative min-w-[200px]">
-            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <select
-              className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm font-bold shadow-sm appearance-none outline-none"
-              value={selectedDeptFilter}
-              onChange={(e) => setSelectedDeptFilter(e.target.value)}
-            >
-              <option value="All">All Departments</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-end gap-3">
+          <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mr-auto">
+             <Filter className="w-3.5 h-3.5" />
+             Quick Filters:
           </div>
           
-          {isAdmin && (
-            <button 
-              onClick={() => { resetForm(); setIsFormOpen(true); }}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Member
-            </button>
-          )}
-        </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative min-w-[160px]">
+              <select
+                className="w-full pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold shadow-sm appearance-none outline-none hover:border-blue-300 transition-colors cursor-pointer"
+                value={selectedStatusFilter}
+                onChange={(e) => setSelectedStatusFilter(e.target.value)}
+              >
+                <option value="All">All Status Levels</option>
+                <option value="Active">Active Duty</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Pending">Pending Approval</option>
+                <option value="Suspended">Suspended</option>
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+            </div>
+
+            <div className="relative min-w-[220px]">
+              <select
+                className="w-full pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold shadow-sm appearance-none outline-none hover:border-blue-300 transition-colors cursor-pointer"
+                value={selectedDeptFilter}
+                onChange={(e) => setSelectedDeptFilter(e.target.value)}
+              >
+                <option value="All">All Institutional Departments</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
+            </div>
+          </div>
       </div>
 
       {/* Pending Approvals Section for Admins */}
