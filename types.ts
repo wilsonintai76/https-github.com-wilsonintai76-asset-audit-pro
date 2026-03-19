@@ -45,6 +45,7 @@ export interface Department {
   description: string;
   auditGroupId: string | null; // UUID of the AuditGroup (Normalized)
   totalAssets?: number;
+  auditorCount?: number;
   isExempted?: boolean;
 }
 

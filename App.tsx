@@ -285,12 +285,14 @@ const App: React.FC = () => {
       ).length;
 
       // Auto-exempt if 0 assets and 0 active auditors, unless manually overridden
-      const isAutoExempted = finalAssets === 0 && auditors === 0;
+      // Exception: If part of a Consolidation Unit (Audit Group), do not auto-exempt
+      const isAutoExempted = finalAssets === 0 && auditors === 0 && !dept.auditGroupId;
       const finalIsExempted = dept.isExempted || isAutoExempted;
 
       return {
         ...dept,
         totalAssets: finalAssets,
+        auditorCount: auditors,
         isExempted: finalIsExempted
       };
     });
@@ -319,8 +321,8 @@ const App: React.FC = () => {
           u.status === 'Active'
         ).length;
         
-        // Auto-exempt if 0 assets and 0 active auditors
-        const shouldBeExempted = totalAssets === 0 && auditors === 0;
+        // Keep manual exemption if it's already true, or apply auto-exemption
+        const shouldBeExempted = d.isExempted || (totalAssets === 0 && auditors === 0);
 
         return {
           id: d.id,
@@ -2030,6 +2032,7 @@ const App: React.FC = () => {
         phases={auditPhases}
         activities={activities}
         topDepartments={topDepartments}
+        onDemoLogin={undefined}
       />
     );
   }
@@ -2191,6 +2194,7 @@ const App: React.FC = () => {
           {activeView === 'team' && (
             <TeamManagement
               users={visibleUsers}
+              departments={visibleDepartments}
               onAddMember={handleAddMember}
               onBulkAddMembers={handleBulkAddMembers}
               onUpdateMember={handleUpdateMember}
@@ -2198,10 +2202,11 @@ const App: React.FC = () => {
               onUpdateRoles={handleUpdateUserRoles}
               onUpdateStatus={handleUpdateUserStatus}
               currentUserRoles={currentUser.roles}
-              departments={visibleDepartments}
               customConfirm={customConfirm}
               customAlert={customAlert}
               phases={auditPhases}
+              selectedDeptFilter={selectedDept}
+              onDeptFilterChange={setSelectedDept}
             />
           )}
           {activeView === 'departments' && (
@@ -2221,6 +2226,10 @@ const App: React.FC = () => {
               onUpdateGroup={handleUpdateAuditGroup}
               onDeleteGroup={handleDeleteAuditGroup}
               onAutoConsolidate={handleAutoConsolidate}
+              onAddAuditor={(deptId) => {
+                setSelectedDept(deptId);
+                setActiveView('team');
+              }}
             />
           )}
           {activeView === 'locations' && (

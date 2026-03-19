@@ -63,26 +63,29 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-yellow-400 border-b-2 border-slate-900">
-                    <th className="px-3 py-2 font-black text-slate-900 border-r-2 border-slate-900 uppercase">Department</th>
-                    <th className="px-3 py-2 font-black text-slate-900 text-right uppercase">Total Asset</th>
+                    <th className="px-3 py-2 font-black text-slate-900 border-r-2 border-slate-900 uppercase text-[10px]">Department</th>
+                    <th id="header-auditors-consolidation" className="px-3 py-2 font-black text-slate-900 border-r-2 border-slate-900 uppercase text-[10px] text-center">Auditors</th>
+                    <th className="px-3 py-2 font-black text-slate-900 text-right uppercase text-[10px]">Total Asset</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-slate-700' : 'divide-slate-200'}`}>
                   {group.departments.map(dept => (
                     <tr key={dept.id}>
                       <td className={`px-3 py-2 font-bold border-r-2 border-slate-900 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{dept.name}</td>
+                      <td className={`px-3 py-2 font-bold border-r-2 border-slate-900 text-center ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>{dept.auditorCount || 0}</td>
                       <td className={`px-3 py-2 font-mono text-right ${isDark ? 'text-white' : 'text-slate-900'}`}>{(typeof dept.totalAssets === 'string' ? parseInt(dept.totalAssets) : (dept.totalAssets || 0)).toLocaleString()}</td>
                     </tr>
                   ))}
                   {group.departments.length === 0 && (
                     <tr>
-                      <td colSpan={2} className="px-3 py-8 text-center text-slate-400 italic">No units assigned</td>
+                      <td colSpan={3} className="px-3 py-8 text-center text-slate-400 italic">No units assigned</td>
                     </tr>
                   )}
                 </tbody>
                 <tfoot>
                   <tr className={`${isDark ? 'bg-slate-900' : 'bg-slate-100'} border-t-2 border-slate-900`}>
                     <td className={`px-3 py-2 font-black uppercase border-r-2 border-slate-900 ${isDark ? 'text-slate-300' : 'text-slate-900'}`}>Sub Total</td>
+                    <td className={`px-3 py-2 font-black text-right text-sm ${isDark ? 'text-blue-300' : 'text-slate-900'}`}></td> {/* Empty cell for Auditors column */}
                     <td className={`px-3 py-2 font-black text-right text-sm ${isDark ? 'text-blue-300' : 'text-slate-900'}`}>{group.subTotal.toLocaleString()}</td>
                   </tr>
                 </tfoot>
@@ -105,14 +108,16 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
                <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-200 border-b-2 border-dashed border-slate-300">
-                    <th className="px-3 py-2 font-black text-slate-500 border-r-2 border-dashed border-slate-300 uppercase">Department</th>
-                    <th className="px-3 py-2 font-black text-slate-500 text-right uppercase">Total Asset</th>
+                    <th className="px-3 py-2 font-black text-slate-500 border-r-2 border-dashed border-slate-300 uppercase text-[10px]">Department</th>
+                    <th className="px-3 py-2 font-black text-slate-500 border-r-2 border-dashed border-slate-300 uppercase text-[10px] text-center">Auditors</th>
+                    <th className="px-3 py-2 font-black text-slate-500 text-right uppercase text-[10px]">Total Asset</th>
                   </tr>
                 </thead>
                 <tbody>
                   {groupedData.unassignedDepts.map(dept => (
                     <tr key={dept.id} className="border-b border-dashed border-slate-200">
                       <td className="px-3 py-2 font-bold border-r-2 border-dashed border-slate-300">{dept.name}</td>
+                      <td className="px-3 py-2 font-bold border-r-2 border-dashed border-slate-300 text-center">{dept.auditorCount || 0}</td>
                       <td className="px-3 py-2 font-mono text-right">{(typeof dept.totalAssets === 'string' ? parseInt(dept.totalAssets) : (dept.totalAssets || 0)).toLocaleString()}</td>
                     </tr>
                   ))}

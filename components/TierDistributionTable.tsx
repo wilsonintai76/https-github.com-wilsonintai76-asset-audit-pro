@@ -80,6 +80,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
           <thead className="bg-slate-50/50">
             <tr>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
+              <th id="header-auditors-tier" className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Auditors</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assets / Tier</th>
               {sortedPhases.map(phase => (
                 <th key={phase.id} className="px-4 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
@@ -95,6 +96,9 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                 <td className="px-6 py-4">
                   <div className="font-bold text-slate-900 text-sm">{row.name}</div>
                   <div className="text-[10px] text-slate-400 font-medium">{row.abbr}</div>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className="text-xs font-bold text-slate-700">{row.auditorCount || 0}</span>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2 mb-1">

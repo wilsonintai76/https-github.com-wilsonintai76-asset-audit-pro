@@ -21,12 +21,24 @@ interface TeamManagementProps {
   customConfirm: (title: string, message: string, onConfirm: () => void, isDestructive?: boolean) => void;
   customAlert: (message: string) => void;
   phases?: AuditPhase[];
+  selectedDeptFilter?: string;
+  onDeptFilterChange?: (deptId: string) => void;
 }
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ 
-  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert, phases = [] 
+  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert, phases = [], selectedDeptFilter: propSelectedDeptFilter, onDeptFilterChange 
 }) => {
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState('All');
+  const [internalSelectedDeptFilter, setInternalSelectedDeptFilter] = useState('All');
+  
+  const selectedDeptFilter = propSelectedDeptFilter !== undefined ? propSelectedDeptFilter : internalSelectedDeptFilter;
+  const setSelectedDeptFilter = (deptId: string) => {
+    if (onDeptFilterChange) {
+      onDeptFilterChange(deptId);
+    } else {
+      setInternalSelectedDeptFilter(deptId);
+    }
+  };
+
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);

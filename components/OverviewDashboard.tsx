@@ -160,7 +160,6 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         members: depts
       };
     })
-    .filter(e => e.assets > 0 || e.auditors > 0) // Filter out dormant entities
     .sort((a, b) => b.assets - a.assets);        // Rank by Assets
   }, [departments, auditGroups, schedules]);
 
@@ -227,7 +226,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                         >
                         <option value="All">All Departments</option>
                         {departments.map(d => (
-                            <option key={d.id} value={d.name}>{d.abbr}</option>
+                            <option key={d.id} value={d.name}>{d.name} ({d.abbr})</option>
                         ))}
                         </select>
                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
@@ -244,7 +243,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                         onChange={(e) => setSelectedBlock(e.target.value)}
                         >
                         {uniqueBlocks.map(b => (
-                            <option key={b} value={b}>{b === 'All' ? 'All Blocks' : b}</option>
+                            <option key={b} value={b}>{b === 'All' ? 'All Building/Block' : b}</option>
                         ))}
                         </select>
                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />

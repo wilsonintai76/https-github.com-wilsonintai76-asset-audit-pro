@@ -28,6 +28,7 @@ interface LandingPageProps {
   phases?: AuditPhase[];
   activities?: SystemActivity[];
   topDepartments?: { name: string, compliance: number }[];
+  onDemoLogin?: (role: UserRole) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ 
@@ -38,7 +39,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   complianceProgress,
   phases = [],
   activities = [],
-  topDepartments = []
+  topDepartments = [],
+  onDemoLogin
 }) => {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
@@ -205,6 +207,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </button>
             </div>
           </div>
+
 
           <div className="relative animate-in fade-in slide-in-from-right-8 duration-1000 delay-200 hidden lg:block">
             <div className="relative bg-white rounded-[56px] shadow-2xl border border-slate-100 p-4">

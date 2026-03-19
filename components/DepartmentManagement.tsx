@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Department, Location, User, AuditGroup } from '../types';
-import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, GitMerge, Ban, ChevronRight, Sparkles } from 'lucide-react';
+import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, GitMerge, Ban, ChevronRight, Sparkles, ShieldOff, UserPlus } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
 import { DepartmentModal } from './DepartmentModal';
@@ -36,6 +36,7 @@ interface DepartmentManagementProps {
   onUpdateGroup?: (id: string, group: Partial<AuditGroup>) => void;
   onDeleteGroup?: (id: string) => void;
   onAutoConsolidate?: (threshold: number, excludedIds: string[]) => Promise<void>;
+  onAddAuditor: (deptId: string) => void;
 }
 
 export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
@@ -51,6 +52,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   onUpdateGroup,
   onDeleteGroup,
   onAutoConsolidate,
+  onAddAuditor,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
@@ -227,6 +229,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
               <tr>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Head of Department</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Auditors</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Asset</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Tier & Group</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-left">Actions</th>
@@ -268,6 +271,22 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                         )}
                       </div>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="flex flex-col items-center">
+                          <span className="font-bold text-slate-900 text-sm">
+                            {dept.auditorCount || 0}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={() => onAddAuditor(dept.id)}
+                          className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center"
+                          title="View or Add Auditors"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-sm text-slate-600 font-bold">
                         <Boxes className="w-4 h-4 opacity-40" />
@@ -302,6 +321,17 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                               }`}
                           >
                             <Ban className="w-4 h-4" />
+                          </button>
+                          {/* Quick Exemption toggle */}
+                          <button
+                            onClick={() => onUpdate(dept.id, { isExempted: !dept.isExempted })}
+                            title={dept.isExempted ? 'Click to un-exempt from cross-audits' : 'Click to manually exempt from cross-audits'}
+                            className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-colors ${dept.isExempted
+                                ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
+                                : 'bg-white border-slate-200 text-slate-400 hover:text-amber-500 hover:border-amber-200'
+                              }`}
+                          >
+                            <ShieldOff className="w-4 h-4" />
                           </button>
                           <button onClick={() => startEdit(dept)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors"><Pencil className="w-4 h-4" /></button>
                           <button onClick={() => onDelete(dept.id)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
