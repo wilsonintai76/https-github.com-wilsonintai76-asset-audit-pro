@@ -184,7 +184,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
             >
               <option value="All">All Departments</option>
               {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
+                <option key={d.id} value={d.id}>{d.abbr}</option>
               ))}
             </select>
             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
@@ -255,7 +255,11 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                                 {buildings.find(b => b.id === loc.buildingId)?.abbr}
                               </span>
                             )}
-                            {loc.level && <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">{loc.level}</span>}
+                            {loc.level && (
+                              <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">
+                                {loc.abbr} | {loc.level}
+                              </span>
+                            )}
                           </div>
                           <div className="mt-1.5 text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
                             <Landmark className="w-3.5 h-3.5" />
