@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Location, Department, User } from '../types';
-import { X, MapPin, Building2, Layers, User as UserIcon, Phone, FileText, Search, ChevronDown } from 'lucide-react';
+import { Location, Department, User, Building } from '../types';
+import { X, MapPin, Building2, Layers, User as UserIcon, Phone, FileText, Search, ChevronDown, Plus } from 'lucide-react';
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -14,6 +14,8 @@ interface LocationModalProps {
   isCoordinator?: boolean;
   isSupervisor?: boolean;
   userDeptId?: string;
+  buildings: Building[];
+  onAddBuilding: (building: Partial<Building>) => Promise<Building>;
 }
 
 export const LocationModal: React.FC<LocationModalProps> = ({
@@ -26,13 +28,16 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   isAdmin,
   isCoordinator,
   isSupervisor,
-  userDeptId
+  userDeptId,
+  buildings,
+  onAddBuilding
 }) => {
   const [formData, setFormData] = useState({
     name: '',
     abbr: '',
     departmentId: userDeptId || '',
-    building: '',
+    buildingId: '', // Added
+    building: '', // Keep for backward compat
     level: '',
     description: '',
     supervisorId: '',
@@ -42,15 +47,23 @@ export const LocationModal: React.FC<LocationModalProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSupervisorDropdownOpen, setIsSupervisorDropdownOpen] = useState(false);
+  
+  // Building state
+  const [buildingSearch, setBuildingSearch] = useState('');
+  const [isBuildingDropdownOpen, setIsBuildingDropdownOpen] = useState(false);
+  const [isAddingBuilding, setIsAddingBuilding] = useState(false);
+  const [newBuilding, setNewBuilding] = useState({ name: '', abbr: '', description: '' });
+  const [isSavingBuilding, setIsSavingBuilding] = useState(false);
 
-  const LEVELS = ["FIRST FLOOR", "SECOND FLOOR", "THIRD FLOOR", "FOURTH FLOOR", "FIFTH FLOOR"];
+  const LEVELS = ["LEVEL 1", "LEVEL 2", "LEVEL 3", "LEVEL 4", "LEVEL 5"];
 
   useEffect(() => {
     if (initialData) {
       setFormData({
-        name: initialData.name || '',
+         name: initialData.name || '',
         abbr: initialData.abbr || '',
         departmentId: initialData.departmentId || userDeptId || '',
+        buildingId: initialData.buildingId || '', 
         building: initialData.building || '',
         level: initialData.level || '',
         description: initialData.description || '',
@@ -63,6 +76,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
         name: '',
         abbr: '',
         departmentId: userDeptId || '',
+        buildingId: '',
         building: '',
         level: '',
         description: '',
@@ -72,6 +86,8 @@ export const LocationModal: React.FC<LocationModalProps> = ({
       });
     }
     setSearchQuery('');
+    setBuildingSearch('');
+    setIsAddingBuilding(false);
   }, [initialData, isOpen, userDeptId]);
 
   const filteredSupervisors = useMemo(() => {
@@ -98,6 +114,38 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     users.find(u => u.id === formData.supervisorId),
     [users, formData.supervisorId]
   );
+
+  const selectedBuildingData = useMemo(() => 
+    buildings.find(b => b.id === formData.buildingId),
+    [buildings, formData.buildingId]
+  );
+
+  const filteredBuildings = useMemo(() => {
+    if (!buildingSearch) return buildings;
+    const q = buildingSearch.toLowerCase();
+    return buildings.filter(b => 
+      b.name.toLowerCase().includes(q) || 
+      b.abbr.toLowerCase().includes(q)
+    );
+  }, [buildings, buildingSearch]);
+
+  const handleCreateBuilding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBuilding.name || !newBuilding.abbr) return;
+    
+    setIsSavingBuilding(true);
+    try {
+      const saved = await onAddBuilding(newBuilding);
+      setFormData({ ...formData, buildingId: saved.id, building: saved.name });
+      setIsAddingBuilding(false);
+      setNewBuilding({ name: '', abbr: '', description: '' });
+      setIsBuildingDropdownOpen(false);
+    } catch (err) {
+      console.error("Failed to add building:", err);
+    } finally {
+      setIsSavingBuilding(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,14 +236,119 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
                 </div>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 relative">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Building / Block</label>
-                <input 
-                  placeholder="e.g. Science Block A"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                  value={formData.building}
-                  onChange={e => setFormData({ ...formData, building: e.target.value })}
-                />
+                {!isAddingBuilding ? (
+                  <div className="relative group">
+                    <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
+                    <div 
+                      className={`w-full pl-11 pr-10 py-3 bg-slate-50 border rounded-2xl text-sm font-bold transition-all cursor-pointer flex items-center min-h-[48px] ${isBuildingDropdownOpen ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-200'}`}
+                      onClick={() => setIsBuildingDropdownOpen(!isBuildingDropdownOpen)}
+                    >
+                      {selectedBuildingData ? (
+                        <span className="text-slate-900">{selectedBuildingData.name} <span className="text-slate-400 font-medium ml-1">({selectedBuildingData.abbr})</span></span>
+                      ) : (
+                        <span className="text-slate-400 font-medium">Select Building...</span>
+                      )}
+                    </div>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                       <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setIsAddingBuilding(true); }}
+                        className="p-2 hover:bg-blue-50 text-blue-600 rounded-xl transition-all"
+                        title="Add New Building"
+                       >
+                        <Plus className="w-4 h-4" />
+                       </button>
+                       <ChevronDown className={`text-slate-400 w-4 h-4 transition-transform duration-200 ${isBuildingDropdownOpen ? 'rotate-180' : ''}`} />
+                    </div>
+
+                    {isBuildingDropdownOpen && (
+                      <div className="absolute z-[120] left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                            <input 
+                              autoFocus
+                              placeholder="Search buildings..."
+                              className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                              value={buildingSearch}
+                              onChange={e => setBuildingSearch(e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {filteredBuildings.length > 0 ? (
+                            filteredBuildings.map(b => (
+                              <button
+                                key={b.id}
+                                type="button"
+                                className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setFormData({ ...formData, buildingId: b.id, building: b.name });
+                                  setIsBuildingDropdownOpen(false);
+                                  setBuildingSearch('');
+                                }}
+                              >
+                                <div>
+                                  <div className="text-sm font-bold text-slate-900 group-hover:text-blue-700">{b.name}</div>
+                                  <div className="text-[10px] text-slate-400 font-medium">{b.abbr}</div>
+                                </div>
+                                {formData.buildingId === b.id && (
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full shadow-sm shadow-blue-500/50"></div>
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-4 py-6 text-center">
+                              <p className="text-xs text-slate-400 font-bold mb-3">No buildings found</p>
+                              <button 
+                                type="button"
+                                onClick={() => setIsAddingBuilding(true)}
+                                className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all"
+                              >
+                                Create "{buildingSearch}"
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 animate-in zoom-in duration-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-tight">New Building Protocol</span>
+                      <button type="button" onClick={() => setIsAddingBuilding(false)} className="text-slate-400 hover:text-slate-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      <input 
+                        placeholder="Building Name"
+                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                        value={newBuilding.name}
+                        onChange={e => setNewBuilding({ ...newBuilding, name: e.target.value })}
+                      />
+                      <input 
+                        placeholder="Abbreviation (e.g. BLK-A)"
+                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                        value={newBuilding.abbr}
+                        onChange={e => setNewBuilding({ ...newBuilding, abbr: e.target.value.toUpperCase() })}
+                      />
+                      <button 
+                        type="button"
+                        disabled={isSavingBuilding || !newBuilding.name || !newBuilding.abbr}
+                        onClick={handleCreateBuilding}
+                        className="w-full py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50"
+                      >
+                        {isSavingBuilding ? 'Synching...' : 'Establish Building'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

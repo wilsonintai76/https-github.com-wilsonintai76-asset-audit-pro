@@ -54,11 +54,20 @@ export interface AuditGroup {
   color?: string;
 }
 
+export interface Building {
+  id: string;
+  name: string;
+  abbr: string;
+  description?: string;
+  createdAt?: string;
+}
+
 export interface Location {
   id: string;
   name: string;
   abbr: string;
   departmentId: string;
+  buildingId?: string | null;
   building: string;
   level?: string;
   description: string;

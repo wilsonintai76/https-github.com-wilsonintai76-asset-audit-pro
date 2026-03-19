@@ -4,7 +4,7 @@ import { gateway } from './services/dataGateway';
 import { supabase } from './services/supabase';
 import { authService } from './services/auth';
 import { ItemNotFoundError } from './services/localDB';
-import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup } from './types';
+import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -48,6 +48,7 @@ const App: React.FC = () => {
   const [institutionKPIs, setInstitutionKPIs] = useState<InstitutionKPITarget[]>([]);
   const [departmentMappings, setDepartmentMappings] = useState<DepartmentMapping[]>([]);
   const [auditGroups, setAuditGroups] = useState<AuditGroup[]>([]);
+  const [buildings, setBuildings] = useState<Building[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -116,10 +117,11 @@ const App: React.FC = () => {
         gateway.getDepartmentMappings(),
         gateway.getActivities(),
         gateway.getAuditGroups(),
-        gateway.getInstitutionKPIs()
+        gateway.getInstitutionKPIs(),
+        gateway.getBuildings()
       ]);
 
-      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiTiersData, departmentMappingsData, activitiesData, auditGroupsData, institutionKPIsData] = results;
+      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiTiersData, departmentMappingsData, activitiesData, auditGroupsData, institutionKPIsData, buildingsData] = results;
       
       setSchedules(auditsData);
       setUsers(usersData);
@@ -132,6 +134,7 @@ const App: React.FC = () => {
       setActivities(activitiesData);
       setAuditGroups(auditGroupsData);
       setInstitutionKPIs(institutionKPIsData);
+      setBuildings(buildingsData);
 
       // KPI targets are optional during schema rollout; don't block the app if missing
       let kpiTargetsData: KPITierTarget[] = [];
@@ -1671,6 +1674,32 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateBuilding = async (building: Partial<Building>) => {
+    try {
+      const saved = await gateway.updateBuilding(building);
+      setBuildings(prev => {
+        const exists = prev.find(b => b.id === saved.id);
+        if (exists) return prev.map(b => b.id === saved.id ? saved : b);
+        return [...prev, saved];
+      });
+      showToast(building.id ? "Building updated" : "Building added");
+      return saved;
+    } catch (e) {
+      showError(e, 'Failed to save building');
+      throw e;
+    }
+  };
+
+  const handleDeleteBuilding = async (id: string) => {
+    try {
+      await gateway.deleteBuilding(id);
+      setBuildings(prev => prev.filter(b => b.id !== id));
+      showToast("Building removed");
+    } catch (e) {
+      showError(e, 'Failed to remove building');
+    }
+  };
+
   const handleDeleteAuditGroup = async (id: string) => {
     if (confirm("Delete this group? Departments will be unassigned.")) {
       try {
@@ -2142,6 +2171,8 @@ const App: React.FC = () => {
               onUpdate={handleUpdateLoc}
               onDelete={handleDeleteLoc}
               phases={auditPhases}
+              buildings={buildings}
+              onAddBuilding={handleUpdateBuilding}
             />
           )}
           {activeView === 'settings' && (

@@ -38,6 +38,7 @@ DROP TABLE IF EXISTS system_activities CASCADE;
 DROP TABLE IF EXISTS department_mappings CASCADE;
 DROP TABLE IF EXISTS allowed_domains CASCADE; -- Added
 DROP TABLE IF EXISTS institution_kpi_targets CASCADE; -- Added
+DROP TABLE IF EXISTS buildings CASCADE; -- Added
 
 -- =============================================================
 -- 0. AUDIT GROUPS
@@ -76,6 +77,18 @@ CREATE TABLE departments (
   description     TEXT,
   audit_group_id  UUID REFERENCES audit_groups(id) ON DELETE SET NULL ON UPDATE CASCADE,
   total_assets    INTEGER DEFAULT 0
+);
+
+-- =============================================================
+-- 2.1 BUILDINGS
+--    Stores global building/block definitions.
+-- =============================================================
+CREATE TABLE buildings (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL UNIQUE,
+  abbr        TEXT NOT NULL,
+  description TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- =============================================================
@@ -145,7 +158,9 @@ CREATE TABLE locations (
   abbr          TEXT    NOT NULL,
   department_id UUID    NOT NULL
                   REFERENCES departments(id) ON DELETE RESTRICT ON UPDATE CASCADE,
-  building      TEXT,
+  building_id   UUID
+                  REFERENCES buildings(id) ON DELETE SET NULL ON UPDATE CASCADE,
+  building      TEXT, -- Deprecated in favor of building_id but kept for migration
   level         TEXT,
   description   TEXT,
   supervisor_id UUID

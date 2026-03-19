@@ -1,5 +1,5 @@
 
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building } from '../types';
 import { supabase } from './supabase';
 import { localDB } from './localDB'; 
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
@@ -27,6 +27,9 @@ class DataGateway {
     if (loc.name !== undefined) payload.name = loc.name;
     if (loc.abbr !== undefined) payload.abbr = loc.abbr;
     if (loc.building !== undefined) payload.building = loc.building;
+    if (loc.buildingId !== undefined) {
+      payload.building_id = (loc.buildingId && loc.buildingId !== "") ? loc.buildingId : null;
+    }
     if (loc.level !== undefined) payload.level = loc.level;
     if (loc.description !== undefined) payload.description = loc.description;
     if (loc.contact !== undefined) payload.contact = loc.contact;
@@ -829,6 +832,50 @@ class DataGateway {
       }, { onConflict: 'phase_id' });
       if (error) throw error;
     }
+  }
+
+  // --- BUILDINGS ---
+  async getBuildings(): Promise<Building[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('buildings').select('*').order('name');
+      if (error) throw error;
+      return (data || []).map((b: any) => ({
+        ...b,
+        createdAt: b.created_at
+      })) as Building[];
+    }
+    return [];
+  }
+
+  async updateBuilding(building: Partial<Building>): Promise<Building> {
+    if (supabase) {
+      const payload = {
+        name: building.name,
+        abbr: building.abbr,
+        description: building.description
+      };
+      
+      const { data, error } = await supabase.from('buildings')
+        .upsert(building.id ? { ...payload, id: building.id } : payload)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return {
+        ...data,
+        createdAt: data.created_at
+      } as Building;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async deleteBuilding(id: string): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('buildings').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
   }
 }
 

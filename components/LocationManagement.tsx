@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Location, UserRole, Department, User, AuditPhase } from '../types';
+import { Location, UserRole, Department, User, AuditPhase, Building } from '../types';
 import { Network, ChevronDown, MapPin, Landmark, User as UserIcon, Phone, Pencil, Trash2, MapPinned, Building2, Layers, Plus } from 'lucide-react';
 import { LocationModal } from './LocationModal';
 import { PageHeader } from './PageHeader';
@@ -14,10 +14,12 @@ interface LocationManagementProps {
   onUpdate: (id: string, loc: Partial<Location>) => void;
   onDelete: (id: string) => void;
   phases?: AuditPhase[];
+  buildings: Building[];
+  onAddBuilding: (building: Partial<Building>) => Promise<Building>;
 }
 
 export const LocationManagement: React.FC<LocationManagementProps> = ({ 
-  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [] 
+  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [], buildings, onAddBuilding
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
@@ -25,7 +27,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
   const [selectedBlockFilter, setSelectedBlockFilter] = useState('All');
   const [selectedLevelFilter, setSelectedLevelFilter] = useState('All');
 
-  const LEVELS = ["FIRST FLOOR", "SECOND FLOOR", "THIRD FLOOR", "FOURTH FLOOR", "FIFTH FLOOR"];
+  const LEVELS = ["LEVEL 1", "LEVEL 2", "LEVEL 3", "LEVEL 4", "LEVEL 5"];
 
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
@@ -40,7 +42,10 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
       base = base.filter(l => l.departmentId === selectedDeptFilter);
     }
     if (selectedBlockFilter !== 'All') {
-      base = base.filter(l => l.building === selectedBlockFilter);
+      base = base.filter(l => {
+        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.name);
+        return bName === selectedBlockFilter;
+      });
     }
     if (selectedLevelFilter !== 'All') {
       base = base.filter(l => l.level === selectedLevelFilter);
@@ -65,13 +70,24 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
   const availableBlocks = useMemo(() => {
     let base = (isCoordinator && !isAdmin) ? locations.filter(l => l.departmentId === userDeptId) : locations;
     if (selectedDeptFilter !== 'All') base = base.filter(l => l.departmentId === selectedDeptFilter);
-    return Array.from(new Set(base.map(l => l.building).filter(Boolean))).sort();
-  }, [locations, isCoordinator, isAdmin, userDeptId, selectedDeptFilter]);
+    // Resolve building names from buildings state if building name is missing in location
+    const names = base.map(l => {
+      if (l.building) return l.building;
+      if (l.buildingId) return buildings.find(b => b.id === l.buildingId)?.name;
+      return null;
+    }).filter(Boolean);
+    return Array.from(new Set(names)).sort() as string[];
+  }, [locations, buildings, isCoordinator, isAdmin, userDeptId, selectedDeptFilter]);
 
   const availableLevels = useMemo(() => {
     let base = (isCoordinator && !isAdmin) ? locations.filter(l => l.departmentId === userDeptId) : locations;
     if (selectedDeptFilter !== 'All') base = base.filter(l => l.departmentId === selectedDeptFilter);
-    if (selectedBlockFilter !== 'All') base = base.filter(l => l.building === selectedBlockFilter);
+    if (selectedBlockFilter !== 'All') {
+      base = base.filter(l => {
+        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.name);
+        return bName === selectedBlockFilter;
+      });
+    }
     return Array.from(new Set(base.map(l => l.level).filter(Boolean))).sort((a: any, b: any) => {
       const indexA = LEVELS.indexOf(a || '');
       const indexB = LEVELS.indexOf(b || '');
@@ -234,7 +250,11 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                         <div>
                           <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
                             {loc.name}
-                            {loc.building && <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">{loc.building}</span>}
+                            {(loc.building || (loc.buildingId && buildings.find(b => b.id === loc.buildingId)?.name)) && (
+                              <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">
+                                {loc.building || buildings.find(b => b.id === loc.buildingId)?.name}
+                              </span>
+                            )}
                             {loc.level && <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">{loc.level}</span>}
                           </div>
                           <div className="mt-1.5 text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
@@ -273,7 +293,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                       {(isAdmin || isCoordinator || isSupervisor) && (
                         <div className="flex gap-1">
                           {(isAdmin || isCoordinator || isSupervisor) && (
-                            <button onClick={() => startEdit(loc)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors" title={isSupervisor && !isAdmin && !isCoordinator ? 'Edit Block / Level / Total Assets' : 'Edit Location'}>
+                            <button onClick={() => startEdit(loc)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors" title={isSupervisor && !isAdmin && !isCoordinator ? 'Edit Level / Total Assets' : 'Edit Location'}>
                               <Pencil className="w-4 h-4" />
                             </button>
                           )}
@@ -317,6 +337,8 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
         isCoordinator={isCoordinator}
         isSupervisor={isSupervisor && !isAdmin && !isCoordinator}
         userDeptId={userDeptId}
+        buildings={buildings}
+        onAddBuilding={onAddBuilding}
       />
     </div>
   );
