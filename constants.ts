@@ -163,7 +163,7 @@ export const BRANDING = {
 export const CURRENT_USER: User = {
   id: 'b887fa1e-7613-4cc6-b7dd-a690ebe8ea72',
   name: 'SysAdmin',
-  email: 'wilsonintai76@gmail.com',
+  email: 'wilson@poliku.edu.my',
   roles: ['Admin', 'Coordinator', 'Supervisor', 'Staff'], 
   departmentId: '00000000-0000-0000-0000-000000000000', // System Management ID
   contactNumber: '+60 12-345 6789',

@@ -371,17 +371,12 @@ DECLARE
   email TEXT;
   domain_part TEXT;
   is_allowed BOOLEAN;
-  master_admin TEXT := 'wilsonintai76@gmail.com';
-  dev_admin TEXT := 'wilsonintai@gmail.com';
 BEGIN
   -- 1. Extract email from the event payload
   email := event->'user'->>'email';
   domain_part := split_part(email, '@', 2);
 
-  -- 2. Master Admin bypass
-  IF LOWER(email) IN (LOWER(master_admin), LOWER(dev_admin)) THEN
-    RETURN '{}'::jsonb;
-  END IF;
+  -- 2. Master Admin bypass (Removed)
 
   -- 3. Check if domain exists in our allow list
   SELECT EXISTS (
@@ -418,9 +413,9 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
     -- 0. STRICT DOMAIN BLOCK (Database Level)
-    -- Only allow @poliku.edu.my or the master admin.
+    -- Only allow @poliku.edu.my
     -- Returning NULL kills the insert/update, effectively blocking the registration.
-    IF NOT (LOWER(new.email) LIKE '%@poliku.edu.my' OR LOWER(new.email) IN ('wilsonintai76@gmail.com', 'wilsonintai@gmail.com')) THEN
+    IF NOT (LOWER(new.email) LIKE '%@poliku.edu.my') THEN
         RETURN NULL;
     END IF;
 

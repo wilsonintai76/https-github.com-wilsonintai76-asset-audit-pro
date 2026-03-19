@@ -19,7 +19,7 @@ INSERT INTO departments (
   name = EXCLUDED.name,
   abbr = EXCLUDED.abbr;
 
--- 2. Create the Super Admin User
+-- 2. Create Admin User
 INSERT INTO users (
   id,
   name,
@@ -29,9 +29,9 @@ INSERT INTO users (
   status,
   is_verified
 ) VALUES (
-  '9c4931a8-61f4-4c4b-a53a-cc786e30ef01',
-  'SysAdmin',
-  'wilsonintai76@gmail.com',
+  '75608424-12d0-414d-add1-f507e296b5b4',
+  'WILSON ANAK INTAI (POLIKU)',
+  'wilson@poliku.edu.my',
   ARRAY['Admin', 'Coordinator', 'Supervisor', 'Staff'],
   '00000000-0000-0000-0000-000000000000',
   'Active',
@@ -42,7 +42,7 @@ INSERT INTO users (
   status = EXCLUDED.status,
   is_verified = EXCLUDED.is_verified;
 
--- 3. Set Super Admin as head of System Management
+-- 3. Set Admin as head of System Management
 UPDATE departments 
-SET head_of_dept_id = '9c4931a8-61f4-4c4b-a53a-cc786e30ef01'
+SET head_of_dept_id = '75608424-12d0-414d-add1-f507e296b5b4'
 WHERE id = '00000000-0000-0000-0000-000000000000';

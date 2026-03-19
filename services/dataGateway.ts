@@ -184,8 +184,9 @@ class DataGateway {
     if (supabase) {
       const { data, error } = await supabase.from('users').select('*');
       if (error) throw error;
-      return data.map((u: any) => ({
+      return (data || []).map((u: any) => ({
         ...u,
+        roles: Array.isArray(u.roles) ? u.roles : ['Staff'], // Fallback if roles is missing or null
         departmentId: u.department_id,
         contactNumber: u.contact_number,
         isVerified: u.is_verified,
@@ -203,12 +204,23 @@ class DataGateway {
       const payload = this.mapUserToDB(user);
       
       // Use upsert with email as the conflict target to handle potential ID changes/clashes
-      const { data, error } = await supabase.from('users').upsert([payload], { onConflict: 'email' }).select().single();
+      let { data, error } = await supabase.from('users').upsert([payload], { onConflict: 'email' }).select().single();
+      
+      // Handle Supabase Schema Cache Staleness for 'roles' column
+      if (error && (String(error.code) === 'PGRST204' || String(error.message).includes('roles'))) {
+        console.warn("[DataGateway] Supabase schema cache stale for 'roles' in addUser. Retrying without roles...");
+        delete payload.roles;
+        const retry = await supabase.from('users').upsert([payload], { onConflict: 'email' }).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
+      
       if (error) throw error;
       
       const result = data as any;
       return {
         ...result,
+        roles: Array.isArray(result.roles) ? result.roles : ['Staff'],
         departmentId: result.department_id,
         contactNumber: result.contact_number,
         isVerified: result.is_verified,
@@ -227,8 +239,8 @@ class DataGateway {
       // Try updating by ID first
       let { data, error } = await supabase.from('users').update(payload).eq('id', id).select();
       
-      // Handle Supabase Schema Cache Staleness (PGRST204) for 'roles' column
-      if (error && String(error.code) === 'PGRST204' && String(error.message).includes('roles')) {
+      // Handle Supabase Schema Cache Staleness (PGRST204 / 42703) for 'roles' column
+      if (error && (String(error.code) === 'PGRST204' || String(error.code) === '42703' || String(error.message).includes('roles'))) {
         console.warn("[DataGateway] Supabase schema cache stale for 'roles'. Retrying without roles...");
         delete payload.roles;
         const retry = await supabase.from('users').update(payload).eq('id', id).select();
@@ -256,6 +268,7 @@ class DataGateway {
       const result = data as any;
       return {
         ...result,
+        roles: Array.isArray(result.roles) ? result.roles : ['Staff'],
         departmentId: result.department_id,
         contactNumber: result.contact_number,
         isVerified: result.is_verified,

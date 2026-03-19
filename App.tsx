@@ -365,7 +365,7 @@ const App: React.FC = () => {
     let user: User = {
       id: mockId,
       name: role === 'Admin' ? 'Wilson Intai' : `Demo ${role}`,
-      email: role === 'Admin' ? 'wilsonintai76@gmail.com' : `${role.toLowerCase()}@demo.com`,
+      email: role === 'Admin' ? 'wilson@poliku.edu.my' : `${role.toLowerCase()}@demo.com`,
       roles: inheritedRoles,
       status: 'Active',
       lastActive: new Date().toISOString(),
@@ -421,10 +421,13 @@ const App: React.FC = () => {
       if (savedSession) {
         try {
           const user = JSON.parse(savedSession);
-          if (user.email?.toLowerCase() === 'wilsonintai76@gmail.com' || user.email?.toLowerCase() === 'wilsonintai@gmail.com') {
-            user.roles = ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
-            user.status = 'Active';
-            user.isVerified = true;
+          if (user.email?.toLowerCase().endsWith('@poliku.edu.my')) {
+            user.roles = user.roles || ['Staff'];
+            // Admins are already marked in DB, but for local session consistency:
+            if (user.roles.includes('Admin')) {
+              user.status = 'Active';
+              user.isVerified = true;
+            }
             localStorage.setItem('audit_pro_session', JSON.stringify(user));
           }
           setCurrentUser(user);
