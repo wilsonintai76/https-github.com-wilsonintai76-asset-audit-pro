@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditGroup, SystemActivity } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
@@ -20,8 +20,8 @@ interface OverviewDashboardProps {
   locations?: Location[];
   currentUser: User;
   auditGroups?: AuditGroup[];
-  activities?: SystemActivity[];
   maxAssetsPerDay?: number;
+  institutionKPIs?: InstitutionKPITarget[];
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
@@ -35,7 +35,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   currentUser,
   auditGroups = [],
   activities = [],
-  maxAssetsPerDay = 500
+  maxAssetsPerDay = 500,
+  institutionKPIs = []
 }) => {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState('All');
@@ -266,6 +267,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                 kpiTiers={kpiTiers}
                 departments={departments}
                 schedules={filteredSchedules}
+                institutionKPIs={institutionKPIs}
             />
           )}
 

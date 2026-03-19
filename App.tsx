@@ -4,7 +4,7 @@ import { gateway } from './services/dataGateway';
 import { supabase } from './services/supabase';
 import { authService } from './services/auth';
 import { ItemNotFoundError } from './services/localDB';
-import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, DepartmentMapping, SystemActivity, AuditGroup } from './types';
+import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -45,6 +45,7 @@ const App: React.FC = () => {
   const [auditPhases, setAuditPhases] = useState<AuditPhase[]>([]);
   const [kpiTiers, setKpiTiers] = useState<KPITier[]>([]);
   const [kpiTierTargets, setKpiTierTargets] = useState<KPITierTarget[]>([]);
+  const [institutionKPIs, setInstitutionKPIs] = useState<InstitutionKPITarget[]>([]);
   const [departmentMappings, setDepartmentMappings] = useState<DepartmentMapping[]>([]);
   const [auditGroups, setAuditGroups] = useState<AuditGroup[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -104,7 +105,7 @@ const App: React.FC = () => {
   // --- INITIAL DATA LOAD ---
   const loadAllData = useCallback(async () => {
     try {
-      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiData, mappingsData, activitiesData, groupsData] = await Promise.all([
+      const results = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
         gateway.getDepartments(),
@@ -114,19 +115,32 @@ const App: React.FC = () => {
         gateway.getKPITiers(),
         gateway.getDepartmentMappings(),
         gateway.getActivities(),
-        gateway.getAuditGroups()
+        gateway.getAuditGroups(),
+        gateway.getInstitutionKPIs()
       ]);
+
+      const [auditsData, usersData, deptsData, locsData, permsData, phasesData, kpiTiersData, departmentMappingsData, activitiesData, auditGroupsData, institutionKPIsData] = results;
+      
+      setSchedules(auditsData);
+      setUsers(usersData);
+      setDepartments(deptsData);
+      setLocations(locsData);
+      setCrossAuditPermissions(permsData);
+      setAuditPhases(phasesData);
+      setKpiTiers(kpiTiersData);
+      setDepartmentMappings(departmentMappingsData);
+      setActivities(activitiesData);
+      setAuditGroups(auditGroupsData);
+      setInstitutionKPIs(institutionKPIsData);
 
       // KPI targets are optional during schema rollout; don't block the app if missing
       let kpiTargetsData: KPITierTarget[] = [];
       try {
         kpiTargetsData = await gateway.getKPITierTargets();
+        setKpiTierTargets(kpiTargetsData);
       } catch (targetErr) {
         console.warn("KPI targets failed to load (non-fatal):", targetErr);
       }
-
-      setActivities(activitiesData);
-      setAuditGroups(groupsData);
 
       // Ensure 3 phases exist
       let finalPhases = phasesData;
@@ -152,7 +166,7 @@ const App: React.FC = () => {
       }
 
       // Ensure 3 KPI tiers exist (Small / Medium / Large) using percentage thresholds
-      let finalKpiTiers = kpiData;
+      let finalKpiTiers = kpiTiersData;
       const requiredTierNames = ['Small', 'Medium', 'Large'];
       const defaultTierRanges = [
         { min: 0,   max: 29  },
@@ -161,28 +175,28 @@ const App: React.FC = () => {
       ];
       // Rename legacy 'Tier 1/2/3' entries on first load after upgrade
       const legacyNameMap: Record<string, string> = { 'Tier 1': 'Small', 'Tier 2': 'Medium', 'Tier 3': 'Large' };
-      for (const tier of kpiData) {
+      for (const tier of kpiTiersData) {
         if (legacyNameMap[tier.name]) {
           await gateway.updateKPITier(tier.id, { name: legacyNameMap[tier.name] });
         }
       }
-      if (kpiData.length < 3) {
-        const refreshedData = await gateway.getKPITiers();
-        const existingNames = refreshedData.map((t: KPITier) => t.name);
+      if (finalKpiTiers.length < 3) {
+        const existingNames = finalKpiTiers.map(p => p.name);
         for (let i = 0; i < requiredTierNames.length; i++) {
-          if (!existingNames.includes(requiredTierNames[i])) {
+          const name = requiredTierNames[i];
+          if (!existingNames.includes(name)) {
             await gateway.addKPITier({
-              name: requiredTierNames[i],
+              name,
               minAssets: defaultTierRanges[i].min
             });
           }
         }
-        finalKpiTiers = await gateway.getKPITiers();
+        setKpiTiers(await gateway.getKPITiers());
       } else {
         // Migration: If any tier has minAssets > 100, they are using raw asset counts instead of percentages.
-        const needsMigration = kpiData.some(t => t.minAssets > 100);
+        const needsMigration = kpiTiersData.some(t => t.minAssets > 100);
         if (needsMigration) {
-          const sorted = [...kpiData].sort((a,b) => a.minAssets - b.minAssets);
+          const sorted = [...kpiTiersData].sort((a,b) => a.minAssets - b.minAssets);
           if (sorted[0]) await gateway.updateKPITier(sorted[0].id, { minAssets: 0 });
           if (sorted[1]) await gateway.updateKPITier(sorted[1].id, { minAssets: 30 });
           if (sorted[2]) await gateway.updateKPITier(sorted[2].id, { minAssets: 70 });
@@ -201,7 +215,7 @@ const App: React.FC = () => {
       setAuditPhases(finalPhases);
       setKpiTiers(finalKpiTiers);
       setKpiTierTargets(finalKpiTargets);
-      setDepartmentMappings(mappingsData);
+      setDepartmentMappings(departmentMappingsData);
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
       const raw = (e as any)?.message ? String((e as any).message) : String(e);
@@ -1532,6 +1546,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateInstitutionKPI = async (phaseId: string, percentage: number) => {
+    try {
+      await gateway.updateInstitutionKPI(phaseId, percentage);
+      const updated = await gateway.getInstitutionKPIs();
+      setInstitutionKPIs(updated);
+      showToast('Institutional KPI updated');
+    } catch (e) {
+      showError(e, 'Failed to update institutional KPI');
+    }
+  };
+
   const handleDeleteKPITier = async (id: string) => {
     customConfirm("Delete KPI Tier", "Are you sure you want to delete this KPI Tier?", async () => {
       try {
@@ -2029,6 +2054,7 @@ const App: React.FC = () => {
               activities={activities}
               maxAssetsPerDay={maxAssetsPerDay}
               auditGroups={auditGroups}
+              institutionKPIs={institutionKPIs}
             />
           )}
           {activeView === 'auditor-dashboard' && (
@@ -2039,6 +2065,7 @@ const App: React.FC = () => {
               kpiTiers={kpiTiers}
               departments={departmentsWithAssets}
               locations={locations}
+              institutionKPIs={institutionKPIs}
             />
           )}
           {activeView === 'schedule' && (
@@ -2124,6 +2151,8 @@ const App: React.FC = () => {
               permissions={crossAuditPermissions}
               phases={auditPhases}
               kpiTiers={kpiTiers}
+              kpiTierTargets={kpiTierTargets}
+              institutionKPIs={institutionKPIs}
               userRoles={currentUser.roles}
               onAddPermission={handleAddPermission}
               onRemovePermission={handleRemovePermission}
@@ -2137,6 +2166,7 @@ const App: React.FC = () => {
               onUpdateKPITier={handleUpdateKPITier}
               onDeleteKPITier={handleDeleteKPITier}
               onUpdateKPITierTarget={handleUpdateKPITierTarget}
+              onUpdateInstitutionKPI={handleUpdateInstitutionKPI}
               onResetLocations={handleResetLocations}
               onResetOperationalData={handleResetOperationalData}
               isSystemLocked={isSystemLocked}
@@ -2156,7 +2186,6 @@ const App: React.FC = () => {
               onAddAuditGroup={handleAddAuditGroup}
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}
-              kpiTierTargets={kpiTierTargets}
             />
           )}
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}

@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { AuditSchedule, User, AuditPhase, KPITier, Department, Location } from '../types';
+import { AuditSchedule, User, AuditPhase, KPITier, Department, Location, InstitutionKPITarget } from '../types';
 import { 
   Calendar, 
   CheckCircle2, 
@@ -10,7 +10,8 @@ import {
   GraduationCap,
   ChevronRight,
   MapPin,
-  Building2
+  Building2,
+  Trophy
 } from 'lucide-react';
 
 interface AuditorDashboardProps {
@@ -20,6 +21,7 @@ interface AuditorDashboardProps {
   kpiTiers: KPITier[];
   departments: Department[];
   locations: Location[];
+  institutionKPIs: InstitutionKPITarget[];
 }
 
 export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({ 
@@ -28,7 +30,8 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
   phases,
   kpiTiers,
   departments,
-  locations
+  locations,
+  institutionKPIs
 }) => {
   // Filter audits assigned to the current user
   const myAudits = useMemo(() => {
@@ -257,6 +260,63 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
               </div>
             </div>
           )}
+
+          {/* Phase Targets & Goals */}
+          <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-[40px] rounded-full -mr-10 -mt-10"></div>
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 relative z-10">
+              <Trophy className="w-5 h-5 text-amber-400" />
+              Phase Targets
+            </h3>
+            
+            {(() => {
+              const today = new Date();
+              const activePhase = (phases || []).find(p => {
+                const start = new Date(p.startDate);
+                const end = new Date(p.endDate);
+                return today >= start && today <= end;
+              }) || phases[0];
+
+              if (!activePhase) return null;
+
+              const instTarget = institutionKPIs.find(k => k.phaseId === activePhase.id)?.targetPercentage ?? 0;
+              
+              // Find Dept Target
+              const myDept = departments.find(d => d.id === currentUser.departmentId);
+              let maxGlobalAssets = 0;
+              departments.forEach(d => { if((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0; });
+              const deptPercentage = maxGlobalAssets > 0 ? ((myDept?.totalAssets || 0) / maxGlobalAssets) * 100 : 0;
+              const myTier = [...kpiTiers]
+                .filter(t => deptPercentage >= t.minAssets)
+                .sort((a,b) => b.minAssets - a.minAssets)[0];
+              const deptTarget = myTier?.targets?.[activePhase.id] ?? 0;
+
+              return (
+                <div className="space-y-4 relative z-10">
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <div className="flex justify-between items-center mb-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Institution Goal</span>
+                       <span className="text-lg font-black">{instTarget}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                       <div className="h-full bg-blue-500" style={{ width: `${instTarget}%` }}></div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                    <div className="flex justify-between items-center mb-2">
+                       <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Your Dept Goal</span>
+                       <span className="text-lg font-black">{deptTarget}%</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                       <div className="h-full bg-emerald-500" style={{ width: `${deptTarget}%` }}></div>
+                    </div>
+                    <p className="text-[9px] text-white/30 mt-2 font-medium">Based on {myTier?.name || 'Standard'} Tier</p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
 
           {/* Performance Insight */}
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">

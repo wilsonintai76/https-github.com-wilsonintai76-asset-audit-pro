@@ -1,17 +1,19 @@
 
 import React, { useMemo, useState } from 'react';
-import { KPITier, AuditPhase, KPITierTarget, Department } from '../types';
+import { KPITier, AuditPhase, KPITierTarget, Department, InstitutionKPITarget } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Lock, Plus, Check, X, Pencil, Trash2, Boxes } from 'lucide-react';
+import { Lock, Plus, Check, X, Pencil, Trash2, Boxes, Building2 } from 'lucide-react';
 
 interface KPISettingsProps {
   tiers: KPITier[];
   phases: AuditPhase[];
   tierTargets: KPITierTarget[];
+  institutionKPIs: InstitutionKPITarget[];
   onAddTier: (tier: Omit<KPITier, 'id'>) => void;
   onUpdateTier: (id: string, updates: Partial<KPITier>) => void;
   onDeleteTier: (id: string) => void;
   onUpdateTarget: (tierId: string, phaseId: string, percentage: number) => void;
+  onUpdateInstitutionKPI: (phaseId: string, percentage: number) => void;
   departments: Department[];
 }
 
@@ -19,11 +21,13 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
   tiers,
   phases,
   tierTargets,
+  institutionKPIs,
   departments,
   onAddTier,
   onUpdateTier,
   onDeleteTier,
-  onUpdateTarget
+  onUpdateTarget,
+  onUpdateInstitutionKPI
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tierToDelete, setTierToDelete] = useState<string | null>(null);
@@ -142,6 +146,73 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
   return (
     <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden mt-8 max-w-full">
       <div className="p-8 pb-0">
+      {/* Institutional KPI Goals */}
+      <div className="mb-12">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-sm border border-blue-100">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-slate-900 leading-tight">Institutional KPI Goals</h3>
+            <p className="text-sm text-slate-500">Overarching performance targets for the entire institution across all 3 phases.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {sortedPhases.map(phase => {
+            const current = institutionKPIs.find(k => k.phaseId === phase.id);
+            const targetValue = current?.targetPercentage ?? 0;
+            const isEditing = editingId === `inst-${phase.id}`;
+
+            return (
+              <div key={phase.id} className={`p-6 rounded-3xl border transition-all ${isEditing ? 'bg-blue-50/50 border-blue-200' : 'bg-slate-50/30 border-slate-100 hover:border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{phase.name}</span>
+                  {isEditing ? (
+                    <button onClick={() => {
+                       onUpdateInstitutionKPI(phase.id, formData.targets[phase.id] || 0);
+                       setEditingId(null);
+                    }} className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center hover:bg-blue-700 shadow-sm shadow-blue-500/20">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button onClick={() => {
+                        setEditingId(`inst-${phase.id}`);
+                        setFormData(prev => ({ ...prev, targets: { ...prev.targets, [phase.id]: targetValue } }));
+                    }} className="text-slate-400 hover:text-blue-600 transition-colors">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                
+                <div className="flex items-baseline gap-1">
+                  {isEditing ? (
+                    <div className="flex items-center gap-2">
+                       <input 
+                         type="number"
+                         min="0"
+                         max="100"
+                         autoFocus
+                         className="w-20 text-3xl font-black bg-transparent border-b-2 border-blue-500 text-slate-900 outline-none p-0"
+                         value={formData.targets[phase.id] ?? ''}
+                         onChange={(e) => handleTargetChange(phase.id, e.target.value)}
+                       />
+                       <span className="text-xl font-bold text-slate-400">%</span>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-4xl font-black text-slate-900 leading-none">{targetValue}</span>
+                      <span className="text-xl font-bold text-slate-400">%</span>
+                    </>
+                  )}
+                </div>
+                <div className="mt-2 text-[11px] font-medium text-slate-500">Global Target</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h3 className="text-xl font-bold text-slate-900">Completion KPI Targets</h3>

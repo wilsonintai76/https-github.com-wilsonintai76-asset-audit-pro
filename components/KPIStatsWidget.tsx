@@ -1,16 +1,17 @@
 
 import React, { useMemo, useState } from 'react';
-import { AuditPhase, KPITier, Department, AuditSchedule } from '../types';
-import { ChevronDown } from 'lucide-react';
+import { AuditPhase, KPITier, Department, AuditSchedule, InstitutionKPITarget } from '../types';
+import { ChevronDown, Building2, TrendingUp, AlertCircle, CheckCircle2, Trophy } from 'lucide-react';
 
 interface KPIStatsWidgetProps {
   phases: AuditPhase[];
   kpiTiers: KPITier[];
   departments: Department[];
   schedules: AuditSchedule[];
+  institutionKPIs: InstitutionKPITarget[];
 }
 
-export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers, departments, schedules }) => {
+export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers, departments, schedules, institutionKPIs }) => {
   const [expandedTierId, setExpandedTierId] = useState<string | null>(null);
   const today = new Date();
   
@@ -82,6 +83,22 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
     }).sort((a,b) => a.minAssets - b.minAssets);
   }, [kpiTiers, departments, schedules, activePhase]);
 
+  // Global Institutional Progress
+  const globalStats = useMemo(() => {
+    if (!activePhase) return null;
+    const totalScheduled = schedules.length;
+    const totalCompleted = schedules.filter(s => s.status === 'Completed').length;
+    const actualPercentage = totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0;
+    const targetPercentage = institutionKPIs.find(k => k.phaseId === activePhase.id)?.targetPercentage ?? 0;
+    return {
+      totalScheduled,
+      totalCompleted,
+      actualPercentage,
+      targetPercentage,
+      isOnTrack: actualPercentage >= targetPercentage
+    };
+  }, [schedules, institutionKPIs, activePhase]);
+
   const toggleExpand = (id: string) => {
     setExpandedTierId(prev => prev === id ? null : id);
   };
@@ -90,20 +107,85 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Phase Completion KPI</h3>
-          <p className="text-xs font-bold text-blue-600 uppercase tracking-widest mt-1">
-            Current Focus: {activePhase.name}
+          <h3 className="text-xl font-bold text-slate-900">Institutional Performance</h3>
+          <p className="text-sm font-bold text-blue-600 uppercase tracking-widest mt-1">
+            Current Phase: {activePhase.name}
           </p>
         </div>
-        <div className="text-right hidden sm:block">
-            <p className="text-[10px] text-slate-400 font-bold uppercase">Phase Ends</p>
-            <p className="text-sm font-bold text-slate-700">{activePhase.endDate}</p>
+        <div className="bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100 hidden sm:block">
+            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest text-right">Phase Ends</p>
+            <p className="text-sm font-black text-slate-700">{activePhase.endDate}</p>
         </div>
       </div>
 
+      {globalStats && (
+        <div className="mb-10 bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden shadow-2xl shadow-blue-900/10 group">
+           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[80px] rounded-full -mr-20 -mt-20"></div>
+           <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 blur-[60px] rounded-full -ml-20 -mb-20"></div>
+           
+           <div className="relative flex flex-col md:flex-row md:items-center gap-8">
+              <div className="flex-grow">
+                 <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-white/10 text-blue-400 rounded-xl flex items-center justify-center border border-white/10">
+                       <Building2 className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-lg font-black uppercase tracking-tight">Global Institutional Progress</h4>
+                 </div>
+                 
+                 <div className="flex items-baseline gap-2 mb-4">
+                    <span className="text-6xl font-black">{globalStats.actualPercentage}%</span>
+                    <span className="text-xl font-bold text-white/40">Overall Completion</span>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+                       <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Global Goal</p>
+                       <p className="text-lg font-bold">{globalStats.targetPercentage}%</p>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+                       <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Status</p>
+                       <div className="flex items-center gap-1.5">
+                          {globalStats.isOnTrack ? (
+                             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                             <AlertCircle className="w-4 h-4 text-amber-400" />
+                          )}
+                          <p className={`text-sm font-bold ${globalStats.isOnTrack ? 'text-emerald-400' : 'text-amber-400'}`}>
+                             {globalStats.isOnTrack ? 'On Track' : 'At Risk'}
+                          </p>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="w-full md:w-48 shrink-0 flex flex-col items-center justify-center p-6 bg-white/5 rounded-[24px] border border-white/10">
+                 <TrendingUp className={`w-8 h-8 mb-3 ${globalStats.isOnTrack ? 'text-emerald-400' : 'text-amber-400'}`} />
+                 <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center mb-1">Audit Velocity</p>
+                 <p className="text-2xl font-black">{globalStats.totalCompleted}/{globalStats.totalScheduled}</p>
+                 <p className="text-[10px] text-white/40 font-medium">Locations Audited</p>
+              </div>
+           </div>
+
+           <div className="h-2 w-full bg-white/10 rounded-full mt-8 relative overflow-hidden">
+              <div 
+                 className="absolute top-0 bottom-0 w-1 bg-white z-10" 
+                 style={{ left: `${globalStats.targetPercentage}%` }}
+              ></div>
+              <div 
+                 className={`h-full rounded-full transition-all duration-1000 ${globalStats.isOnTrack ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                 style={{ width: `${globalStats.actualPercentage}%` }}
+              ></div>
+           </div>
+        </div>
+      )}
+
       <div className="space-y-6">
+        <h5 className="text-[11px] font-black uppercase text-slate-400 tracking-widest mb-4 flex items-center gap-2">
+           <Trophy className="w-3.5 h-3.5" />
+           Department Tier Progress
+        </h5>
         {tierStats.map(stat => {
            const progressColor = stat.status === 'On Track' ? 'bg-emerald-500' : 'bg-amber-500';
            const width = `${Math.min(100, stat.actualPercentage)}%`;
