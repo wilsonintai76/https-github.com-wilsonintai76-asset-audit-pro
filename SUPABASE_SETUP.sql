@@ -28,6 +28,7 @@
 DROP TABLE IF EXISTS audits       CASCADE;
 DROP TABLE IF EXISTS cross_audits CASCADE;
 DROP TABLE IF EXISTS locations    CASCADE;
+DROP TABLE IF EXISTS kpi_tier_targets CASCADE; -- Added
 DROP TABLE IF EXISTS kpi_tiers    CASCADE;
 DROP TABLE IF EXISTS users        CASCADE;
 DROP TABLE IF EXISTS departments  CASCADE;
@@ -35,6 +36,7 @@ DROP TABLE IF EXISTS audit_groups CASCADE;
 DROP TABLE IF EXISTS audit_phases CASCADE;
 DROP TABLE IF EXISTS system_activities CASCADE;
 DROP TABLE IF EXISTS department_mappings CASCADE;
+DROP TABLE IF EXISTS allowed_domains CASCADE; -- Added
 
 -- =============================================================
 -- 0. AUDIT GROUPS
