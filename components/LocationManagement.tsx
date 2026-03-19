@@ -43,7 +43,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
     }
     if (selectedBlockFilter !== 'All') {
       base = base.filter(l => {
-        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.name);
+        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.abbr);
         return bName === selectedBlockFilter;
       });
     }
@@ -55,8 +55,8 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
       if (a.departmentId !== b.departmentId) {
         return a.departmentId.localeCompare(b.departmentId);
       }
-      const buildingA = a.building || '';
-      const buildingB = b.building || '';
+      const buildingA = a.building || (a.buildingId && buildings.find(b => b.id === a.buildingId)?.abbr) || '';
+      const buildingB = b.building || (b.buildingId && buildings.find(b => b.id === b.buildingId)?.abbr) || '';
       if (buildingA !== buildingB) {
         return buildingA.localeCompare(buildingB);
       }
@@ -73,7 +73,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
     // Resolve building names from buildings state if building name is missing in location
     const names = base.map(l => {
       if (l.building) return l.building;
-      if (l.buildingId) return buildings.find(b => b.id === l.buildingId)?.name;
+      if (l.buildingId) return buildings.find(b => b.id === l.buildingId)?.abbr;
       return null;
     }).filter(Boolean);
     return Array.from(new Set(names)).sort() as string[];
@@ -84,7 +84,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
     if (selectedDeptFilter !== 'All') base = base.filter(l => l.departmentId === selectedDeptFilter);
     if (selectedBlockFilter !== 'All') {
       base = base.filter(l => {
-        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.name);
+        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.abbr);
         return bName === selectedBlockFilter;
       });
     }
@@ -250,9 +250,9 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                         <div>
                           <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
                             {loc.name}
-                            {(loc.building || (loc.buildingId && buildings.find(b => b.id === loc.buildingId)?.name)) && (
+                            {(loc.buildingId && buildings.find(b => b.id === loc.buildingId)?.abbr) && (
                               <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">
-                                {loc.building || buildings.find(b => b.id === loc.buildingId)?.name}
+                                {buildings.find(b => b.id === loc.buildingId)?.abbr}
                               </span>
                             )}
                             {loc.level && <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">{loc.level}</span>}
