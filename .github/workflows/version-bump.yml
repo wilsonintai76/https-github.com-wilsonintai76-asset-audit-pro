@@ -1,0 +1,38 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'package.json'
+      - '.github/workflows/**'
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Bump Version
+        run: |
+          npm version patch -m "chore: bump version to %s [skip ci]"
+          
+      - name: Push Changes
+        run: |
+          git push origin master --follow-tags
