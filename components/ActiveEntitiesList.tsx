@@ -17,6 +17,7 @@ interface ActiveEntitiesListProps {
   onSelect: (name: string) => void;
   megaTargetThreshold: number;
   minAuditors: number;
+  overallTotal?: number;
 }
 
 export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
@@ -24,15 +25,24 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
   selectedEntity,
   onSelect,
   megaTargetThreshold,
-  minAuditors
+  minAuditors,
+  overallTotal
 }) => {
   return (
     <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden mt-12">
-      <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+      <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h3 className="text-lg font-bold text-slate-900">Active Entities (Ranked by Assets)</h3>
           <p className="text-sm text-slate-500">Live visualization of audit entities and resource strength.</p>
         </div>
+        
+        {overallTotal !== undefined && (
+          <div className="bg-slate-900 px-5 py-3 rounded-2xl border border-slate-700 shadow-md">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Institutional Grand Total</p>
+            <p className="text-xl font-mono font-black text-white">{overallTotal.toLocaleString()}</p>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Live Updates</span>

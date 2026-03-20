@@ -7,7 +7,6 @@ import { KPIStatsWidget } from './KPIStatsWidget';
 import { TierDistributionTable } from './TierDistributionTable';
 import { Sliders, GraduationCap, Filter, ChevronDown, LayoutDashboard, Trophy } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
-import { InstitutionalConsolidationView } from './InstitutionalConsolidationView';
 import { PageHeader } from './PageHeader';
 
 interface OverviewDashboardProps {
@@ -34,7 +33,6 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   locations = [],
   currentUser,
   auditGroups = [],
-  activities = [],
   maxAssetsPerDay = 500,
   institutionKPIs = []
 }) => {
@@ -56,7 +54,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   // Filter Logic
   const filteredLocations = useMemo(() => {
     return locations.filter(l => {
-      if (!l.isActive) return false; // Filter out inactive locations
+      if (!l.isActive) return false;
       const dept = departments.find(d => d.id === l.departmentId);
       if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
       if (selectedBlock !== 'All' && l.building !== selectedBlock) return false;
@@ -68,7 +66,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   const filteredSchedules = useMemo(() => {
     return schedules.filter(s => {
       const loc = locations.find(l => l.id === s.locationId);
-      if (loc && !loc.isActive) return false; // Filter out audits for inactive locations
+      if (loc && !loc.isActive) return false;
       const dept = departments.find(d => d.id === s.departmentId);
       
       if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
@@ -102,7 +100,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
   const upcomingAudits = [...filteredSchedules]
     .filter(s => s.status !== 'Completed')
-    .sort((a: AuditSchedule, b: AuditSchedule) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 3);
 
   const deptCounts = useMemo(() => {
@@ -120,11 +118,9 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   , [deptCounts]);
 
   const activeEntities = useMemo(() => {
-    // Group departments by their Consolidated Unit (Audit Group)
     const groupedDepts: Record<string, Department[]> = {};
     
     departments.filter(d => !d.isExempted).forEach(dept => {
-      // If no group, use a unique key for the individual department
       const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
       groupedDepts[key].push(dept);
@@ -133,11 +129,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
       const isUnassigned = groupId.startsWith('unassigned_');
       const deptIds = depts.map(d => d.id);
-      
-      // 1. Calculate combined assets
       const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
       
-      // 2. Count unique auditors assigned to these departments
       const deptSchedules = schedules.filter(s => deptIds.includes(s.departmentId));
       const uniqueAuditors = new Set<string>();
       deptSchedules.forEach(s => {
@@ -159,9 +152,12 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         id: groupId,
         members: depts
       };
-    })
-    .sort((a, b) => b.assets - a.assets);        // Rank by Assets
+    }).sort((a, b) => b.assets - a.assets);
   }, [departments, auditGroups, schedules]);
+
+  const overallTotalAssets = useMemo(() => {
+     return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+  }, [departments]);
 
   const activePhase = useMemo(() => {
     const today = new Date();
@@ -206,16 +202,13 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
       </PageHeader>
 
-      {/* Filters Bar */}
       <div className="bg-white rounded-[32px] p-4 border border-slate-200 shadow-sm">
           <div className="flex flex-col lg:flex-row gap-4">
               <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest mb-2 lg:mb-0 lg:mr-4">
                   <Filter className="w-4 h-4" />
                   Filters
               </div>
-              
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-grow">
-                  {/* Department Filter */}
                   <div className="relative">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Department</label>
                     <div className="relative">
@@ -232,8 +225,6 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
                     </div>
                   </div>
-
-                  {/* Block Filter */}
                   <div className="relative">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Block / Building</label>
                     <div className="relative">
@@ -249,8 +240,6 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
                     </div>
                   </div>
-
-                  {/* Level Filter */}
                   <div className="relative">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Level</label>
                     <div className="relative">
@@ -274,8 +263,6 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-            
-          {/* KPI Widget */}
           {phases?.length > 0 && kpiTiers?.length > 0 && (
             <KPIStatsWidget 
                 phases={phases}
@@ -344,36 +331,15 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
 
         <div className="space-y-8">
-          {/* Active Entities Ranked by Assets */}
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                <Trophy className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Active Entities</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Ranked by Total Assets</p>
-              </div>
-            </div>
             <ActiveEntitiesList 
-              entities={activeEntities.slice(0, 10)} 
+              entities={activeEntities} 
               selectedEntity=""
               onSelect={() => {}}
               megaTargetThreshold={3000}
               minAuditors={2}
+              overallTotal={overallTotalAssets}
             />
-          </div>
-
-          {/* Excel-Style Consolidation View */}
-          <div className="mt-12 bg-white rounded-[32px] border border-slate-200 shadow-sm p-8">
-            <InstitutionalConsolidationView 
-              departments={departments}
-              auditGroups={auditGroups}
-              title="Audit Consolidation Overview"
-              subtitle="Consolidated asset tracking by institutional groups (Excel Style)."
-            />
-          </div>
-
+          
           {config.showUpcoming && (
             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Upcoming Audits</h3>
