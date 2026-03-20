@@ -74,6 +74,14 @@ This project uses an automated CI/CD pipeline:
 - **Pushes to `master`**: Automatically bumps the patch version in `package.json`, creates a GitHub Tag, and triggers a Cloudflare Pages deployment.
 - **Self-Hosted Components**: Uses a `self-hosted` runner for Docker-based server synchronization as defined in `.github/workflows/deploy.yml`.
 
+### ⚠️ Troubleshooting Versioning
+If the version number (patch) does not increment automatically on GitHub:
+1.  Go to your Repository **Settings**.
+2.  Navigate to **Actions** > **General**.
+3.  Scroll down to **Workflow permissions**.
+4.  Select **"Read and write permissions"** and click **Save**.
+5.  Ensure **"Allow GitHub Actions to create and approve pull requests"** is also checked.
+
 ---
 
 © 2026 Asset Audit Pro. All rights reserved.
