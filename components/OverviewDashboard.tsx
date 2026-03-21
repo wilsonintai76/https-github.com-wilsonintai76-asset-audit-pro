@@ -8,6 +8,10 @@ import { TierDistributionTable } from './TierDistributionTable';
 import { Sliders, GraduationCap, Filter, ChevronDown, LayoutDashboard, Trophy } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { PageHeader } from './PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 interface OverviewDashboardProps {
   schedules: AuditSchedule[];
@@ -130,14 +134,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       const isUnassigned = groupId.startsWith('unassigned_');
       const deptIds = depts.map(d => d.id);
       const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+      const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       
-      const deptSchedules = schedules.filter(s => deptIds.includes(s.departmentId));
-      const uniqueAuditors = new Set<string>();
-      deptSchedules.forEach(s => {
-        if (s.auditor1Id) uniqueAuditors.add(s.auditor1Id);
-        if (s.auditor2Id) uniqueAuditors.add(s.auditor2Id);
-      });
-
       const name = isUnassigned 
         ? depts[0].name 
         : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
@@ -145,7 +143,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       return {
         name,
         assets: totalAssets,
-        auditors: uniqueAuditors.size,
+        auditors: totalAuditors,
         memberCount: depts.length,
         isJoint: !isUnassigned && depts.length > 0,
         isConsolidated: !isUnassigned,
@@ -179,17 +177,17 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         activePhase={activePhase}
       >
         <div className="flex items-center gap-3">
-          <button 
+          <Button 
+            variant={activePhase ? "outline" : "default"}
+            size="sm"
             onClick={() => setIsCustomizeOpen(true)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 ${
-              activePhase 
-                ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20' 
-                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+            className={`flex items-center gap-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 ${
+              activePhase && 'bg-white/10 text-white border-white/20 hover:bg-white/20'
             }`}
           >
             <Sliders className={`w-4 h-4 ${activePhase ? 'text-emerald-400' : 'text-blue-500'}`} />
             Customize View
-          </button>
+          </Button>
           {!activePhase && (
             <div className="text-right hidden sm:block">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">System Status</p>
@@ -202,62 +200,58 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
       </PageHeader>
 
-      <div className="bg-white rounded-[32px] p-4 border border-slate-200 shadow-sm">
+      <Card className="rounded-[32px] border-slate-200 shadow-sm overflow-hidden">
+        <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
               <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest mb-2 lg:mb-0 lg:mr-4">
                   <Filter className="w-4 h-4" />
                   Filters
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-grow">
-                  <div className="relative">
-                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Department</label>
-                    <div className="relative">
-                        <select
-                        className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
-                        value={selectedDept}
-                        onChange={(e) => setSelectedDept(e.target.value)}
-                        >
-                        <option value="All">All Departments</option>
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Department</Label>
+                    <Select value={selectedDept} onValueChange={setSelectedDept}>
+                      <SelectTrigger className="w-full bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-10 px-4">
+                        <SelectValue placeholder="All Departments" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="All">All Departments</SelectItem>
                         {departments.map(d => (
-                            <option key={d.id} value={d.name}>{d.name} ({d.abbr})</option>
+                            <SelectItem key={d.id} value={d.name}>{d.name} ({d.abbr})</SelectItem>
                         ))}
-                        </select>
-                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
-                    </div>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="relative">
-                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Block / Building</label>
-                    <div className="relative">
-                        <select
-                        className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
-                        value={selectedBlock}
-                        onChange={(e) => setSelectedBlock(e.target.value)}
-                        >
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Block / Building</Label>
+                    <Select value={selectedBlock} onValueChange={setSelectedBlock}>
+                      <SelectTrigger className="w-full bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-10 px-4">
+                        <SelectValue placeholder="All Building/Block" />
+                      </SelectTrigger>
+                      <SelectContent>
                         {uniqueBlocks.map(b => (
-                            <option key={b} value={b}>{b === 'All' ? 'All Building/Block' : b}</option>
+                            <SelectItem key={b} value={b}>{b === 'All' ? 'All Building/Block' : b}</SelectItem>
                         ))}
-                        </select>
-                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
-                    </div>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="relative">
-                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Level</label>
-                    <div className="relative">
-                        <select
-                        className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
-                        value={selectedLevel}
-                        onChange={(e) => setSelectedLevel(e.target.value)}
-                        >
+                  <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Level</Label>
+                    <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+                      <SelectTrigger className="w-full bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-10 px-4">
+                        <SelectValue placeholder="All Levels" />
+                      </SelectTrigger>
+                      <SelectContent>
                         {uniqueLevels.map(l => (
-                            <option key={l} value={l}>{l === 'All' ? 'All Levels' : l}</option>
+                            <SelectItem key={l} value={l}>{l === 'All' ? 'All Levels' : l}</SelectItem>
                         ))}
-                        </select>
-                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
-                    </div>
+                      </SelectContent>
+                    </Select>
                   </div>
               </div>
           </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {config.showStats && <StatsCards schedules={filteredSchedules} />}
 
@@ -283,26 +277,28 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           )}
 
           {config.showTrends && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-900">Compliance Trends</h3>
+            <Card className="rounded-3xl border-slate-200 shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-xl font-bold text-slate-900">Compliance Trends</CardTitle>
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-blue-500"></span>
                   <span className="text-xs font-bold text-slate-500 uppercase">Weekly Goal</span>
                 </div>
-              </div>
-              <div className="h-48 flex items-end gap-3 md:gap-6">
-                {[45, 78, 55, 90, 65, 82, 95].map((height, i) => (
-                  <div key={i} className="flex-grow flex flex-col items-center group">
-                    <div 
-                      className={`w-full rounded-t-lg transition-all duration-500 ${i === 6 ? 'bg-blue-600' : 'bg-slate-100 group-hover:bg-slate-200'}`}
-                      style={{ height: `${height}%` }}
-                    ></div>
-                    <span className="text-[10px] font-bold text-slate-400 mt-2 uppercase">Day 0{i+1}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+              </CardHeader>
+              <CardContent className="p-8 pt-0">
+                <div className="h-48 flex items-end gap-3 md:gap-6">
+                  {[45, 78, 55, 90, 65, 82, 95].map((height, i) => (
+                    <div key={i} className="flex-grow flex flex-col items-center group">
+                      <div 
+                        className={`w-full rounded-t-lg transition-all duration-500 ${i === 6 ? 'bg-blue-600' : 'bg-slate-100 group-hover:bg-slate-200'}`}
+                        style={{ height: `${height}%` }}
+                      ></div>
+                      <span className="text-[10px] font-bold text-slate-400 mt-2 uppercase">Day 0{i+1}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {config.showDeptDistribution && (
@@ -341,9 +337,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
             />
           
           {config.showUpcoming && (
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900 mb-4">Upcoming Audits</h3>
-              <div className="space-y-4">
+            <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg font-bold text-slate-900">Upcoming Audits</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 pt-0 space-y-4">
                 {upcomingAudits.map((audit) => {
                   const loc = locations.find(l => l.id === audit.locationId);
                   const dept = departments.find(d => d.id === audit.departmentId);
@@ -370,11 +368,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                     <p className="text-xs text-slate-400 font-medium italic">No upcoming audits scheduled.</p>
                   </div>
                 )}
-                <button className="w-full py-3 text-xs font-bold text-blue-600 border border-blue-100 rounded-xl hover:bg-blue-50 transition-colors">
+                <Button variant="outline" className="w-full py-3 h-auto text-xs font-bold text-blue-600 border-blue-100 rounded-xl hover:bg-blue-50 transition-colors">
                   View Full Calendar
-                </button>
-              </div>
-            </div>
+                </Button>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>

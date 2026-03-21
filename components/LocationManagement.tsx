@@ -33,6 +33,19 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
 
+  const getBuildingAbbr = (buildingId?: string, buildingName?: string) => {
+    if (buildingId) {
+      const b = buildings.find(b => b.id === buildingId);
+      if (b) return b.abbr;
+    }
+    if (buildingName) {
+      const b = buildings.find(b => b.name === buildingName);
+      if (b) return b.abbr;
+      return buildingName;
+    }
+    return '';
+  };
+
   const filteredLocations = useMemo(() => {
     let base = (isCoordinator && !isAdmin)
       ? locations.filter(l => l.departmentId === userDeptId) 
@@ -42,10 +55,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
       base = base.filter(l => l.departmentId === selectedDeptFilter);
     }
     if (selectedBlockFilter !== 'All') {
-      base = base.filter(l => {
-        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.abbr);
-        return bName === selectedBlockFilter;
-      });
+      base = base.filter(l => getBuildingAbbr(l.buildingId, l.building) === selectedBlockFilter);
     }
     if (selectedLevelFilter !== 'All') {
       base = base.filter(l => l.level === selectedLevelFilter);
@@ -55,8 +65,8 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
       if (a.departmentId !== b.departmentId) {
         return a.departmentId.localeCompare(b.departmentId);
       }
-      const buildingA = a.building || (a.buildingId && buildings.find(b => b.id === a.buildingId)?.abbr) || '';
-      const buildingB = b.building || (b.buildingId && buildings.find(b => b.id === b.buildingId)?.abbr) || '';
+      const buildingA = getBuildingAbbr(a.buildingId, a.building);
+      const buildingB = getBuildingAbbr(b.buildingId, b.building);
       if (buildingA !== buildingB) {
         return buildingA.localeCompare(buildingB);
       }
@@ -71,22 +81,15 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
     let base = (isCoordinator && !isAdmin) ? locations.filter(l => l.departmentId === userDeptId) : locations;
     if (selectedDeptFilter !== 'All') base = base.filter(l => l.departmentId === selectedDeptFilter);
     // Resolve building names from buildings state if building name is missing in location
-    const names = base.map(l => {
-      if (l.building) return l.building;
-      if (l.buildingId) return buildings.find(b => b.id === l.buildingId)?.abbr;
-      return null;
-    }).filter(Boolean);
-    return Array.from(new Set(names)).sort() as string[];
+    const abbrs = base.map(l => getBuildingAbbr(l.buildingId, l.building)).filter(Boolean);
+    return Array.from(new Set(abbrs)).sort() as string[];
   }, [locations, buildings, isCoordinator, isAdmin, userDeptId, selectedDeptFilter]);
 
   const availableLevels = useMemo(() => {
     let base = (isCoordinator && !isAdmin) ? locations.filter(l => l.departmentId === userDeptId) : locations;
     if (selectedDeptFilter !== 'All') base = base.filter(l => l.departmentId === selectedDeptFilter);
     if (selectedBlockFilter !== 'All') {
-      base = base.filter(l => {
-        const bName = l.building || (l.buildingId && buildings.find(b => b.id === l.buildingId)?.abbr);
-        return bName === selectedBlockFilter;
-      });
+      base = base.filter(l => getBuildingAbbr(l.buildingId, l.building) === selectedBlockFilter);
     }
     return Array.from(new Set(base.map(l => l.level).filter(Boolean))).sort((a: any, b: any) => {
       const indexA = LEVELS.indexOf(a || '');
@@ -257,7 +260,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                             )}
                             {loc.level && (
                               <span className="text-[10px] text-slate-400 font-normal italic border-l border-slate-200 pl-2">
-                                {loc.abbr} | {loc.level}
+                                {getBuildingAbbr(loc.buildingId, loc.building) || loc.abbr} | {loc.level}
                               </span>
                             )}
                           </div>

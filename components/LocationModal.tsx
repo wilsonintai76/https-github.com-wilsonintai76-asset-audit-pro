@@ -202,7 +202,6 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                 <div className="relative">
                   <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
                   <input 
-                    required
                     disabled={isSupervisor}
                     placeholder="e.g. Main Chemistry Lab"
                     className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
@@ -214,7 +213,6 @@ export const LocationModal: React.FC<LocationModalProps> = ({
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Abbreviation</label>
                 <input 
-                  required
                   disabled={isSupervisor}
                   placeholder="e.g. MCL-01"
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
@@ -231,7 +229,6 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                 <div className="relative">
                   <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
                   <select 
-                    required
                     disabled={!isAdmin}
                     className="w-full pl-11 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all appearance-none cursor-pointer disabled:opacity-60"
                     value={formData.departmentId}
@@ -437,7 +434,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                               className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors flex items-center justify-between group"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setFormData({ ...formData, supervisorId: u.id, contact: u.contactNumber || formData.contact });
+                                setFormData({ ...formData, supervisorId: u.id, contact: u.contactNumber || '' });
                                 setIsSupervisorDropdownOpen(false);
                                 setSearchQuery('');
                               }}
@@ -471,7 +468,6 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                 <div className="relative">
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
                   <input 
-                    required
                     disabled={isSupervisor}
                     type="tel"
                     placeholder="Phone / Ext"

@@ -1,7 +1,10 @@
 
 import React, { useState } from 'react';
 import { DashboardConfig } from '../types';
-import { BarChart3, LineChart, CalendarDays, Network, Award, X } from 'lucide-react';
+import { BarChart3, LineChart, CalendarDays, Network, Award, X, Sliders } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
 
 interface CustomizeDashboardModalProps {
   config: DashboardConfig;
@@ -28,26 +31,25 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
   ] as const;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={onClose}></div>
-      <div className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div className="bg-slate-900 p-6 text-white flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-bold">Customize Dashboard</h3>
-            <p className="text-slate-400 text-xs mt-1">Configure your workspace view preferences.</p>
+    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md rounded-3xl border-none shadow-2xl p-0 overflow-hidden bg-white">
+        <DialogHeader className="bg-slate-900 p-6 text-white space-y-0 flex flex-row items-center justify-between">
+          <div className="space-y-1">
+            <DialogTitle className="text-xl font-bold">Customize Dashboard</DialogTitle>
+            <DialogDescription className="text-slate-400 text-xs">
+              Configure your workspace view preferences.
+            </DialogDescription>
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         <div className="p-6 space-y-4">
           <div className="space-y-3">
             {widgetDefinitions.map((widget) => {
               const Icon = widget.icon;
               return (
-                <label 
+                <div 
                   key={widget.key}
+                  onClick={() => toggle(widget.key)}
                   className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all cursor-pointer group ${
                     tempConfig[widget.key] 
                       ? 'border-blue-100 bg-blue-50/30' 
@@ -63,36 +65,32 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
                     <p className="text-sm font-bold text-slate-900">{widget.label}</p>
                     <p className="text-[10px] text-slate-500 font-medium">{widget.desc}</p>
                   </div>
-                  <div className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={tempConfig[widget.key]}
-                      onChange={() => toggle(widget.key)}
-                    />
-                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </div>
-                </label>
+                  <Switch 
+                    checked={tempConfig[widget.key]}
+                    onCheckedChange={() => toggle(widget.key)}
+                  />
+                </div>
               );
             })}
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <button 
+          <DialogFooter className="flex flex-row gap-3 pt-4 sm:justify-start">
+            <Button 
+              variant="outline"
               onClick={onClose}
-              className="flex-grow py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all text-sm"
+              className="flex-grow py-6 border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-100 transition-all text-sm"
             >
               Discard Changes
-            </button>
-            <button 
+            </Button>
+            <Button 
               onClick={() => onSave(tempConfig)}
-              className="flex-[2] py-3 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 text-sm"
+              className="flex-[2] py-6 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 text-sm border-none"
             >
               Save Configuration
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };

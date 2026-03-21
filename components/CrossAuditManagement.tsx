@@ -70,27 +70,21 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [isApplied, setIsApplied] = useState(false);
   const [activeModal, setActiveModal] = useState<'apply' | 'reset' | null>(null);
 
-  // 1. Compute Stats for Each Department
-  const deptStats = useMemo(() => {
-    return departments.filter(d => !d.isExempted).map(dept => {
-      const auditorCount = users.filter(u => 
-        u.department === dept.name && 
-        (u.roles.includes('Staff') || u.roles.includes('Supervisor') || u.roles.includes('Coordinator') || u.roles.includes('Admin')) &&
-        u.status === 'Active'
-      ).length || 0;
+  // 0. Compute Institutional Grand Total
+  const overallTotalAssets = useMemo(() => {
+    if (!departments) return 0;
+    return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+  }, [departments]);
 
-      return {
-        ...dept,
-        auditorCount
-      };
-    });
-  }, [departments, users]);
+  // 1. Get Non-Exempted Departments
+  const activeDepts = useMemo(() => {
+    return departments.filter(d => !d.isExempted);
+  }, [departments]);
 
-  // 2. Compute "Audit Entities" (Merged Groups + Standalone)
   const entities = useMemo(() => {
     const map = new Map<string, { name: string, assets: number, auditors: number, memberCount: number, members: any[], id?: string }>(); 
 
-    deptStats.forEach(d => {
+    activeDepts.forEach(d => {
       // Use the normalized auditGroupId to identify the group.
       // If none, it is a standalone department.
       const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
@@ -104,7 +98,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       map.set(entityId, { 
         name: entityName,
         assets: current.assets + safeAssets,
-        auditors: current.auditors + d.auditorCount,
+        auditors: current.auditors + (d.auditorCount || 0),
         memberCount: current.memberCount + 1,
         members: [...current.members, d],
         id: entityId
@@ -117,10 +111,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       return { 
         ...stats, 
         isJoint: constitutesGroup,
-        isGroup: constitutesGroup 
+        isGroup: constitutesGroup,
+        isConsolidated: constitutesGroup
       };
-    });
-  }, [deptStats, auditGroups]);
+    }).sort((a, b) => b.assets - a.assets);
+  }, [activeDepts, auditGroups]);
 
   // Group manual permissions by auditor for the table view
   const groupedPermissions = useMemo(() => {
@@ -256,10 +251,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const handleAnalyzeAndGroup = async () => {
     setIsProcessing(true);
-    const standalones: typeof deptStats = [];
-    const pool: typeof deptStats = [];
+    const standalones: typeof activeDepts = [];
+    const pool: typeof activeDepts = [];
     
-    deptStats.forEach(d => {
+    activeDepts.forEach(d => {
         const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
         if (safeAssets >= assetThreshold && d.auditorCount >= minAuditors) {
             standalones.push(d);
@@ -277,7 +272,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         return assetsA - assetsB;
     });
     
-    let currentGroup: typeof deptStats = [];
+    let currentGroup: typeof activeDepts = [];
     let currentAssets = 0;
     let currentAuditors = 0;
     let groupIndex = 1;
@@ -643,11 +638,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
       {/* ENTITIES LIST */}
       <ActiveEntitiesList 
-        entities={entities.filter(e => !e.isGroup)}
+        entities={entities}
         selectedEntity={selectedAuditor}
         onSelect={setSelectedAuditor}
         megaTargetThreshold={megaTargetThreshold}
         minAuditors={minAuditors}
+        overallTotal={overallTotalAssets}
       />
 
       <ConfirmationModal

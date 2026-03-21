@@ -1,6 +1,17 @@
 
 import React from 'react';
-import { AlertTriangle, AlertCircle, Info } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -44,38 +55,38 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   }[variant];
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <div 
-        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" 
-        onClick={onCancel}
-      ></div>
-      <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-        <div className="p-8 text-center">
+    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+      <AlertDialogContent className="sm:max-w-sm rounded-3xl border-none shadow-2xl p-0 overflow-hidden bg-white">
+        <div className="p-8 text-center bg-white">
           <div className={`w-16 h-16 ${iconClasses[variant]} rounded-2xl flex items-center justify-center mx-auto mb-6 text-2xl`}>
             <IconComponent className="w-8 h-8" />
           </div>
           
-          <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
-          <p className="text-slate-500 text-sm leading-relaxed mb-8">
-            {message}
-          </p>
+          <AlertDialogHeader className="space-y-2">
+            <AlertDialogTitle className="text-xl font-bold text-slate-900 mx-auto text-center">{title}</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-500 text-sm leading-relaxed mx-auto text-center">
+              {message}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
 
-          <div className="space-y-3">
-            <button 
+          <AlertDialogFooter className="flex flex-col space-y-3 mt-8 sm:space-x-0">
+            <AlertDialogAction 
               onClick={onConfirm}
-              className={`w-full py-3.5 text-white font-bold rounded-2xl transition-all shadow-lg ${variantClasses[variant]}`}
+              className={`w-full py-6 text-white font-bold rounded-2xl transition-all shadow-lg border-none ${variantClasses[variant]}`}
             >
               {confirmLabel}
-            </button>
-            <button 
+            </AlertDialogAction>
+            <AlertDialogCancel 
               onClick={onCancel}
-              className="w-full py-3.5 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+              variant="outline"
+              size="default"
+              className="w-full py-6 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all border-none"
             >
               {cancelLabel}
-            </button>
-          </div>
+            </AlertDialogCancel>
+          </AlertDialogFooter>
         </div>
-      </div>
-    </div>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };

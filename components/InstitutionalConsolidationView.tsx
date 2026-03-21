@@ -1,6 +1,8 @@
 
 import React from 'react';
 import { Department, AuditGroup } from '../types';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface InstitutionalConsolidationViewProps {
   departments: Department[];
@@ -97,7 +99,7 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
             <div className={`rounded-2xl p-4 border-2 border-slate-100 ${isDark ? 'bg-slate-700' : 'bg-slate-50'}`}>
               <div className="flex justify-between items-center mb-3">
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Components</span>
-                <span className="px-2 py-0.5 rounded-full bg-slate-900 text-white text-[9px] font-bold">{group.departments.length}</span>
+                <Badge variant="secondary" className="px-2 py-0.5 rounded-full bg-slate-900 text-white text-[9px] font-bold border-none">{group.departments.length}</Badge>
               </div>
               
               <div className="space-y-1.5">
