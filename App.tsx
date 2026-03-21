@@ -1434,13 +1434,27 @@ const App: React.FC = () => {
     });
   };
 
-  const handleAddPermission = async (auditorDept: string, targetDept: string, isMutual: boolean) => {
+  const handleAddPermission = async (auditorDeptId: string, targetDeptId: string, isMutual: boolean) => {
     try {
-      await gateway.addPermission({ auditorDeptId: auditorDept, targetDeptId: targetDept, isMutual, isActive: true });
+      await gateway.addPermission({ auditorDeptId, targetDeptId, isMutual, isActive: true });
+      if (isMutual) {
+        await gateway.addPermission({ auditorDeptId: targetDeptId, targetDeptId: auditorDeptId, isMutual: true, isActive: true });
+      }
       setCrossAuditPermissions(await gateway.getPermissions());
       showToast('Permission added successfully');
     } catch (e) {
       showError(e, 'Failed to Add Permission');
+    }
+  };
+
+  const handleBulkAddPermissions = async (perms: Omit<CrossAuditPermission, 'id'>[]) => {
+    try {
+      if (!perms?.length) return;
+      await gateway.bulkAddPermissions(perms);
+      setCrossAuditPermissions(await gateway.getPermissions());
+      showToast(`Successfully added ${perms.length} pairings.`);
+    } catch (e) {
+      showError(e, 'Bulk Operation Failed');
     }
   };
 
@@ -2275,6 +2289,7 @@ const App: React.FC = () => {
               onTogglePermission={handleTogglePermission}
               onUpdateDepartment={handleUpdateDept}
               onBulkUpdateDepartments={handleBulkUpdateDepts}
+              onBulkAddPermissions={handleBulkAddPermissions}
               onAddPhase={handleAddPhase}
               onUpdatePhase={handleUpdatePhase}
               onDeletePhase={handleDeletePhase}

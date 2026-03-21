@@ -51,6 +51,7 @@ interface SystemSettingsProps {
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup: (id: string) => Promise<void>;
   onAutoConsolidate: (threshold: number, excludedIds: string[]) => Promise<void>;
+  onBulkAddPermissions: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -92,6 +93,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onUpdateAuditGroup,
   onDeleteAuditGroup,
   onAutoConsolidate,
+  onBulkAddPermissions,
   kpiTierTargets,
   institutionKPIs,
   onUpdateInstitutionKPI
@@ -171,6 +173,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         permissions={permissions}
         onTogglePermission={handlePermissionChange}
         onRemovePermission={onRemovePermission}
+        onBulkAddPermissions={onBulkAddPermissions}
         onUpdateDepartment={onUpdateDepartment}
         onBulkUpdateDepartments={onBulkUpdateDepartments}
         auditGroups={auditGroups}
@@ -178,6 +181,9 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateAuditGroup={onUpdateAuditGroup}
         onDeleteAuditGroup={onDeleteAuditGroup}
         onAutoConsolidate={onAutoConsolidate}
+        phases={phases}
+        institutionKPIs={institutionKPIs}
+        maxAssetsPerDay={maxAssetsPerDay}
       />
 
       {(phases?.length > 0 && kpiTiers?.length > 0) && (

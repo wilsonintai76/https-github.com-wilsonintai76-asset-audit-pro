@@ -574,6 +574,24 @@ class DataGateway {
     throw new Error("Supabase client not initialized");
   }
 
+  async bulkAddPermissions(perms: Omit<CrossAuditPermission, 'id'>[]) {
+    if (supabase) {
+      if (!perms || perms.length === 0) return;
+      const payloads = perms.map(perm => {
+        const payload: any = { ...perm };
+        if (perm.auditorDeptId) { payload.auditor_dept_id = perm.auditorDeptId; delete payload.auditorDeptId; }
+        if (perm.targetDeptId) { payload.target_dept_id = perm.targetDeptId; delete payload.targetDeptId; }
+        if (perm.isActive !== undefined) { payload.is_active = perm.isActive; delete payload.isActive; }
+        if (perm.isMutual !== undefined) { payload.is_mutual = perm.isMutual; delete payload.isMutual; }
+        return payload;
+      });
+      const { error } = await supabase.from('cross_audits').insert(payloads);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
   async deletePermission(id: string) {
     if (supabase) {
       const { error } = await supabase.from('cross_audits').delete().eq('id', id);
