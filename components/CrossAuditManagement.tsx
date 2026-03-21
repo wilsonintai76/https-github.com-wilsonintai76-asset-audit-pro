@@ -207,13 +207,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
     try {
       if (onRemovePermission && permissions.length > 0) {
-        const idsToRemove = permissions.map(p => p.id);
-        for (const id of idsToRemove) {
-          await onRemovePermission(id);
-        }
+        // Use Promise.all to ensure all deletions finish before proceeding
+        await Promise.all(permissions.map(p => onRemovePermission(p.id)));
       }
 
-      await new Promise(r => setTimeout(r, 500));
+      // Brief delay to ensure database consistency
+      await new Promise(r => setTimeout(r, 1000));
 
       let skippedVirtuals = 0;
       for (const pair of strategicPlan) {
@@ -406,9 +405,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
       // Loop to fill target capacity
       while (assignedCount < targetCapacity) {
-        // Find best available auditor (that isn't this target)
+        // Find best available auditor (that isn't this target AND hasn't been assigned to this target yet)
         const availableAuditor = auditors
-          .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0)
+          .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0 && !assignedAuditors.some(aa => aa.id === a.id))
           .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
 
         if (!availableAuditor) break;
