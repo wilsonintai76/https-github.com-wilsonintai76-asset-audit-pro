@@ -56,6 +56,11 @@ const App: React.FC = () => {
   const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
+  // --- ROLE CHECKS ---
+  const isAdmin = (currentUser?.roles || []).includes('Admin');
+  const isCoordinator = (currentUser?.roles || []).includes('Coordinator');
+  const isSupervisor = (currentUser?.roles || []).includes('Supervisor');
+
   // UI State
   const [selectedDept, setSelectedDept] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
@@ -270,19 +275,10 @@ const App: React.FC = () => {
         ? `Database schema mismatch: ${raw}. Please run the latest SUPABASE_SETUP.sql in Supabase.`
         : "Failed to load application data. Please refresh.";
       setConnectionErrorMessage(hint);
-    } finally {
-      setIsInitialLoading(false);
     }
-  }, []);
+  }, [isAdmin, kpiTiers, auditPhases, kpiTierTargets]);
 
-  useEffect(() => {
-    loadAllData();
-  }, [loadAllData]);
 
-  // --- ROLE CHECKS ---
-  const isAdmin = (currentUser?.roles || []).includes('Admin');
-  const isCoordinator = (currentUser?.roles || []).includes('Coordinator');
-  const isSupervisor = (currentUser?.roles || []).includes('Supervisor');
 
   // --- COMPUTED VALUES ---
   const departmentsWithAssets = useMemo(() => {
@@ -598,6 +594,13 @@ const App: React.FC = () => {
         // Fallback to local storage for non-auth users or previous sessions
         fallbackToLocalSession();
       }
+      // 2. Load all data before hiding the spinner to ensure landing page stats are populated
+      try {
+        await loadAllData();
+      } catch (err) {
+        console.error("Data loading failed during initialization:", err);
+      }
+
       setIsInitialLoading(false);
     };
 
@@ -2070,6 +2073,20 @@ const App: React.FC = () => {
   const handleViewChange = (view: AppView) => {
     setActiveView(view);
   };
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <ShieldCheck className="w-6 h-6 text-indigo-600" />
+          </div>
+        </div>
+        <p className="mt-8 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Initializing Platform</p>
+      </div>
+    );
+  }
 
   if (viewState === 'landing') {
     const totalAssets = departmentsWithAssets.reduce((sum, d) => sum + (d.totalAssets || 0), 0);

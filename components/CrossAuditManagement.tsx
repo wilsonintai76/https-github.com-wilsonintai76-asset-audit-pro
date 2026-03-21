@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X } from 'lucide-react';
+import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
 import { InstitutionalConsolidationView } from './InstitutionalConsolidationView';
 import { GroupBuilderTab } from './GroupBuilderTab';
+import { AuditConstraints } from './AuditConstraints';
 interface StrategicPair {
   target: { name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
   auditors: { name: string; assets: number; auditors: number; isJoint: boolean; members?: any[] }[];
@@ -35,9 +36,9 @@ interface CrossAuditManagementProps {
   onBulkAddPermissions?: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
   phases?: any[];
   institutionKPIs?: any[];
-  maxAssetsPerDay?: number;
-  maxLocationsPerDay?: number;
   showToast?: (message: string, type?: any) => void;
+  onUpdateMaxAssetsPerDay?: (value: number) => void;
+  onUpdateMaxLocationsPerDay?: (value: number) => void;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -59,7 +60,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   institutionKPIs = [],
   maxAssetsPerDay = 1000,
   maxLocationsPerDay = 5,
-  showToast
+  showToast,
+  onUpdateMaxAssetsPerDay,
+  onUpdateMaxLocationsPerDay
 }) => {
   // --- STATE ---
   const [manualViewMode, setManualViewMode] = useState<ManualViewMode>('grid');
@@ -87,6 +90,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   // Confirmation & State Control
   const [isApplied, setIsApplied] = useState(false);
   const [activeModal, setActiveModal] = useState<'apply' | 'reset' | null>(null);
+  const [showConstraints, setShowConstraints] = useState(false);
 
   // 0. Compute Institutional Grand Total
   const overallTotalAssets = useMemo(() => {
@@ -507,6 +511,38 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
          <div className="flex flex-col lg:flex-row gap-12">
           {/* Left Column: Controls */}
           <div className="lg:w-1/3">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Cross-Audit Management</h2>
+          <p className="text-slate-500 font-medium">Configure institutional consolidation and generate anti-bias pairing strategies.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowConstraints(!showConstraints)}
+            className={`flex items-center gap-3 px-6 py-3 rounded-2xl border text-sm font-bold transition-all ${
+              showConstraints 
+                ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm' 
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <ShieldCheck className={`w-4 h-4 ${showConstraints ? 'animate-pulse' : ''}`} />
+            Institutional Limits
+            <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showConstraints ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {showConstraints && onUpdateMaxAssetsPerDay && onUpdateMaxLocationsPerDay && (
+        <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-300">
+          <AuditConstraints 
+            maxAssetsPerDay={maxAssetsPerDay}
+            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
+            maxLocationsPerDay={maxLocationsPerDay}
+            onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
+          />
+        </div>
+      )}
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl mb-6 transition-colors ${isSimulatorActive ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
               <Zap className="w-8 h-8" />
             </div>

@@ -191,6 +191,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         institutionKPIs={institutionKPIs}
         maxAssetsPerDay={maxAssetsPerDay}
         maxLocationsPerDay={maxLocationsPerDay}
+        onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
+        onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
         showToast={showToast}
       />
 

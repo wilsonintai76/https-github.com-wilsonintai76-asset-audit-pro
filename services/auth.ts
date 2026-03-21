@@ -53,7 +53,7 @@ export const authService = {
       // and does NOT make a blocking network call (avoids Cloudflare Workers timeout).
       const { data: { session }, error: sessionError } = await Promise.race([
         supabase.auth.getSession(),
-        timeout(8000)
+        timeout(15000)
       ]) as any;
 
       const authUser = session?.user ?? null;
