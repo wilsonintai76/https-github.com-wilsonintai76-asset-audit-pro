@@ -2151,6 +2151,7 @@ const App: React.FC = () => {
               maxAssetsPerDay={maxAssetsPerDay}
               auditGroups={auditGroups}
               institutionKPIs={institutionKPIs}
+              buildings={buildings}
             />
           )}
           {activeView === 'auditor-dashboard' && (
