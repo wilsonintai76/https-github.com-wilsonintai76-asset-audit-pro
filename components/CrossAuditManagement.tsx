@@ -83,6 +83,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   // Workflow Control
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('grouping');
+  const [simulateIdealStaffing, setSimulateIdealStaffing] = useState(false);
   
   // State for Auditor Strictness (Min 2 Auditors rule)
   const [strictAuditorRule, setStrictAuditorRule] = useState<boolean>(true);
@@ -214,10 +215,19 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
       await new Promise(r => setTimeout(r, 500));
 
+      let skippedVirtuals = 0;
       for (const pair of strategicPlan) {
         for (const auditor of pair.auditors) {
+          if ((auditor as any).isVirtual) {
+            skippedVirtuals++;
+            continue;
+          }
           await onAddPermission(auditor.id, pair.target.id, false);
         }
+      }
+
+      if (skippedVirtuals > 0 && showToast) {
+        showToast(`Stored mappings. Skipped ${skippedVirtuals} virtual simulation placeholders.`, 'info');
       }
 
       setIsApplied(true);
@@ -365,13 +375,22 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     // 1. Get targets (Entities with assets)
     const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
     
-    // 2. Get available auditors (Entities with enough auditors)
-    const auditors = entities.filter(e => e.auditors >= minAuditorsRequired);
+    // 2. Get available auditors
+    const auditors = entities.filter(e => {
+        if (simulateIdealStaffing) return true; // Everyone can audit in ideal mode
+        return e.auditors >= minAuditorsRequired;
+    });
     
     const capacityMap = new Map<string, number>();
     auditors.forEach(a => {
-        const capacity = minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors;
-        capacityMap.set(a.id!, capacity);
+        if (simulateIdealStaffing) {
+            // In ideal mode, assume every entity can provide at least some auditors for simulation
+            // We'll give them a virtual capacity of 2-4 based on their Joint status
+            capacityMap.set(a.id!, a.isJoint ? 4 : 2);
+        } else {
+            const capacity = minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors;
+            capacityMap.set(a.id!, capacity);
+        }
     });
 
     const newStrategicPlan: StrategicPair[] = [];
@@ -390,32 +409,42 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         // Find best available auditor (that isn't this target)
         const availableAuditor = auditors
           .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0)
-          // Sort by remaining capacity to use larger units first
           .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
 
         if (!availableAuditor) break;
 
         // Calculate recommended individual auditors
-        const auditorDeptIds = availableAuditor.members.map(m => m.id);
-        const potentialMembers = users.filter(u => 
-          auditorDeptIds.includes(u.departmentId) && 
-          u.status === 'Active' &&
-          (u.roles.includes('Supervisor') || u.roles.includes('Staff'))
-        );
+        let potentialMembers: any[] = [];
+        
+        if (simulateIdealStaffing && availableAuditor.auditors === 0) {
+            // Generate virtual placeholders if real staff are missing
+            potentialMembers = [
+                { id: `virtual-${availableAuditor.id}-1`, name: `Virtual Auditor A (${availableAuditor.name})` },
+                { id: `virtual-${availableAuditor.id}-2`, name: `Virtual Auditor B (${availableAuditor.name})` }
+            ];
+        } else {
+            const auditorDeptIds = availableAuditor.members.map(m => m.id);
+            potentialMembers = users.filter(u => 
+                auditorDeptIds.includes(u.activeDeptId || u.departmentId) && 
+                u.status === 'Active' &&
+                (u.roles.includes('Supervisor') || u.roles.includes('Staff'))
+            );
+        }
 
         assignedAuditors.push({ 
           name: availableAuditor.name,
           assets: availableAuditor.assets,
-          auditors: availableAuditor.auditors,
+          auditors: simulateIdealStaffing ? Math.max(availableAuditor.auditors, 2) : availableAuditor.auditors,
           isJoint: availableAuditor.isJoint,
           id: availableAuditor.id,
-          members: potentialMembers.slice(0, 2)
+          members: potentialMembers.slice(0, 2),
+          isVirtual: simulateIdealStaffing && availableAuditor.auditors === 0
         });
 
         // Update capacities
         const currentCap = capacityMap.get(availableAuditor.id!) || 0;
         capacityMap.set(availableAuditor.id!, currentCap - 1);
-        assignedCount += availableAuditor.auditors;
+        assignedCount += (simulateIdealStaffing ? Math.max(availableAuditor.auditors, 2) : availableAuditor.auditors);
       }
 
       if (assignedAuditors.length > 0) {
@@ -602,7 +631,27 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
             <p className="text-slate-500 text-sm leading-relaxed mb-6">
               Generate the most efficient audit assignments automatically. The engine matches auditing entities to high-asset targets until your Institutional KPI is mathematically secured.
             </p>
-            
+                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-8">
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-indigo-500" />
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Simulate Ideal Staffing</span>
+                  </div>
+                  <p className="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-tighter">Bypass real auditor shortages for strategic planning</p>
+                </div>
+                <div className="relative inline-flex items-center ml-4">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={simulateIdealStaffing}
+                    onChange={() => setSimulateIdealStaffing(!simulateIdealStaffing)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </div>
+              </label>
+            </div>
+
             {isSimulatorActive ? (
                 <div className="space-y-3">
                     <button 
@@ -747,7 +796,14 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || perm.auditorDeptId}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{auditorEntity?.auditors || 0} Total Auditors</p>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                                        {auditorEntity?.auditors || 0} Total Auditors
+                                                        {planAuditor?.isVirtual && (
+                                                            <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[8px]">
+                                                                <Zap className="w-2 h-2" /> VIRTUAL STRATEGIC
+                                                            </span>
+                                                        )}
+                                                    </p>
                                                     
                                                     {isSimulatorActive && planAuditor && (
                                                         <div className="flex flex-wrap gap-1 mt-2">
