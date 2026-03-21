@@ -18,6 +18,7 @@ import { LocationManagement } from './components/LocationManagement';
 import { UserProfile } from './components/UserProfile';
 import { LandingPage } from './components/LandingPage';
 import { KnowledgeBase } from './components/KnowledgeBase';
+import { AutoUpdater } from './components/AutoUpdater';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X } from 'lucide-react';
 
@@ -2080,6 +2081,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
+      <AutoUpdater />
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
