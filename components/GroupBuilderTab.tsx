@@ -147,8 +147,14 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                  className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-[24px] text-sm font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-600/20 active:scale-95"
                >
                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                 Run Auto-Consolidation Now
+                 {auditGroups.some(g => g.name.startsWith('Group ')) ? 'Reset & Re-Group' : 'Run Auto-Consolidate'}
                </button>
+               
+               {auditGroups.some(g => g.name.startsWith('Group ')) && (
+                  <p className="text-center text-[11px] font-bold text-amber-600 mt-4 bg-amber-50 rounded-xl py-2 px-4 shadow-sm border border-amber-100">
+                    ⚠️ Running this again will safely reset your existing "Group X" combinations before recalculating.
+                  </p>
+               )}
              </div>
            )}
 
