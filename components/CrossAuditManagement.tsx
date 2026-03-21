@@ -32,6 +32,10 @@ interface CrossAuditManagementProps {
   onUpdateAuditGroup?: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
   onAutoConsolidate?: (threshold: number, excludedIds: string[]) => Promise<void>;
+  onBulkAddPermissions?: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
+  phases?: any[];
+  institutionKPIs?: any[];
+  maxAssetsPerDay?: number;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -47,7 +51,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onAddAuditGroup,
   onUpdateAuditGroup,
   onDeleteAuditGroup,
-  onAutoConsolidate
+  onAutoConsolidate,
+  onBulkAddPermissions,
+  phases = [],
+  institutionKPIs = [],
+  maxAssetsPerDay = 1000
 }) => {
   // --- STATE ---
   const [manualViewMode, setManualViewMode] = useState<ManualViewMode>('grid');
@@ -64,6 +72,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [manualAuditor, setManualAuditor] = useState('');
   const [manualTarget, setManualTarget] = useState('');
   const [isMutual, setIsMutual] = useState(false);
+  const [overrideIsMutual, setOverrideIsMutual] = useState(false);
 
   // Workflow Control
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('grouping');
@@ -544,6 +553,19 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         {entities.filter(e => e.assets > 0).map(e => <option key={e.name} value={e.name}>{e.name} ({e.assets} Assets)</option>)}
                      </select>
                      
+                     <label className="flex items-center gap-2 cursor-pointer group px-2">
+                        <div className="relative inline-flex items-center">
+                          <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={overrideIsMutual}
+                            onChange={() => setOverrideIsMutual(!overrideIsMutual)}
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual</span>
+                     </label>
+
                      <button 
                          onClick={handleAddOverride}
                          disabled={!manualAuditor || !manualTarget}

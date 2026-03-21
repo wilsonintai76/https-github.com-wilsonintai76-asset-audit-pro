@@ -98,7 +98,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   institutionKPIs,
   onUpdateInstitutionKPI
 }) => {
-  const isAdmin = userRoles.includes('Admin');
+  const isAdmin = (userRoles || []).includes('Admin');
 
   const activePhase = useMemo(() => {
     const today = new Date();
