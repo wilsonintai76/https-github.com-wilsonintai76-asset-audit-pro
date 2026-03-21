@@ -170,6 +170,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       setStrategicPlan([]);
       setWorkflowStep('grouping');
       setIsApplied(false);
+      setIsSimulatorActive(false);
+      setSimulatedPairings([]);
 
       // 2. Clear Department Groups (Database)
       const updates = departments
@@ -384,9 +386,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const capacityMap = new Map<string, number>();
     auditors.forEach(a => {
         if (simulateIdealStaffing) {
-            // In ideal mode, assume every entity can provide at least some auditors for simulation
-            // We'll give them a virtual capacity of 2-4 based on their Joint status
-            capacityMap.set(a.id!, a.isJoint ? 4 : 2);
+            // In ideal mode, scale capacity by members (2 auditors per department)
+            capacityMap.set(a.id!, Math.max(2, a.members.length * 2));
         } else {
             const capacity = minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors;
             capacityMap.set(a.id!, capacity);
@@ -434,7 +435,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         assignedAuditors.push({ 
           name: availableAuditor.name,
           assets: availableAuditor.assets,
-          auditors: simulateIdealStaffing ? Math.max(availableAuditor.auditors, 2) : availableAuditor.auditors,
+          auditors: simulateIdealStaffing ? Math.max(availableAuditor.auditors, availableAuditor.members.length * 2) : availableAuditor.auditors,
           isJoint: availableAuditor.isJoint,
           id: availableAuditor.id,
           members: potentialMembers.slice(0, 2),
