@@ -497,11 +497,10 @@ const App: React.FC = () => {
     } catch (e) {
       console.error("[App] Logout error:", e);
     } finally {
-      // ALWAYS clear local state regardless of Supabase results
-      localStorage.removeItem('audit_pro_session');
+      // Cleanup local state
       setCurrentUser(null);
       setViewState('landing');
-      setIsSidebarOpen(false); // Close sidebar just in case
+      setIsSidebarOpen(false);
     }
   };
 
@@ -646,6 +645,31 @@ const App: React.FC = () => {
       subscription?.unsubscribe();
     };
   }, []);
+
+  // Idle Timer for auto-logout (30 minutes)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let timeoutId: NodeJS.Timeout;
+    const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleLogout();
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => document.addEventListener(event, resetTimer));
+
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      activityEvents.forEach(event => document.removeEventListener(event, resetTimer));
+    };
+  }, [currentUser]);
 
   // --- ACTION HANDLERS ---
   const showError = useCallback((error: any, title: string = 'Operation Failed') => {

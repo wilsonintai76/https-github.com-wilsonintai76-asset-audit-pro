@@ -27,7 +27,10 @@ export const authService = {
 
   logout: async () => {
     try {
-      localStorage.removeItem('audit_pro_session');
+      // Clear all local and session storage to prevent data leakage
+      localStorage.clear();
+      sessionStorage.clear();
+      
       if (supabase) {
         // We use a promise with a timeout for signOut to ensure it doesn't hang the app
         const signOutPromise = supabase.auth.signOut();
@@ -36,7 +39,7 @@ export const authService = {
       }
     } catch (error) {
       console.warn("[Auth] Logout warning (Supabase signOut may have failed or timed out):", error);
-      // We still cleared localStorage, so the app will consider the user logged out locally.
+      // Even if Supabase signOut fails, we already cleared the local storage.
     }
   },
 
