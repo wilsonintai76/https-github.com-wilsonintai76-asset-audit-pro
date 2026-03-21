@@ -38,9 +38,12 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
       const b = buildings.find(b => b.id === buildingId);
       if (b) return b.abbr;
     }
+    // Fallback if legacy building name matches a building
     if (buildingName) {
-      const b = buildings.find(b => b.name === buildingName);
+      const cleanName = buildingName.toLowerCase().trim();
+      const b = buildings.find(b => b.name.toLowerCase().trim() === cleanName);
       if (b) return b.abbr;
+      // If we cannot find it in buildings, return the name as fallback
       return buildingName;
     }
     return '';

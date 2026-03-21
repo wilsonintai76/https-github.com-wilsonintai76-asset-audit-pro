@@ -105,7 +105,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
       if (b) return b.abbr;
     }
     if (buildingName) {
-      const b = buildings.find(b => b.name === buildingName);
+      const cleanName = buildingName.toLowerCase().trim();
+      const b = buildings.find(b => b.name.toLowerCase().trim() === cleanName);
       if (b) return b.abbr;
       return buildingName;
     }
