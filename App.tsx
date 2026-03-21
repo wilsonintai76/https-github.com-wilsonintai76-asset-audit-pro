@@ -2323,6 +2323,7 @@ const App: React.FC = () => {
               onUpdateDepartment={handleUpdateDept}
               onBulkUpdateDepartments={handleBulkUpdateDepts}
               onBulkAddPermissions={handleBulkAddPermissions}
+              showToast={showToast}
               onAddPhase={handleAddPhase}
               onUpdatePhase={handleUpdatePhase}
               onDeletePhase={handleDeletePhase}

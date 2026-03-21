@@ -52,6 +52,7 @@ interface SystemSettingsProps {
   onDeleteAuditGroup: (id: string) => Promise<void>;
   onAutoConsolidate: (threshold: number, excludedIds: string[]) => Promise<void>;
   onBulkAddPermissions: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
+  showToast?: (message: string, type?: any) => void;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -96,7 +97,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onBulkAddPermissions,
   kpiTierTargets,
   institutionKPIs,
-  onUpdateInstitutionKPI
+  onUpdateInstitutionKPI,
+  showToast
 }) => {
   const isAdmin = (userRoles || []).includes('Admin');
 
@@ -171,9 +173,9 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         departments={departments}
         users={users}
         permissions={permissions}
-        onTogglePermission={handlePermissionChange}
+        onTogglePermission={onTogglePermission}
+        onAddPermission={onAddPermission}
         onRemovePermission={onRemovePermission}
-        onBulkAddPermissions={onBulkAddPermissions}
         onUpdateDepartment={onUpdateDepartment}
         onBulkUpdateDepartments={onBulkUpdateDepartments}
         auditGroups={auditGroups}
@@ -181,9 +183,11 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateAuditGroup={onUpdateAuditGroup}
         onDeleteAuditGroup={onDeleteAuditGroup}
         onAutoConsolidate={onAutoConsolidate}
+        onBulkAddPermissions={onBulkAddPermissions}
         phases={phases}
         institutionKPIs={institutionKPIs}
         maxAssetsPerDay={maxAssetsPerDay}
+        showToast={showToast}
       />
 
       {(phases?.length > 0 && kpiTiers?.length > 0) && (

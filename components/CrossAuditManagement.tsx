@@ -36,6 +36,7 @@ interface CrossAuditManagementProps {
   phases?: any[];
   institutionKPIs?: any[];
   maxAssetsPerDay?: number;
+  showToast?: (message: string, type?: any) => void;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -55,7 +56,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onBulkAddPermissions,
   phases = [],
   institutionKPIs = [],
-  maxAssetsPerDay = 1000
+  maxAssetsPerDay = 1000,
+  showToast
 }) => {
   // --- STATE ---
   const [manualViewMode, setManualViewMode] = useState<ManualViewMode>('grid');
@@ -120,7 +122,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     });
 
     return Array.from(map.values()).map(stats => {
-      // It is a group if it contains multiple members OR it maps to an official Registry group
+      // It is a group if it contains multiple departments OR it explicitly maps to an audit group ID
       const constitutesGroup = stats.memberCount > 1 || auditGroups.some(g => g.id === stats.id);
       return { 
         ...stats, 
@@ -369,21 +371,23 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     let currentAssets = 0;
 
     for (const target of targets) {
-      if (currentAssets >= targetKPIAssets) break;
-
+      // KPI Target check: if we've met the target but still have matches possible, 
+      // we only break if the user explicitly wants to minimize auditing (not implemented yet).
+      // For now, let's prioritize complete coverage if resources allow.
+      
       const availableAuditors = auditors
-        .filter(a => a.name !== target.name && (capacityMap.get(a.name) || 0) > 0)
-        .sort((a, b) => (capacityMap.get(b.name) || 0) - (capacityMap.get(a.name) || 0));
+        .filter(a => a.id !== target.id && (capacityMap.get(a.id || '') || 0) > 0)
+        .sort((a, b) => (capacityMap.get(b.id || '') || 0) - (capacityMap.get(a.id || '') || 0));
 
       if (availableAuditors.length > 0) {
         const chosen = availableAuditors[0];
         newPairings.push({
-           auditorDeptId: chosen.name,
-           targetDeptId: target.name,
+           auditorDeptId: chosen.id as string, // UUID
+           targetDeptId: target.id as string,   // UUID
            isActive: true,
            isMutual: false
         });
-        capacityMap.set(chosen.name, (capacityMap.get(chosen.name) || 0) - 1);
+        capacityMap.set(chosen.id || '', (capacityMap.get(chosen.id || '') || 0) - 1);
         currentAssets += target.assets;
       }
     }
@@ -425,14 +429,45 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     if (!onBulkAddPermissions || simulatedPairings.length === 0) return;
     setIsProcessing(true);
     try {
-      // If we are committing the simulation, we likely want to clear old permissions first to avoid bloat
+      // EXPANSION LOGIC: Map Entity-to-Entity pairings into Department-to-Department permissions
+      const expandedPairings: Omit<CrossAuditPermission, 'id'>[] = [];
+      
+      for (const pair of simulatedPairings) {
+        // Find the entities for these IDs
+        const auditorEntity = entities.find(e => e.id === pair.auditorDeptId);
+        const targetEntity = entities.find(e => e.id === pair.targetDeptId);
+        
+        if (!auditorEntity || !targetEntity) continue;
+        
+        // Expand: Each department in the auditing entity audits each department in the target entity.
+        // This ensures the database's FK constraints (References departments.id) are met.
+        for (const auditorDept of auditorEntity.members) {
+          for (const targetDept of targetEntity.members) {
+             expandedPairings.push({
+               auditorDeptId: auditorDept.id,
+               targetDeptId: targetDept.id,
+               isActive: true,
+               isMutual: false
+             });
+          }
+        }
+      }
+
+      if (expandedPairings.length === 0) {
+        alert("Expansion failed. No valid pairings generated.");
+        return;
+      }
+
+      // If we are committing the simulation, we clear old permissions first
       if (onRemovePermission && permissions.length > 0) {
           const ids = permissions.map(p => p.id);
           for (const id of ids) await onRemovePermission(id);
       }
-      await onBulkAddPermissions(simulatedPairings);
+      
+      await onBulkAddPermissions(expandedPairings);
       setIsSimulatorActive(false);
       setSimulatedPairings([]);
+      showToast?.(`Successfully committed ${expandedPairings.length} departmental links.`);
     } catch (e) {
       alert("Failed to commit simulated pairings.");
     } finally {
