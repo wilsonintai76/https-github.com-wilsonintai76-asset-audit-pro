@@ -1839,8 +1839,11 @@ const App: React.FC = () => {
         runningAuditors += dept.auditorCount || 0;
         currentBundle.push(dept);
         
-        // Flush condition: Asset threshold met AND Auditor threshold met (minAuditors)
-        if (runningAssets >= threshold && runningAuditors >= minAuditors) {
+        // Flush condition: Asset threshold met
+        // If strictAuditorRule is true, we ONLY flush if we also have >= 2 auditors.
+        // If not strict, we flush as soon as threshold is met (even if 0 or 1 auditor).
+        const minRequired = minAuditors; 
+        if (runningAssets >= threshold && (runningAuditors >= minRequired || minRequired < 2)) {
             bundles.push([...currentBundle]);
             currentBundle = [];
             runningAssets = 0;
@@ -1851,8 +1854,16 @@ const App: React.FC = () => {
       // Handle leftovers
       if (currentBundle.length > 0) {
         if (bundles.length > 0) {
-            // Append remaining to the last bundle to ensure they aren't orphaned with < minAuditors auditors
-            bundles[bundles.length - 1].push(...currentBundle);
+            // Only merge if the leftover is "small" (less than 70% of threshold)
+            // or if it has 0 auditors and we are in strict mode.
+            const leftoverAssets = currentBundle.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+            const leftoverAuditors = currentBundle.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+            
+            if (leftoverAssets < threshold * 0.7 || (leftoverAuditors < minAuditors && minAuditors > 1)) {
+              bundles[bundles.length - 1].push(...currentBundle);
+            } else {
+              bundles.push(currentBundle);
+            }
         } else {
             bundles.push(currentBundle);
         }
