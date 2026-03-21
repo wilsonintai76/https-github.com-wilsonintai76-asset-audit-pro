@@ -50,6 +50,7 @@ interface SystemSettingsProps {
   onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup: (id: string) => Promise<void>;
+  onAutoConsolidate: (threshold: number, excludedIds: string[]) => Promise<void>;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -90,6 +91,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onAddAuditGroup,
   onUpdateAuditGroup,
   onDeleteAuditGroup,
+  onAutoConsolidate,
   kpiTierTargets,
   institutionKPIs,
   onUpdateInstitutionKPI
@@ -175,6 +177,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onAddAuditGroup={onAddAuditGroup}
         onUpdateAuditGroup={onUpdateAuditGroup}
         onDeleteAuditGroup={onDeleteAuditGroup}
+        onAutoConsolidate={onAutoConsolidate}
       />
 
       {(phases?.length > 0 && kpiTiers?.length > 0) && (

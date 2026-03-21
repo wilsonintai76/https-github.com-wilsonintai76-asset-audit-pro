@@ -31,6 +31,7 @@ interface CrossAuditManagementProps {
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup?: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
+  onAutoConsolidate?: (threshold: number, excludedIds: string[]) => Promise<void>;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -45,7 +46,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   auditGroups = [],
   onAddAuditGroup,
   onUpdateAuditGroup,
-  onDeleteAuditGroup
+  onDeleteAuditGroup,
+  onAutoConsolidate
 }) => {
   // --- STATE ---
   const [manualViewMode, setManualViewMode] = useState<ManualViewMode>('grid');
@@ -402,6 +404,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         onAddAuditGroup={onAddAuditGroup}
         onDeleteAuditGroup={onDeleteAuditGroup}
         onBulkUpdateDepartments={onBulkUpdateDepartments}
+        onAutoConsolidate={onAutoConsolidate}
         isProcessing={isProcessing}
         setIsProcessing={setIsProcessing}
       />
