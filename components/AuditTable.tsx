@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase } from '../types';
+import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase, Building as BuildingType } from '../types';
 import { AuditReportModal } from './AuditReportModal';
 import { 
   ShieldOff, 
@@ -43,13 +43,15 @@ interface AuditTableProps {
   crossAuditPermissions: CrossAuditPermission[];
   auditPhases: AuditPhase[];
   maxAssetsPerDay: number;
+  buildings?: BuildingType[];
 }
 
 export const AuditTable: React.FC<AuditTableProps> = ({ 
   schedules, users, currentUserName, userRoles, departments, selectedDept, onDeptChange, selectedStatus, onStatusChange,
   selectedPhaseId, onPhaseChange, onAssign, onUnassign, onUpdateDate, onUpdateAudit, onToggleStatus,
   allDepartments, allLocations, crossAuditPermissions, auditPhases,
-  maxAssetsPerDay
+  maxAssetsPerDay,
+  buildings = []
 }) => {
   const [reportAudit, setReportAudit] = useState<AuditSchedule | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('All');
@@ -97,6 +99,19 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     setSelectedLevel('All');
   }, [selectedBlock]);
 
+  const getBuildingAbbr = (buildingId?: string | null, buildingName?: string) => {
+    if (buildingId) {
+      const b = buildings.find(b => b.id === buildingId);
+      if (b) return b.abbr;
+    }
+    if (buildingName) {
+      const b = buildings.find(b => b.name === buildingName);
+      if (b) return b.abbr;
+      return buildingName;
+    }
+    return '';
+  };
+
   const availableLocations = useMemo(() => {
     if (selectedDept === 'All') return allLocations;
     const dept = allDepartments.find(d => d.name === selectedDept);
@@ -105,14 +120,14 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   }, [selectedDept, allLocations, allDepartments]);
 
   const uniqueBlocks = useMemo(() => {
-    const blocks = new Set(availableLocations.map(l => l.building).filter(Boolean));
+    const blocks = new Set(availableLocations.map(l => getBuildingAbbr(l.buildingId, l.building)).filter(Boolean));
     return ['All', ...Array.from(blocks)].sort();
-  }, [availableLocations]);
+  }, [availableLocations, buildings]);
 
   const uniqueLevels = useMemo(() => {
     let filtered = availableLocations;
     if (selectedBlock !== 'All') {
-      filtered = filtered.filter(l => l.building === selectedBlock);
+      filtered = filtered.filter(l => getBuildingAbbr(l.buildingId, l.building) === selectedBlock);
     }
     const levels = new Set(filtered.map(l => l.level).filter(Boolean));
     return ['All', ...Array.from(levels)].sort();
@@ -224,7 +239,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     return schedules.filter(s => {
       const loc = allLocations.find(l => l.id === s.locationId);
       
-      if (selectedBlock !== 'All' && loc?.building !== selectedBlock) return false;
+      if (selectedBlock !== 'All' && getBuildingAbbr(loc?.buildingId, loc?.building) !== selectedBlock) return false;
       if (selectedLevel !== 'All' && loc?.level !== selectedLevel) return false;
       
       return true;
@@ -312,9 +327,12 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                         value={selectedBlock}
                         onChange={(e) => setSelectedBlock(e.target.value)}
                         >
-                        {uniqueBlocks.map(b => (
-                            <option key={b} value={b}>{b === 'All' ? 'All Blocks' : b}</option>
-                        ))}
+                        {uniqueBlocks.map(b => {
+                            if (b === 'All') return <option key={b} value={b}>All Blocks</option>;
+                            const fullBuilding = buildings.find(building => building.abbr === b);
+                            const displayName = fullBuilding ? `${b} | ${fullBuilding.name}` : b;
+                            return <option key={b} value={b}>{displayName}</option>;
+                        })}
                         </select>
                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
                     </div>

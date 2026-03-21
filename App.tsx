@@ -2188,6 +2188,7 @@ const App: React.FC = () => {
                 crossAuditPermissions={crossAuditPermissions}
                 auditPhases={auditPhases}
                 maxAssetsPerDay={maxAssetsPerDay}
+                buildings={buildings}
               />
             </div>
           )}

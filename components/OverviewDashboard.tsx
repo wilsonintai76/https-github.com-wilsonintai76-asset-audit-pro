@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
@@ -25,6 +25,7 @@ interface OverviewDashboardProps {
   auditGroups?: AuditGroup[];
   maxAssetsPerDay?: number;
   institutionKPIs?: InstitutionKPITarget[];
+  buildings?: Building[];
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
@@ -38,7 +39,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   currentUser,
   auditGroups = [],
   maxAssetsPerDay = 500,
-  institutionKPIs = []
+  institutionKPIs = [],
+  buildings = []
 }) => {
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState('All');
@@ -55,13 +57,26 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     setSelectedLevel('All');
   }, [selectedBlock]);
 
+  const getBuildingAbbr = (buildingId?: string | null, buildingName?: string) => {
+    if (buildingId) {
+      const b = buildings.find(b => b.id === buildingId);
+      if (b) return b.abbr;
+    }
+    if (buildingName) {
+      const b = buildings.find(b => b.name === buildingName);
+      if (b) return b.abbr;
+      return buildingName;
+    }
+    return '';
+  };
+
   // Filter Logic
   const filteredLocations = useMemo(() => {
     return locations.filter(l => {
       if (!l.isActive) return false;
       const dept = departments.find(d => d.id === l.departmentId);
       if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
-      if (selectedBlock !== 'All' && l.building !== selectedBlock) return false;
+      if (selectedBlock !== 'All' && getBuildingAbbr(l.buildingId, l.building) !== selectedBlock) return false;
       if (selectedLevel !== 'All' && l.level !== selectedLevel) return false;
       return true;
     });
@@ -74,7 +89,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       const dept = departments.find(d => d.id === s.departmentId);
       
       if (selectedDept !== 'All' && dept?.name !== selectedDept) return false;
-      if (selectedBlock !== 'All' && loc?.building !== selectedBlock) return false;
+      if (selectedBlock !== 'All' && getBuildingAbbr(loc?.buildingId, loc?.building) !== selectedBlock) return false;
       if (selectedLevel !== 'All' && loc?.level !== selectedLevel) return false;
       return true;
     });
@@ -89,14 +104,14 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   }, [selectedDept, locations, departments]);
 
   const uniqueBlocks = useMemo(() => {
-    const blocks = new Set(availableLocationsForFilters.map(l => l.building).filter(Boolean));
+    const blocks = new Set(availableLocationsForFilters.map(l => getBuildingAbbr(l.buildingId, l.building)).filter(Boolean));
     return ['All', ...Array.from(blocks)].sort();
-  }, [availableLocationsForFilters]);
+  }, [availableLocationsForFilters, buildings]);
 
   const uniqueLevels = useMemo(() => {
     let filtered = availableLocationsForFilters;
     if (selectedBlock !== 'All') {
-      filtered = filtered.filter(l => l.building === selectedBlock);
+      filtered = filtered.filter(l => getBuildingAbbr(l.buildingId, l.building) === selectedBlock);
     }
     const levels = new Set(filtered.map(l => l.level).filter(Boolean));
     return ['All', ...Array.from(levels)].sort();
@@ -229,9 +244,12 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                         <SelectValue placeholder="All Building/Block" />
                       </SelectTrigger>
                       <SelectContent>
-                        {uniqueBlocks.map(b => (
-                            <SelectItem key={b} value={b}>{b === 'All' ? 'All Building/Block' : b}</SelectItem>
-                        ))}
+                        {uniqueBlocks.map(b => {
+                            if (b === 'All') return <SelectItem key={b} value={b}>All Building/Block</SelectItem>;
+                            const fullBuilding = buildings.find(building => building.abbr === b);
+                            const displayName = fullBuilding ? `${b} | ${fullBuilding.name}` : b;
+                            return <SelectItem key={b} value={b}>{displayName}</SelectItem>;
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
