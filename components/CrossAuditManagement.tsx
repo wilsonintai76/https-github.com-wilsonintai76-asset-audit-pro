@@ -380,14 +380,22 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     for (const target of targets) {
       if (usedTargetIds.has(target.id!)) continue;
 
-      // Find best auditor for this target
-      const availableAuditor = auditors
-        .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0)
-        .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
+      const assets = target.assets || 0;
+      const targetCapacity = Math.max(2, Math.ceil(assets / maxAssetsPerDay));
+      let assignedCount = 0;
+      const assignedAuditors: any[] = [];
 
-      if (availableAuditor) {
-        // Calculate recommended individual auditors from the auditor unit
-        // We look for users in the auditing department(s)
+      // Loop to fill target capacity
+      while (assignedCount < targetCapacity) {
+        // Find best available auditor (that isn't this target)
+        const availableAuditor = auditors
+          .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0)
+          // Sort by remaining capacity to use larger units first
+          .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
+
+        if (!availableAuditor) break;
+
+        // Calculate recommended individual auditors
         const auditorDeptIds = availableAuditor.members.map(m => m.id);
         const potentialMembers = users.filter(u => 
           auditorDeptIds.includes(u.departmentId) && 
@@ -395,38 +403,50 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
           (u.roles.includes('Supervisor') || u.roles.includes('Staff'))
         );
 
-        // Map to StrategicPair format
+        assignedAuditors.push({ 
+          name: availableAuditor.name,
+          assets: availableAuditor.assets,
+          auditors: availableAuditor.auditors,
+          isJoint: availableAuditor.isJoint,
+          id: availableAuditor.id,
+          members: potentialMembers.slice(0, 2)
+        });
+
+        // Update capacities
+        const currentCap = capacityMap.get(availableAuditor.id!) || 0;
+        capacityMap.set(availableAuditor.id!, currentCap - 1);
+        assignedCount += availableAuditor.auditors;
+      }
+
+      if (assignedAuditors.length > 0) {
         newStrategicPlan.push({
           target: { 
             name: target.name,
             assets: target.assets,
             auditors: target.auditors,
             members: target.members,
-            id: target.id // Ensure target ID is passed
+            id: target.id
           } as any,
-          auditors: [{ 
-            name: availableAuditor.name,
-            assets: availableAuditor.assets,
-            auditors: availableAuditor.auditors,
-            isJoint: availableAuditor.isJoint,
-            id: availableAuditor.id, // Ensure auditor ID is passed
-            members: potentialMembers.slice(0, 2) // Recommend up to 2 members for simulation
-          }],
-          totalAuditorsInGroup: availableAuditor.auditors,
-          auditorSideAssets: availableAuditor.assets
+          auditors: assignedAuditors,
+          totalAuditorsInGroup: assignedAuditors.reduce((sum, a) => sum + a.auditors, 0),
+          auditorSideAssets: assignedAuditors.reduce((sum, a) => sum + a.assets, 0)
         });
-
-        capacityMap.set(availableAuditor.id!, (capacityMap.get(availableAuditor.id!) || 0) - 1);
         usedTargetIds.add(target.id!);
       }
     }
 
-    const newPairings: Omit<CrossAuditPermission, 'id'>[] = newStrategicPlan.map(p => ({
-        auditorDeptId: p.auditors[0].id,
-        targetDeptId: p.target.id,
-        isActive: true,
-        isMutual: false
-    }));
+    // Map ALL auditors from the plan to the flat pairings list
+    const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
+    newStrategicPlan.forEach(p => {
+        p.auditors.forEach(auditor => {
+            newPairings.push({
+                auditorDeptId: auditor.id,
+                targetDeptId: p.target.id,
+                isActive: true,
+                isMutual: false
+            });
+        });
+    });
 
     setStrategicPlan(newStrategicPlan);
     setSimulatedPairings(newPairings);
@@ -715,7 +735,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                             activePairingList.map((perm, idx) => {
                                 const targetEntity = entities.find(e => e.id === perm.targetDeptId);
                                 const auditorEntity = entities.find(e => e.id === perm.auditorDeptId);
-                                const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === perm.targetDeptId && p.auditors.some(a => a.id === perm.auditorDeptId)) : null;
+                                const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === perm.targetDeptId) : null;
+                                const planAuditor = planPair?.auditors.find(a => a.id === perm.auditorDeptId);
                                 
                                 return (
                                     <tr key={isSimulatorActive ? idx : (perm as any).id} className="hover:bg-white transition-colors">
@@ -728,9 +749,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                     <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || perm.auditorDeptId}</p>
                                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{auditorEntity?.auditors || 0} Total Auditors</p>
                                                     
-                                                    {isSimulatorActive && planPair && (
+                                                    {isSimulatorActive && planAuditor && (
                                                         <div className="flex flex-wrap gap-1 mt-2">
-                                                            {planPair.auditors[0].members?.map(m => (
+                                                            {planAuditor.members?.map(m => (
                                                                 <span key={m.id} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-md text-[9px] font-bold">
                                                                     {m.name}
                                                                 </span>
