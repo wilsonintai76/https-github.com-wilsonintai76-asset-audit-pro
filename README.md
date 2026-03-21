@@ -14,9 +14,15 @@
 - **Phase Management**: Multi-phase audit scheduling with automated progress tracking.
 
 ### 🏢 Consolidation Units
-- **Audit Groups**: Automatically consolidate smaller departments into larger "Audit Units" for streamlined management.
-- **Asset Aggregation**: Real-time totaling of assets across consolidated entities.
+- **Auto-First Grouping**: Instantly consolidate small, unbalanced departments based on a dynamic asset threshold into perfectly balanced generic units (e.g., Group A, Group B).
+- **Refinement Sandbox**: Modify generated audit groups via an intuitive registry checklist interface before finalizing to the database.
 - **Premium Visualization**: Card-based layouts with "Brutalist" design aesthetics for high-impact reporting.
+
+### 🎯 Cross-Audit Pairing Simulator
+- **Intelligent Engine**: Automatically assigns high-asset audit targets to available auditing departments until the Institutional Phase KPI is perfectly met.
+- **2-Person Team Constraint**: The mathematical engine computes workload strictly by "Teams" (calculating exactly 2 auditors per audit team), handling uneven headcounts natively.
+- **Real-Time Projection Sandbox**: A live KPI Progress Bar shifts visually as admins manually override, create, or delete pairing drafts before locking decisions into the database.
+- **Auto-Exemptions**: Departments with zero assets and zero auditors are instantly fully exempted from calculations.
 
 ### 🛡️ Role-Based Access (RBAC)
 - **Admin**: Full system control, user management, and configuration.
