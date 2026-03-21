@@ -29,6 +29,8 @@ interface GroupBuilderTabProps {
   setIsProcessing: (processing: boolean) => void;
   strictAuditorRule: boolean;
   setStrictAuditorRule: (val: boolean) => void;
+  maxAssetsPerDay?: number;
+  maxLocationsPerDay?: number;
 }
 
 export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
@@ -40,7 +42,9 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   isProcessing,
   setIsProcessing,
   strictAuditorRule,
-  setStrictAuditorRule
+  setStrictAuditorRule,
+  maxAssetsPerDay = 1000,
+  maxLocationsPerDay = 5
 }) => {
   const [builderTab, setBuilderTab] = useState<1 | 2>(1);
   const [threshold, setThreshold] = useState<number>(() => loadThreshold());
@@ -243,12 +247,13 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                                   const depts = departments.filter(d => d.auditGroup === g.name || d.auditGroupId === g.id);
                                   const actualAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
                                   const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                                  const rec = Math.max(2, Math.ceil(totalAssets / threshold) * 2);
+                                  const locCount = depts.length; // Actually we should sum location count if available
+                                  const rec = Math.max(2, Math.ceil(totalAssets / maxAssetsPerDay), Math.ceil(locCount / maxLocationsPerDay));
                                   return (
                                     <span>
                                       {depts.length} Units • {actualAuditors} Auditors 
-                                      {!strictAuditorRule && actualAuditors < rec && (
-                                        <span className="text-amber-500 ml-1">(Rec: {rec})</span>
+                                      {actualAuditors < rec && (
+                                        <span className="text-amber-500 ml-1 text-[8px] font-black underline decoration-amber-200 underline-offset-2">(Rec: {rec})</span>
                                       )}
                                     </span>
                                   );

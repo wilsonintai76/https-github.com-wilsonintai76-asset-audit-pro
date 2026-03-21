@@ -1,5 +1,5 @@
 
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, SystemSetting } from '../types';
 import { supabase } from './supabase';
 import { localDB } from './localDB'; 
 import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, INITIAL_NOTIFICATIONS } from '../constants';
@@ -890,6 +890,36 @@ class DataGateway {
   async deleteBuilding(id: string): Promise<void> {
     if (supabase) {
       const { error } = await supabase.from('buildings').delete().eq('id', id);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
+  async getSystemSettings(): Promise<SystemSetting[]> {
+    if (supabase) {
+      const { data, error } = await supabase.from('system_settings').select('*');
+      if (error) {
+        const msg = String(error?.message || error).toLowerCase();
+        if (msg.includes('system_settings') && msg.includes('does not exist')) return [];
+        throw error;
+      }
+      return (data || []).map((s: any) => ({
+        id: s.id,
+        value: s.value,
+        updatedAt: s.updated_at
+      })) as SystemSetting[];
+    }
+    return [];
+  }
+
+  async updateSystemSetting(id: string, value: any): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('system_settings').upsert({
+        id,
+        value,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
       if (error) throw error;
       return;
     }

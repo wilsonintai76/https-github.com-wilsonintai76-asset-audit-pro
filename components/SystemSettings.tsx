@@ -37,8 +37,9 @@ interface SystemSettingsProps {
   onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
   onBulkAddDepts: (depts: Omit<Department, 'id'>[]) => void;
   onBulkActivateStaff: (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => void;
-  maxAssetsPerDay: number;
   onUpdateMaxAssetsPerDay: (val: number) => void;
+  maxLocationsPerDay: number;
+  onUpdateMaxLocationsPerDay: (val: number) => void;
   onRebalanceSchedule: () => Promise<void>;
   schedules: AuditSchedule[];
   departmentMappings: DepartmentMapping[];
@@ -82,6 +83,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onBulkActivateStaff,
   maxAssetsPerDay,
   onUpdateMaxAssetsPerDay,
+  maxLocationsPerDay,
+  onUpdateMaxLocationsPerDay,
   onRebalanceSchedule,
   schedules,
   departmentMappings,
@@ -187,6 +190,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         phases={phases}
         institutionKPIs={institutionKPIs}
         maxAssetsPerDay={maxAssetsPerDay}
+        maxLocationsPerDay={maxLocationsPerDay}
         showToast={showToast}
       />
 
@@ -195,6 +199,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           <AuditConstraints
             maxAssetsPerDay={maxAssetsPerDay}
             onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
+            maxLocationsPerDay={maxLocationsPerDay}
+            onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
           />
           
           <TierDistributionTable
@@ -203,6 +209,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             phases={phases}
             schedules={schedules}
             maxAssetsPerDay={maxAssetsPerDay}
+            maxLocationsPerDay={maxLocationsPerDay}
           />
           
           {isAdmin && (

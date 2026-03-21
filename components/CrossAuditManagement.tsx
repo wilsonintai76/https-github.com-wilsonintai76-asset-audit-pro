@@ -36,6 +36,7 @@ interface CrossAuditManagementProps {
   phases?: any[];
   institutionKPIs?: any[];
   maxAssetsPerDay?: number;
+  maxLocationsPerDay?: number;
   showToast?: (message: string, type?: any) => void;
 }
 
@@ -57,6 +58,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   phases = [],
   institutionKPIs = [],
   maxAssetsPerDay = 1000,
+  maxLocationsPerDay = 5,
   showToast
 }) => {
   // --- STATE ---
@@ -492,6 +494,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         setIsProcessing={setIsProcessing}
         strictAuditorRule={strictAuditorRule}
         setStrictAuditorRule={setStrictAuditorRule}
+        maxAssetsPerDay={maxAssetsPerDay}
+        maxLocationsPerDay={maxLocationsPerDay}
       />
           
       {/* Simulator Mode Header */}
@@ -663,6 +667,19 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                            </div>
                                        </td>
                                        <td className="px-6 py-4">
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 group">
+                                  <Users className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+                                  <span className="text-[10px] font-black uppercase tracking-tight">
+                                    Recommended: {(() => {
+                                      const assets = targetEntity?.assets || 0;
+                                      const locs = targetEntity?.locations || 0;
+                                      const assetRec = Math.ceil(assets / maxAssetsPerDay);
+                                      const locRec = Math.ceil(locs / maxLocationsPerDay);
+                                      return Math.max(2, assetRec, locRec);
+                                    })()}
+                                  </span>
+                                </div>
+
                                            <div className="flex items-center gap-3">
                                                <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                                                    <Building2 className="w-4 h-4" />

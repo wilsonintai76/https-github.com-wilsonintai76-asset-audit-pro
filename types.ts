@@ -151,3 +151,14 @@ export interface SystemActivity {
   timestamp?: string;
   metadata?: Record<string, any>;
 }
+
+export interface AuditConstraintsState {
+  maxAssetsPerDay: number;
+  maxLocationsPerDay: number;
+}
+
+export interface SystemSetting {
+  id: string;
+  value: any;
+  updatedAt?: string;
+}

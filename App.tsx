@@ -38,7 +38,8 @@ const App: React.FC = () => {
 
   // Data State
   const [schedules, setSchedules] = useState<AuditSchedule[]>([]);
-  const [maxAssetsPerDay, setMaxAssetsPerDay] = useState<number>(500);
+  const [maxAssetsPerDay, setMaxAssetsPerDay] = useState<number>(1000);
+  const [maxLocationsPerDay, setMaxLocationsPerDay] = useState<number>(5);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [crossAuditPermissions, setCrossAuditPermissions] = useState<CrossAuditPermission[]>([]);
@@ -137,6 +138,18 @@ const App: React.FC = () => {
       setAuditGroups(auditGroupsData);
       setInstitutionKPIs(institutionKPIsData);
       setBuildings(buildingsData);
+
+      // System Settings
+      try {
+        const settings = await gateway.getSystemSettings();
+        const constraints = settings.find(s => s.id === 'audit_constraints');
+        if (constraints?.value) {
+          if (constraints.value.maxAssetsPerDay) setMaxAssetsPerDay(constraints.value.maxAssetsPerDay);
+          if (constraints.value.maxLocationsPerDay) setMaxLocationsPerDay(constraints.value.maxLocationsPerDay);
+        }
+      } catch (e) {
+        console.warn("System settings failed to load:", e);
+      }
 
       // KPI targets are optional during schema rollout; don't block the app if missing
       let kpiTargetsData: KPITierTarget[] = [];
@@ -2339,7 +2352,15 @@ const App: React.FC = () => {
               onBulkAddDepts={handleBulkAddDepts}
               onBulkActivateStaff={handleBulkActivateStaff}
               maxAssetsPerDay={maxAssetsPerDay}
-              onUpdateMaxAssetsPerDay={setMaxAssetsPerDay}
+              maxLocationsPerDay={maxLocationsPerDay}
+              onUpdateMaxAssetsPerDay={async (val) => {
+                setMaxAssetsPerDay(val);
+                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay: val, maxLocationsPerDay });
+              }}
+              onUpdateMaxLocationsPerDay={async (val) => {
+                setMaxLocationsPerDay(val);
+                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: val });
+              }}
               onRebalanceSchedule={handleRebalanceSchedule}
               schedules={schedules}
               departmentMappings={departmentMappings}

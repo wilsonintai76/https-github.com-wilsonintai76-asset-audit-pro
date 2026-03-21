@@ -8,13 +8,17 @@ interface TierDistributionTableProps {
   kpiTiers: KPITier[];
   phases: AuditPhase[];
   schedules: AuditSchedule[];
+  maxAssetsPerDay?: number;
+  maxLocationsPerDay?: number;
 }
 
 export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({ 
   departments, 
   kpiTiers, 
   phases,
-  schedules 
+  schedules,
+  maxAssetsPerDay = 1000,
+  maxLocationsPerDay = 5
 }) => {
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate)), [phases]);
   const sortedTiers = useMemo(() => [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets), [kpiTiers]);
@@ -81,6 +85,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
             <tr>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
               <th id="header-auditors-tier" className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Auditors</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Recommended</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assets / Tier</th>
               {sortedPhases.map(phase => (
                 <th key={phase.id} className="px-4 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
@@ -99,6 +104,17 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                 </td>
                 <td className="px-6 py-4 text-center">
                   <span className="text-xs font-bold text-slate-700">{row.auditorCount || 0}</span>
+                </td>
+                <td className="px-6 py-4 text-center">
+                   <div className="flex flex-col items-center">
+                      <span className="text-xs font-black text-indigo-600">
+                        {(() => {
+                           const assets = row.totalAssets || 0;
+                           const locs = 1; // Basic assumption if no loc count per dept
+                           return Math.max(2, Math.ceil(assets / maxAssetsPerDay), Math.ceil(locs / maxLocationsPerDay));
+                        })()}
+                      </span>
+                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2 mb-1">
