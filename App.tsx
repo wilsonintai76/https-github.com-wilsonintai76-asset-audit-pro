@@ -591,20 +591,21 @@ const App: React.FC = () => {
           fallbackToLocalSession();
         }
       } else {
-        // Fallback to local storage for non-auth users or previous sessions
         fallbackToLocalSession();
       }
-      // 2. Load all data before hiding the spinner to ensure landing page stats are populated
-      try {
-        await loadAllData();
-      } catch (err) {
-        console.error("Data loading failed during initialization:", err);
-      }
+    };
 
+    const initialize = async () => {
+      // Start data loading and session check in parallel for speed
+      await Promise.allSettled([
+        initSession(),
+        loadAllData()
+      ]);
+      
       setIsInitialLoading(false);
     };
 
-    initSession();
+    initialize();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase?.auth.onAuthStateChange(async (event, session) => {
