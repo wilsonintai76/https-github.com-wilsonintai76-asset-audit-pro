@@ -1,7 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { CrossAuditPermission, Department, User, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup } from '../types';
 import { CrossAuditManagement } from './CrossAuditManagement';
-import { AuditConstraints } from './AuditConstraints';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
 import { KPISettings } from './KPISettings';
 import { TierDistributionTable } from './TierDistributionTable';
@@ -198,13 +197,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
       {(phases?.length > 0 && kpiTiers?.length > 0) && (
         <div className="space-y-8">
-          <AuditConstraints
-            maxAssetsPerDay={maxAssetsPerDay}
-            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
-            maxLocationsPerDay={maxLocationsPerDay}
-            onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
-          />
-          
           <TierDistributionTable
             departments={departments}
             kpiTiers={kpiTiers}
