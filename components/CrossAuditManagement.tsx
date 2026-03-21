@@ -144,8 +144,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const groupedPermissions = useMemo(() => {
     const groups: Record<string, CrossAuditPermission[]> = {};
     permissions.forEach(p => {
-      if (!groups[p.auditorDept]) groups[p.auditorDept] = [];
-      groups[p.auditorDept].push(p);
+      const auditorId = p.auditorDeptId;
+      if (!groups[auditorId]) groups[auditorId] = [];
+      groups[auditorId].push(p);
     });
     return groups;
   }, [permissions]);
@@ -250,7 +251,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       await onAddPermission(manualAuditor, manualTarget, isMutual);
       if (isMutual) {
         // Also check if reverse already exists
-        const reverseExists = permissions.some(p => p.auditorDept === manualTarget && p.targetDept === manualAuditor);
+        const reverseExists = permissions.some(p => p.auditorDeptId === manualTarget && p.targetDeptId === manualAuditor);
         if (!reverseExists) {
             await onAddPermission(manualTarget, manualAuditor, isMutual);
         }
@@ -264,17 +265,17 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     }
   };
 
-  const handleGridToggle = async (auditorName: string, targetName: string) => {
-    if (auditorName === targetName) return; // Prevent self-audit
+  const handleGridToggle = async (auditorId: string, targetId: string) => {
+    if (auditorId === targetId) return; // Prevent self-audit
     
-    const perm = permissions.find(p => p.auditorDept === auditorName && p.targetDept === targetName);
+    const perm = permissions.find(p => p.auditorDeptId === auditorId && p.targetDeptId === targetId);
     
     if (perm) {
       // Toggle off (remove)
       if (onRemovePermission) await onRemovePermission(perm.id);
     } else {
       // Toggle on (add)
-      await onAddPermission(auditorName, targetName, false);
+      await onAddPermission(auditorId, targetId, false);
     }
   };
 
@@ -356,10 +357,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const targetKPIAssets = overallTotalAssets * (targetKPIPercentage / 100);
 
   const projectedAssetsMet = useMemo(() => {
-    const activeList = isSimulatorActive ? simulatedPairings : permissions.map(p => ({ auditorDeptId: p.auditorDept, targetDeptId: p.targetDept, isMutual: p.isMutual, isActive: p.isActive }));
+    const activeList = isSimulatorActive ? simulatedPairings : permissions;
     const auditedTargets = new Set(activeList.filter(p => p.isActive).map(p => p.targetDeptId));
-    return Array.from(auditedTargets).reduce((sum, targetName) => {
-       const entity = entities.find(e => e.name === targetName);
+    return Array.from(auditedTargets).reduce((sum, targetId) => {
+       const entity = entities.find(e => e.id === targetId);
        return sum + (entity?.assets || 0);
     }, 0);
   }, [simulatedPairings, permissions, entities, isSimulatorActive]);
@@ -561,7 +562,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     }
   };
 
-  const activePairingList = isSimulatorActive ? simulatedPairings : permissions.map(p => ({ ...p, auditorDeptId: p.auditorDept, targetDeptId: p.targetDept }));
+  const activePairingList = isSimulatorActive ? simulatedPairings : (permissions as any[]);
 
   return (
     <div className="space-y-8">
@@ -722,7 +723,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         onChange={(e) => setManualAuditor(e.target.value)}
                      >
                         <option value="">Select Auditing Entity</option>
-                        {entities.filter(e => e.auditors >= 1).map(e => <option key={e.name} value={e.name}>{e.name} ({e.auditors} Auditors)</option>)}
+                        {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => <option key={e.id} value={e.id}>{e.name} ({e.auditors} Auditors)</option>)}
                      </select>
                      
                      <select 
@@ -731,7 +732,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         onChange={(e) => setManualTarget(e.target.value)}
                      >
                         <option value="">Select Target</option>
-                        {entities.filter(e => e.assets > 0).map(e => <option key={e.name} value={e.name}>{e.name} ({e.assets} Assets)</option>)}
+                        {entities.filter(e => e.assets > 0).map(e => <option key={e.id} value={e.id}>{e.name} ({e.assets} Assets)</option>)}
                      </select>
                      
                      <label className="flex items-center gap-2 cursor-pointer group px-2">
@@ -793,26 +794,23 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                 <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
                                                     <Users className="w-4 h-4" />
                                                 </div>
-                                                <div>
+                                                 <div>
                                                     <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || perm.auditorDeptId}</p>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                                                        {auditorEntity?.auditors || 0} Total Auditors
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {auditorEntity?.members?.map((m: any) => (
+                                                            <span key={m.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase tracking-wider">
+                                                                {m.abbr}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
+                                                        {isSimulatorActive && planAuditor ? planAuditor.auditors : (auditorEntity?.auditors || 0)} Total Auditors
                                                         {planAuditor?.isVirtual && (
                                                             <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[8px]">
                                                                 <Zap className="w-2 h-2" /> VIRTUAL STRATEGIC
                                                             </span>
                                                         )}
                                                     </p>
-                                                    
-                                                    {isSimulatorActive && planAuditor && (
-                                                        <div className="flex flex-wrap gap-1 mt-2">
-                                                            {planAuditor.members?.map(m => (
-                                                                <span key={m.id} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-md text-[9px] font-bold">
-                                                                    {m.name}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
                                                 </div>
                                             </div>
                                         </td>
