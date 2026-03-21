@@ -205,9 +205,13 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
             }}
           >
             <option value="All">All Building/Block</option>
-            {availableBlocks.map(b => (
-              <option key={b} value={b}>{b}</option>
-            ))}
+            {availableBlocks.map(b => {
+              const fullBuilding = buildings.find(building => building.abbr === b);
+              const displayName = fullBuilding ? `${b} | ${fullBuilding.name}` : b;
+              return (
+                <option key={b} value={b}>{displayName}</option>
+              );
+            })}
           </select>
           <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
         </div>

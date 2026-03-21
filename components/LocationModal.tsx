@@ -250,7 +250,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                       onClick={() => setIsBuildingDropdownOpen(!isBuildingDropdownOpen)}
                     >
                       {selectedBuildingData ? (
-                        <span className="text-slate-900">{selectedBuildingData.abbr}</span>
+                        <span className="text-slate-900">{selectedBuildingData.abbr} | {selectedBuildingData.name}</span>
                       ) : (
                         <span className="text-slate-400 font-medium">Select Building...</span>
                       )}
