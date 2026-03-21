@@ -100,12 +100,22 @@ class LocalDB {
     });
   }
 
-  async clear(storeName: StoreName): Promise<void> {
-    const store = await this.getStore(storeName, 'readwrite');
+  async clearAll(): Promise<void> {
+    const db = await this.open();
+    const stores: StoreName[] = ['audits', 'users', 'departments', 'locations', 'crossAudits', 'notifications', 'auditPhases', 'kpiTiers'];
+    const transaction = db.transaction(stores, 'readwrite');
+    
     return new Promise((resolve, reject) => {
-      const request = store.clear();
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      let completed = 0;
+      stores.forEach(storeName => {
+        const store = transaction.objectStore(storeName);
+        const request = store.clear();
+        request.onsuccess = () => {
+          completed++;
+          if (completed === stores.length) resolve();
+        };
+        request.onerror = () => reject(request.error);
+      });
     });
   }
 }

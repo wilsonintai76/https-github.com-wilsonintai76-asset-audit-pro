@@ -651,7 +651,7 @@ const App: React.FC = () => {
     if (!currentUser) return;
 
     let timeoutId: NodeJS.Timeout;
-    const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+    const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
     const resetTimer = () => {
       if (timeoutId) clearTimeout(timeoutId);
