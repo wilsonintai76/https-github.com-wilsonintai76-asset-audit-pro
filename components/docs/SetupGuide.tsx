@@ -6,7 +6,7 @@ export const SetupGuide: React.FC = () => {
   const steps = [
     { 
       title: "01. Onboard Departments", 
-      desc: "Define your units (JKE, Kamsis, JKA, etc.) and their total asset counts. The system uses these counts to balance auditing loads.",
+      desc: "Define your units (JKE, Kamsis, JKA) and total assets. Under 'Group Builder', group smaller unbalanced units into generic super-groups (Group A, Group B) to ensure viable capacity.",
       tip: "Use CSV Import for bulk onboarding."
     },
     { 
@@ -25,9 +25,9 @@ export const SetupGuide: React.FC = () => {
       tip: "Phase dates should not overlap for clear KPI tracking."
     },
     { 
-      title: "05. Run Optimization Matrix", 
-      desc: "Execute the Pairing Engine in Settings. This automatically creates the cross-departmental permissions required for neutral auditing.",
-      tip: "Review the Matrix before applying permissions."
+      title: "05. Run Simulator Drafts", 
+      desc: "Execute the Pairing Simulator in Settings. Watch the Projected KPI bar fill up, tweak the rules if needed, and 'Lock In' the pairings for deployment.",
+      tip: "You can delete or manually override draft pairings before committing."
     }
   ];
 

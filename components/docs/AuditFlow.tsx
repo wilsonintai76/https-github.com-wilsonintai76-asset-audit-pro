@@ -16,13 +16,13 @@ export const AuditFlow: React.FC = () => {
     },
     {
       id: 2,
-      title: "Matrix Optimization",
+      title: "KPI Pairing Simulator",
       role: "System Automation",
       roleIcon: Bot,
       color: "indigo",
       icon: Network,
-      desc: "The Cross-Audit Engine analyzes asset density per department. It generates a conflict-free permission matrix, ensuring no department audits itself (Anti-Bias Rule).",
-      logic: "Calculates asset load -> Pairs high-density targets with multiple auditor teams -> Generates 'CrossAuditPermission' records."
+      desc: "The intelligent Pairing Engine calculates Audit load mathematically based on '2-Person Teams'. It drafts a conflict-free projected matrix to hit Institutional KPI percentages.",
+      logic: "Teams = Floor(Auditors/2) -> Matches high-asset targets to available teams -> Stops exactly at KPI % -> Admin visualizes and refines -> Commits Draft."
     },
     {
       id: 3,

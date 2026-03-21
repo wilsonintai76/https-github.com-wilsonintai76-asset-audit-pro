@@ -36,7 +36,7 @@ export const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ phases = [] }) => 
   }, [phases]);
 
   return (
-    <div className="max-w-6xl mx-auto pb-20">
+    <div className="max-w-6xl mx-auto pb-20 w-full shrink-0 animate-in fade-in duration-500">
       <div className="flex flex-col lg:flex-row gap-12">
         {/* Sticky Internal Nav */}
         <aside className="lg:w-64 shrink-0">
