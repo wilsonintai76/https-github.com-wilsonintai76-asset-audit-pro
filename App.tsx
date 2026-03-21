@@ -1797,7 +1797,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAutoConsolidate = async (threshold: number, excludedIds: string[]) => {
+  const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number = 2) => {
     try {
       // Step 1: Clear all previously auto-generated groups
       const prevAutoGroups = auditGroups.filter(g => g.name?.startsWith('Group '));
@@ -1815,7 +1815,11 @@ const App: React.FC = () => {
       // Step 2: Re-fetch fresh state after clearing
       const freshDepts = await gateway.getDepartments();
       const eligible = freshDepts
-        .filter(d => !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0)
+        .filter(d => !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0 && !d.isExempted)
+        .map(d => {
+            const enriched = departmentsWithAssets.find(x => x.id === d.id);
+            return { ...d, auditorCount: enriched?.auditorCount || 0 };
+        })
         .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
 
       if (eligible.length === 0) {
@@ -1825,29 +1829,47 @@ const App: React.FC = () => {
         return;
       }
 
-      let groupIndex = 1;
-      let bundle: typeof eligible = [];
-      let running = 0;
-
-      const flush = async () => {
-        if (bundle.length === 0) return;
-        const newGroup = await gateway.addAuditGroup({
-          name: `Group ${String.fromCharCode(65 + (groupIndex++) - 1)}`,
-          description: `Auto-grouped: ${bundle.map(d => d.abbr).join(', ')}`
-        });
-        for (const dept of bundle) {
-          await gateway.updateDepartment(dept.id, { auditGroupId: newGroup.id });
-        }
-        bundle = [];
-        running = 0;
-      };
+      let bundles: (typeof eligible)[] = [];
+      let currentBundle: typeof eligible = [];
+      let runningAssets = 0;
+      let runningAuditors = 0;
 
       for (const dept of eligible) {
-        running += dept.totalAssets || 0;
-        bundle.push(dept);
-        if (running >= threshold) await flush();
+        runningAssets += dept.totalAssets || 0;
+        runningAuditors += dept.auditorCount || 0;
+        currentBundle.push(dept);
+        
+        // Flush condition: Asset threshold met AND Auditor threshold met (minAuditors)
+        if (runningAssets >= threshold && runningAuditors >= minAuditors) {
+            bundles.push([...currentBundle]);
+            currentBundle = [];
+            runningAssets = 0;
+            runningAuditors = 0;
+        }
       }
-      await flush(); // flush any remaining
+      
+      // Handle leftovers
+      if (currentBundle.length > 0) {
+        if (bundles.length > 0) {
+            // Append remaining to the last bundle to ensure they aren't orphaned with < minAuditors auditors
+            bundles[bundles.length - 1].push(...currentBundle);
+        } else {
+            bundles.push(currentBundle);
+        }
+      }
+
+      // Create groups in database
+      let groupIndex = 1;
+      for (const b of bundles) {
+        if (b.length === 0) continue;
+        const newGroup = await gateway.addAuditGroup({
+          name: `Group ${String.fromCharCode(65 + (groupIndex++) - 1)}`,
+          description: `Auto-grouped: ${b.map(d => d.abbr).join(', ')}`
+        });
+        for (const dept of b) {
+          await gateway.updateDepartment(dept.id, { auditGroupId: newGroup.id });
+        }
+      }
 
       setAuditGroups(await gateway.getAuditGroups());
       setDepartments(await gateway.getDepartments());

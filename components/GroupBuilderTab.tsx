@@ -3,12 +3,19 @@ import { Department, AuditGroup } from '../types';
 import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users } from 'lucide-react';
 
 const THRESHOLD_STORAGE_KEY = 'group_builder_threshold';
+const MEGA_THRESHOLD_STORAGE_KEY = 'group_builder_mega_threshold';
 
 function loadThreshold(): number {
   return parseInt(localStorage.getItem(THRESHOLD_STORAGE_KEY) || '1000', 10);
 }
 function saveThreshold(t: number) {
   localStorage.setItem(THRESHOLD_STORAGE_KEY, String(t));
+}
+function loadMegaThreshold(): number {
+  return parseInt(localStorage.getItem(MEGA_THRESHOLD_STORAGE_KEY) || '3000', 10);
+}
+function saveMegaThreshold(t: number) {
+  localStorage.setItem(MEGA_THRESHOLD_STORAGE_KEY, String(t));
 }
 
 interface GroupBuilderTabProps {
@@ -20,6 +27,8 @@ interface GroupBuilderTabProps {
   onBulkUpdateDepartments: (updates: { id: string, data: Partial<Department> }[]) => void;
   isProcessing: boolean;
   setIsProcessing: (processing: boolean) => void;
+  strictAuditorRule: boolean;
+  setStrictAuditorRule: (val: boolean) => void;
 }
 
 export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
@@ -29,10 +38,13 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   onDeleteAuditGroup,
   onBulkUpdateDepartments,
   isProcessing,
-  setIsProcessing
+  setIsProcessing,
+  strictAuditorRule,
+  setStrictAuditorRule
 }) => {
   const [builderTab, setBuilderTab] = useState<1 | 2>(1);
   const [threshold, setThreshold] = useState<number>(() => loadThreshold());
+  const [megaThreshold, setMegaThreshold] = useState<number>(() => loadMegaThreshold());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   // Derive which departments are currently locked into the editing group
@@ -46,11 +58,21 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     saveThreshold(val);
   };
 
+  const handleMegaThresholdChange = (val: number) => {
+    setMegaThreshold(val);
+    saveMegaThreshold(val);
+  };
+
   const handleRunAutoConsolidate = async () => {
     if (!onAutoConsolidate) return;
     setIsProcessing(true);
     try {
-      await onAutoConsolidate(threshold, []);
+      const megaExcludedIds = departments
+        .filter(d => (d.totalAssets || 0) >= megaThreshold)
+        .map(d => d.id);
+        
+      const minAuditors = strictAuditorRule ? 2 : 1;
+      await onAutoConsolidate(threshold, megaExcludedIds, minAuditors);
       setBuilderTab(2); // Automatically jump to review tab when finished
     } finally {
       setIsProcessing(false);
@@ -126,8 +148,22 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                  Set an asset threshold. The system will bundle standalone departments together until they exceed this threshold, naming them Group A, Group B, etc.
                </p>
 
-               <div className="space-y-4 mb-10">
-                  <label className="text-[10px] font-bold text-slate-400 block uppercase tracking-widest">Asset Threshold per Group</label>
+               <div className="space-y-4 mb-6">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-slate-400 block uppercase tracking-widest">Asset Threshold per Group</label>
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Min 2 Auditors Rule</span>
+                      <div className="relative inline-flex items-center">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={strictAuditorRule}
+                          onChange={() => setStrictAuditorRule(!strictAuditorRule)}
+                        />
+                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
+                      </div>
+                    </label>
+                  </div>
                   <div className="flex items-center gap-4 bg-white p-4 border border-slate-200 rounded-2xl shadow-sm">
                     <Boxes className="w-6 h-6 text-indigo-400" />
                     <input 
@@ -139,6 +175,27 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                       onChange={e => handleThresholdChange(parseInt(e.target.value) || 1000)}
                     />
                   </div>
+                  {!strictAuditorRule && (
+                    <p className="text-[10px] text-amber-600 font-bold bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 italic">
+                      Notice: Strict auditor rule is disabled. Single-auditor units can be standalone.
+                    </p>
+                  )}
+               </div>
+
+               <div className="space-y-4 mb-10">
+                  <label className="text-[10px] font-bold text-amber-500 block uppercase tracking-widest">Mega-Department Cutoff (Bypass Grouping)</label>
+                  <div className="flex items-center gap-4 bg-white p-4 border border-amber-200 rounded-2xl shadow-sm">
+                    <Sparkles className="w-6 h-6 text-amber-500" />
+                    <input 
+                      type="number"
+                      min={authThreshold => Math.max(100, threshold + 100)}
+                      step={100}
+                      className="w-full text-2xl font-black text-slate-700 outline-none placeholder:text-slate-300"
+                      value={megaThreshold}
+                      onChange={e => handleMegaThresholdChange(parseInt(e.target.value) || 3000)}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold leading-relaxed px-2">Departments with assets above this limit will remain standalone and participate in cross-audits independently.</p>
                </div>
 
                <button 
@@ -182,7 +239,20 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                              <h5 className="font-black text-slate-900">{g.name}</h5>
                              <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1">
                                 <Users className="w-3 h-3" />
-                                {departments.filter(d => d.auditGroup === g.name || d.auditGroupId === g.id).length} Units Assigned
+                                {(() => {
+                                  const depts = departments.filter(d => d.auditGroup === g.name || d.auditGroupId === g.id);
+                                  const actualAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+                                  const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                                  const rec = Math.max(2, Math.ceil(totalAssets / threshold) * 2);
+                                  return (
+                                    <span>
+                                      {depts.length} Units • {actualAuditors} Auditors 
+                                      {!strictAuditorRule && actualAuditors < rec && (
+                                        <span className="text-amber-500 ml-1">(Rec: {rec})</span>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
                              </p>
                           </div>
                        </div>
@@ -253,7 +323,14 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                             </div>
                           )}
                         </div>
-                        <span className="text-xs font-mono font-bold text-slate-400">{(dept.totalAssets || 0).toLocaleString()} <Boxes className="inline w-3 h-3"/></span>
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs font-mono font-bold text-slate-400">{(dept.totalAssets || 0).toLocaleString()} <Boxes className="inline w-3 h-3"/></span>
+                          {!strictAuditorRule && (dept.auditorCount || 0) < Math.max(2, Math.ceil((dept.totalAssets || 0) / threshold) * 2) && (
+                            <span className="text-[10px] font-bold text-amber-500 italic">
+                              Rec: {Math.max(2, Math.ceil((dept.totalAssets || 0) / threshold) * 2)} Auditors
+                            </span>
+                          )}
+                        </div>
                       </label>
                     );
                   })}

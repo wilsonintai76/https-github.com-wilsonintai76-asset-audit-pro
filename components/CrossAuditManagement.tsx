@@ -31,7 +31,7 @@ interface CrossAuditManagementProps {
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup?: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
-  onAutoConsolidate?: (threshold: number, excludedIds: string[]) => Promise<void>;
+  onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors?: number) => Promise<void>;
   onBulkAddPermissions?: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
   phases?: any[];
   institutionKPIs?: any[];
@@ -76,6 +76,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   // Workflow Control
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('grouping');
+  
+  // State for Auditor Strictness (Min 2 Auditors rule)
+  const [strictAuditorRule, setStrictAuditorRule] = useState<boolean>(true);
   
   // Confirmation & State Control
   const [isApplied, setIsApplied] = useState(false);
@@ -349,16 +352,17 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const handleRunSimulator = () => {
     setIsProcessing(true);
+    const minAuditors = strictAuditorRule ? 2 : 1;
     const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
-    const auditors = entities.filter(e => e.auditors >= 2);
+    const auditors = entities.filter(e => e.auditors >= minAuditors);
     
-    // Team Capacity = Floor(Total Auditors / 2)
+    // Capacity = Floor(Total Auditors / minAuditors) or just Total Auditors if min is 1
     const capacityMap = new Map<string, number>();
-    let totalTeams = 0;
+    let totalCapacity = 0;
     auditors.forEach(a => {
-        const teams = Math.floor(a.auditors / 2);
-        capacityMap.set(a.name, teams);
-        totalTeams += teams;
+        const capacity = minAuditors === 2 ? Math.floor(a.auditors / 2) : a.auditors;
+        capacityMap.set(a.name, capacity);
+        totalCapacity += capacity;
     });
 
     const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
@@ -451,6 +455,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         onAutoConsolidate={onAutoConsolidate}
         isProcessing={isProcessing}
         setIsProcessing={setIsProcessing}
+        strictAuditorRule={strictAuditorRule}
+        setStrictAuditorRule={setStrictAuditorRule}
       />
           
       {/* Simulator Mode Header */}
@@ -467,7 +473,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
             </div>
             <h3 className="text-2xl font-black text-slate-900 mb-4">Pairing Simulator</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-6">
-              Generate the most efficient audit assignments automatically. The engine matches 2-person auditor teams to high-asset targets until your Institutional KPI is mathematically secured.
+              Generate the most efficient audit assignments automatically. The engine matches auditing entities to high-asset targets until your Institutional KPI is mathematically secured.
             </p>
             
             {isSimulatorActive ? (
@@ -540,8 +546,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         value={manualAuditor}
                         onChange={(e) => setManualAuditor(e.target.value)}
                      >
-                        <option value="">Select Auditor</option>
-                        {entities.filter(e => e.auditors >= 2).map(e => <option key={e.name} value={e.name}>{e.name} ({Math.floor(e.auditors/2)} Teams)</option>)}
+                        <option value="">Select Auditing Entity</option>
+                        {entities.filter(e => e.auditors >= 1).map(e => <option key={e.name} value={e.name}>{e.name} ({e.auditors} Auditors)</option>)}
                      </select>
                      
                      <select 
@@ -585,7 +591,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                  <table className="w-full text-left">
                     <thead className="bg-white border-b border-slate-100">
                        <tr>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Auditing Team</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Auditing Entity</th>
                           <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Direction</th>
                           <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Entity (Assets)</th>
                           <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Action</th>
@@ -656,8 +662,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       <ActiveEntitiesList 
         entities={entities}
         selectedEntity={selectedAuditor}
-        minAuditors={minAuditors}
+        onSelect={setSelectedAuditor}
+        megaTargetThreshold={megaTargetThreshold}
+        minAuditors={strictAuditorRule ? 2 : 1}
         overallTotal={overallTotalAssets}
+        threshold={assetThreshold}
+        strictAuditorRule={strictAuditorRule}
       />
 
       <ConfirmationModal
