@@ -1785,8 +1785,8 @@ const App: React.FC = () => {
 
   const handleAutoConsolidate = async (threshold: number, excludedIds: string[]) => {
     try {
-      // Step 1: Clear all previously auto-generated "Consolidated Unit" groups
-      const prevAutoGroups = auditGroups.filter(g => g.name?.startsWith('Consolidated Unit'));
+      // Step 1: Clear all previously auto-generated groups
+      const prevAutoGroups = auditGroups.filter(g => g.name?.startsWith('Group '));
       if (prevAutoGroups.length > 0) {
         for (const group of prevAutoGroups) {
           // Unassign all departments from this group before deleting it
@@ -1818,7 +1818,7 @@ const App: React.FC = () => {
       const flush = async () => {
         if (bundle.length === 0) return;
         const newGroup = await gateway.addAuditGroup({
-          name: `Consolidated Unit ${groupIndex++}`,
+          name: `Group ${String.fromCharCode(65 + (groupIndex++) - 1)}`,
           description: `Auto-grouped: ${bundle.map(d => d.abbr).join(', ')}`
         });
         for (const dept of bundle) {
@@ -2229,7 +2229,6 @@ const App: React.FC = () => {
               onAddGroup={handleAddAuditGroup}
               onUpdateGroup={handleUpdateAuditGroup}
               onDeleteGroup={handleDeleteAuditGroup}
-              onAutoConsolidate={handleAutoConsolidate}
               onAddAuditor={(deptId) => {
                 setSelectedDept(deptId);
                 setActiveView('team');
@@ -2303,6 +2302,7 @@ const App: React.FC = () => {
               onAddAuditGroup={handleAddAuditGroup}
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}
+              onAutoConsolidate={handleAutoConsolidate}
             />
           )}
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
