@@ -9,8 +9,8 @@ import { InstitutionalConsolidationView } from './InstitutionalConsolidationView
 import { GroupBuilderTab } from './GroupBuilderTab';
 import { AuditConstraints } from './AuditConstraints';
 interface StrategicPair {
-  target: { name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
-  auditors: { name: string; assets: number; auditors: number; isJoint: boolean; members?: any[] }[];
+  target: { id: string; name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
+  auditors: { id: string; name: string; assets: number; auditors: number; isJoint: boolean; members?: any[] }[];
   totalAuditorsInGroup: number;
   auditorSideAssets: number;
 }
@@ -112,7 +112,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
       
       const entityName = group ? group.name : d.name;
-      const entityId = group ? group.id : `dept_${d.id}`;
+      const entityId = group ? group.id : d.id;
       
       const current = map.get(entityId) || { name: entityName, assets: 0, auditors: 0, memberCount: 0, members: [], id: entityId };
       const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
@@ -216,7 +216,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
       for (const pair of strategicPlan) {
         for (const auditor of pair.auditors) {
-          await onAddPermission(auditor.name, pair.target.name, false);
+          await onAddPermission(auditor.id, pair.target.id, false);
         }
       }
 
@@ -360,46 +360,78 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const handleRunSimulator = () => {
     setIsProcessing(true);
-    const minAuditors = strictAuditorRule ? 2 : 1;
-    const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
-    const auditors = entities.filter(e => e.auditors >= minAuditors);
+    const minAuditorsRequired = strictAuditorRule ? 2 : 1;
     
-    // Capacity = Floor(Total Auditors / minAuditors) or just Total Auditors if min is 1
+    // 1. Get targets (Entities with assets)
+    const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
+    
+    // 2. Get available auditors (Entities with enough auditors)
+    const auditors = entities.filter(e => e.auditors >= minAuditorsRequired);
+    
     const capacityMap = new Map<string, number>();
-    let totalCapacity = 0;
     auditors.forEach(a => {
-        const capacity = minAuditors === 2 ? Math.floor(a.auditors / 2) : a.auditors;
-        capacityMap.set(a.name, capacity);
-        totalCapacity += capacity;
+        const capacity = minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors;
+        capacityMap.set(a.id!, capacity);
     });
 
-    const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
-    let currentAssets = 0;
+    const newStrategicPlan: StrategicPair[] = [];
+    const usedTargetIds = new Set<string>();
 
     for (const target of targets) {
-      // KPI Target check: if we've met the target but still have matches possible, 
-      // we only break if the user explicitly wants to minimize auditing (not implemented yet).
-      // For now, let's prioritize complete coverage if resources allow.
-      
-      const availableAuditors = auditors
-        .filter(a => a.id !== target.id && (capacityMap.get(a.id || '') || 0) > 0)
-        .sort((a, b) => (capacityMap.get(b.id || '') || 0) - (capacityMap.get(a.id || '') || 0));
+      if (usedTargetIds.has(target.id!)) continue;
 
-      if (availableAuditors.length > 0) {
-        const chosen = availableAuditors[0];
-        newPairings.push({
-           auditorDeptId: chosen.id as string, // UUID
-           targetDeptId: target.id as string,   // UUID
-           isActive: true,
-           isMutual: false
+      // Find best auditor for this target
+      const availableAuditor = auditors
+        .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0)
+        .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
+
+      if (availableAuditor) {
+        // Calculate recommended individual auditors from the auditor unit
+        // We look for users in the auditing department(s)
+        const auditorDeptIds = availableAuditor.members.map(m => m.id);
+        const potentialMembers = users.filter(u => 
+          auditorDeptIds.includes(u.departmentId) && 
+          u.status === 'Active' &&
+          (u.roles.includes('Supervisor') || u.roles.includes('Staff'))
+        );
+
+        // Map to StrategicPair format
+        newStrategicPlan.push({
+          target: { 
+            name: target.name,
+            assets: target.assets,
+            auditors: target.auditors,
+            members: target.members,
+            id: target.id // Ensure target ID is passed
+          } as any,
+          auditors: [{ 
+            name: availableAuditor.name,
+            assets: availableAuditor.assets,
+            auditors: availableAuditor.auditors,
+            isJoint: availableAuditor.isJoint,
+            id: availableAuditor.id, // Ensure auditor ID is passed
+            members: potentialMembers.slice(0, 2) // Recommend up to 2 members for simulation
+          }],
+          totalAuditorsInGroup: availableAuditor.auditors,
+          auditorSideAssets: availableAuditor.assets
         });
-        capacityMap.set(chosen.id || '', (capacityMap.get(chosen.id || '') || 0) - 1);
-        currentAssets += target.assets;
+
+        capacityMap.set(availableAuditor.id!, (capacityMap.get(availableAuditor.id!) || 0) - 1);
+        usedTargetIds.add(target.id!);
       }
     }
 
+    const newPairings: Omit<CrossAuditPermission, 'id'>[] = newStrategicPlan.map(p => ({
+        auditorDeptId: p.auditors[0].id,
+        targetDeptId: p.target.id,
+        isActive: true,
+        isMutual: false
+    }));
+
+    setStrategicPlan(newStrategicPlan);
     setSimulatedPairings(newPairings);
     setIsSimulatorActive(true);
+    setIsApplied(false);
     setIsProcessing(false);
   };
 
@@ -680,48 +712,56 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                </td>
                            </tr>
                        ) : (
-                           activePairingList.map((perm, idx) => {
-                               const targetEntity = entities.find(e => e.name === perm.targetDeptId);
-                               const auditorEntity = entities.find(e => e.name === perm.auditorDeptId);
-                               
-                               return (
-                                   <tr key={isSimulatorActive ? idx : (perm as any).id} className="hover:bg-white transition-colors">
-                                       <td className="px-6 py-4">
-                                           <div className="flex items-center gap-3">
-                                               <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-                                                   <Users className="w-4 h-4" />
-                                               </div>
-                                               <div>
-                                                   <p className="font-bold text-sm text-slate-900">{perm.auditorDeptId}</p>
-                                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{auditorEntity?.auditors || 0} Total Auditors</p>
-                                               </div>
-                                           </div>
-                                       </td>
-                                       <td className="px-6 py-4 text-center">
-                                           <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-400">
-                                               {perm.isMutual ? <ArrowRightLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                                           </div>
-                                       </td>
-                                       <td className="px-6 py-4">
-                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 group">
-                                  <Users className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
-                                  <span className="text-[10px] font-black uppercase tracking-tight">
-                                    Recommended: {(() => {
-                                      const assets = targetEntity?.assets || 0;
-                                      const locs = targetEntity?.locations || 0;
-                                      const assetRec = Math.ceil(assets / maxAssetsPerDay);
-                                      const locRec = Math.ceil(locs / maxLocationsPerDay);
-                                      return Math.max(2, assetRec, locRec);
-                                    })()}
-                                  </span>
-                                </div>
+                            activePairingList.map((perm, idx) => {
+                                const targetEntity = entities.find(e => e.id === perm.targetDeptId);
+                                const auditorEntity = entities.find(e => e.id === perm.auditorDeptId);
+                                const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === perm.targetDeptId && p.auditors.some(a => a.id === perm.auditorDeptId)) : null;
+                                
+                                return (
+                                    <tr key={isSimulatorActive ? idx : (perm as any).id} className="hover:bg-white transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                                                    <Users className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || perm.auditorDeptId}</p>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{auditorEntity?.auditors || 0} Total Auditors</p>
+                                                    
+                                                    {isSimulatorActive && planPair && (
+                                                        <div className="flex flex-wrap gap-1 mt-2">
+                                                            {planPair.auditors[0].members?.map(m => (
+                                                                <span key={m.id} className="px-2 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-md text-[9px] font-bold">
+                                                                    {m.name}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-400">
+                                                {perm.isMutual ? <ArrowRightLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 group w-fit mb-3">
+                                                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                                                <span className="text-[10px] font-black uppercase tracking-tight">
+                                                    Target Capacity: {(() => {
+                                                        const assets = targetEntity?.assets || 0;
+                                                        return Math.max(2, Math.ceil(assets / maxAssetsPerDay));
+                                                    })()} Auditors
+                                                </span>
+                                            </div>
 
                                            <div className="flex items-center gap-3">
                                                <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
                                                    <Building2 className="w-4 h-4" />
                                                </div>
                                                <div>
-                                                   <p className="font-bold text-sm text-slate-900">{perm.targetDeptId}</p>
+                                                   <p className="font-bold text-sm text-slate-900">{targetEntity?.name || perm.targetDeptId}</p>
                                                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Assets</p>
                                                </div>
                                            </div>
