@@ -129,6 +129,19 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         description="Customize institutional audit rules and scheduling windows."
       />
 
+      {isAdmin && (
+        <DataManagementWorkflow
+          departments={departments}
+          departmentMappings={departmentMappings}
+          onBulkAddDepts={onBulkAddDepts}
+          onBulkActivateStaff={onBulkActivateStaff}
+          onAddDepartmentMapping={onAddDepartmentMapping}
+          onDeleteDepartmentMapping={onDeleteDepartmentMapping}
+          onSyncLocationMappings={onSyncLocationMappings}
+          onUpsertLocations={onUpsertLocations}
+        />
+      )}
+
       <AuditPhasesSettings
         phases={phases}
         isAdmin={isAdmin}
@@ -150,21 +163,27 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateInstitutionKPI={onUpdateInstitutionKPI}
       />
 
-      {isAdmin && (
-        <DataManagementWorkflow
-          departments={departments}
-          departmentMappings={departmentMappings}
-          onBulkAddDepts={onBulkAddDepts}
-          onBulkActivateStaff={onBulkActivateStaff}
-          onAddDepartmentMapping={onAddDepartmentMapping}
-          onDeleteDepartmentMapping={onDeleteDepartmentMapping}
-          onSyncLocationMappings={onSyncLocationMappings}
-          onUpsertLocations={onUpsertLocations}
-        />
-      )}
+      <CrossAuditManagement
+        departments={departments}
+        users={users}
+        permissions={permissions}
+        onTogglePermission={handlePermissionChange}
+        onRemovePermission={onRemovePermission}
+        onUpdateDepartment={onUpdateDepartment}
+        onBulkUpdateDepartments={onBulkUpdateDepartments}
+        auditGroups={auditGroups}
+        onAddAuditGroup={onAddAuditGroup}
+        onUpdateAuditGroup={onUpdateAuditGroup}
+        onDeleteAuditGroup={onDeleteAuditGroup}
+      />
 
       {(phases?.length > 0 && kpiTiers?.length > 0) && (
         <div className="space-y-8">
+          <AuditConstraints
+            maxAssetsPerDay={maxAssetsPerDay}
+            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
+          />
+          
           <TierDistributionTable
             departments={departments}
             kpiTiers={kpiTiers}
@@ -187,27 +206,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
               </button>
             </div>
           )}
-
-          <AuditConstraints
-            maxAssetsPerDay={maxAssetsPerDay}
-            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
-          />
         </div>
       )}
-
-      <CrossAuditManagement
-        departments={departments}
-        users={users}
-        permissions={permissions}
-        onTogglePermission={handlePermissionChange}
-        onRemovePermission={onRemovePermission}
-        onUpdateDepartment={onUpdateDepartment}
-        onBulkUpdateDepartments={onBulkUpdateDepartments}
-        auditGroups={auditGroups}
-        onAddAuditGroup={onAddAuditGroup}
-        onUpdateAuditGroup={onUpdateAuditGroup}
-        onDeleteAuditGroup={onDeleteAuditGroup}
-      />
 
       {isAdmin && (
         <div className={`rounded-[32px] p-8 border-2 transition-all duration-500 ${
