@@ -145,6 +145,13 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
       return;
     }
 
+    // Enforcement: Duplicate check
+    const isDuplicate = users.some(u => u.email.toLowerCase() === formData.email.toLowerCase() && u.id !== editingId);
+    if (isDuplicate) {
+      customAlert(`The email ${formData.email} is already registered to another team member.`);
+      return;
+    }
+
     const assignedRoles = formData.roles;
 
     if (editingId) {

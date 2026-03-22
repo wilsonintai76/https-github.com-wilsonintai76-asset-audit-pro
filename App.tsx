@@ -1174,30 +1174,24 @@ const App: React.FC = () => {
 
   const handleBulkActivateStaff = async (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => {
     try {
-      const userNameToObj = new Map<string, typeof users[0]>(users.map(u => [u.name.toUpperCase().trim(), u]));
+      const userEmailToObj = new Map<string, typeof users[0]>(users.map(u => [u.email.toLowerCase().trim(), u]));
       const deptNameToId = new Map<string, string>(departments.map(d => [d.name.toUpperCase().trim(), d.id]));
       let createdCount = 0;
-      let updatedCount = 0;
+      let skippedCount = 0;
       for (const entry of entries) {
         const deptId = entry.department ? (deptNameToId.get(entry.department.toUpperCase().trim()) ?? undefined) : undefined;
         const resolvedDesignation = (entry.designation as User['designation']) || undefined;
         const resolvedRoles: User['roles'] = entry.role ? [entry.role as any] : ['Staff'];
-        // Match by name
-        const existing = entry.name ? userNameToObj.get(entry.name.toUpperCase().trim()) : undefined;
+        // Match by email strictly for duplicate prevention
+        const existing = entry.email ? userEmailToObj.get(entry.email.toLowerCase().trim()) : undefined;
         if (existing) {
-          const updates: Partial<User> = { status: 'Active', isVerified: true };
-          if (entry.email) updates.email = entry.email;
-          if (deptId) updates.departmentId = deptId;
-          if (resolvedDesignation) updates.designation = resolvedDesignation;
-          if (entry.role) updates.roles = resolvedRoles;
-          await gateway.updateUser(existing.id, updates);
-          updatedCount++;
+          skippedCount++;
         } else {
           // Create new user
           const newUser: User = {
             id: crypto.randomUUID(),
             name: entry.name,
-            email: entry.email || `${entry.name.replace(/\s+/g, '').toLowerCase()}@asset-audit.pro`,
+            email: entry.email || `${entry.name.replace(/\s+/g, '').toLowerCase()}@poliku.edu.my`,
             roles: resolvedRoles,
             designation: resolvedDesignation || 'Supervisor',
             status: 'Active',
@@ -1205,12 +1199,13 @@ const App: React.FC = () => {
             departmentId: deptId,
           };
           await gateway.addUser(newUser);
+          userEmailToObj.set(newUser.email.toLowerCase().trim(), newUser); // Prevent duplicates within same batch
           createdCount++;
         }
       }
       const updatedUsers = await gateway.getUsers();
       setUsers(updatedUsers);
-      showToast(`Staff import complete: ${createdCount} created, ${updatedCount} updated.`);
+      showToast(`Staff import complete: ${createdCount} created, ${skippedCount} duplicates skipped.`);
     } catch (e) {
       showError(e, 'Staff Import Failed');
     }
@@ -1995,6 +1990,11 @@ const App: React.FC = () => {
 
   const handleAddMember = async (user: User) => {
     try {
+      const emailExists = users.some(u => u.email.toLowerCase() === user.email.toLowerCase());
+      if (emailExists) {
+        showToast('This email is already registered.', 'error');
+        return;
+      }
       await gateway.addUser(user);
       setUsers(await gateway.getUsers());
       showToast('Member added successfully');
@@ -2005,8 +2005,15 @@ const App: React.FC = () => {
 
   const handleBulkAddMembers = async (newUsers: User[]) => {
     try {
-      for (const u of newUsers) await gateway.addUser(u);
+      let createdCount = 0;
+      for (const u of newUsers) {
+        if (!users.some(ex => ex.email.toLowerCase() === u.email.toLowerCase())) {
+          await gateway.addUser(u);
+          createdCount++;
+        }
+      }
       setUsers(await gateway.getUsers());
+      showToast(`Bulk add complete: ${createdCount} new members added.`);
     } catch (e) {
       showError(e, 'Bulk Import Failed');
     }
