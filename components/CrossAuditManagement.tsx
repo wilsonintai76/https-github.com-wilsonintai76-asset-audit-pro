@@ -783,8 +783,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                            </tr>
                        ) : (
                             activePairingList.map((perm, idx) => {
-                                const targetEntity = entities.find(e => e.id === perm.targetDeptId);
-                                const auditorEntity = entities.find(e => e.id === perm.auditorDeptId);
+                                const targetEntity = entities.find(e => e.id === perm.targetDeptId || (e.members && e.members.some(m => m.id === perm.targetDeptId)));
+                                const auditorEntity = entities.find(e => e.id === perm.auditorDeptId || (e.members && e.members.some(m => m.id === perm.auditorDeptId)));
                                 const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === perm.targetDeptId) : null;
                                 const planAuditor = planPair?.auditors.find(a => a.id === perm.auditorDeptId);
                                 
