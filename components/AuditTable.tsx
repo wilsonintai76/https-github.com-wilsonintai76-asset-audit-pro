@@ -136,7 +136,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
   const getEntityName = (deptId: string) => {
     const dept = allDepartments.find(d => d.id === deptId);
-    return dept?.auditGroup || deptId;
+    return dept?.auditGroupId || deptId;
   };
 
   const getPhaseName = (phaseId: string) => {
@@ -144,14 +144,16 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   };
 
   const canAuditDepartment = (targetDeptId: string) => {
-    const myEntity = getEntityName(currentUser?.departmentId || '');
-    const targetEntity = getEntityName(targetDeptId);
+    const myEntityId = getEntityName(currentUser?.departmentId || '');
+    const targetEntityId = getEntityName(targetDeptId);
 
-    if (myEntity === targetEntity && !isAdmin) return false;
+    // 1. Prevent self-audit at the entity level (Department or Group)
+    if (myEntityId === targetEntityId && !isAdmin) return false;
 
+    // 2. Check if a pairing exists in crossAuditPermissions
     const hasPermission = crossAuditPermissions.some(p => 
-      p.auditorDept === myEntity && 
-      p.targetDept === targetEntity && 
+      p.auditorDeptId === myEntityId && 
+      p.targetDeptId === targetEntityId && 
       p.isActive
     );
     
@@ -198,6 +200,9 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   };
 
   const handleSelfAssign = (auditId: string, slot: 1 | 2, date: string, phaseId: string) => {
+    const audit = schedules.find(s => s.id === auditId);
+    if (!audit) return;
+
     if (!hasFieldRole) {
       alert("ACTION BLOCKED: Your current role does not permit performing audits.");
       return;
@@ -210,6 +215,16 @@ export const AuditTable: React.FC<AuditTableProps> = ({
       alert("Self-assignment is locked until an audit phase is configured.");
       return;
     }
+
+    // Explicit Pairing Check (Defense in Depth)
+    if (!canAuditDepartment(audit.departmentId)) {
+      const myEnt = getEntityName(currentUser?.departmentId || '');
+      const targetEnt = getEntityName(audit.departmentId);
+      const reason = myEnt === targetEnt ? "You cannot audit your own department." : "This location is outside your assigned audit matrix.";
+      alert(`PAIRING RESTRICTION: ${reason}`);
+      return;
+    }
+
     if (!date) {
       alert("Please select a valid audit date before assigning yourself.");
       return;
