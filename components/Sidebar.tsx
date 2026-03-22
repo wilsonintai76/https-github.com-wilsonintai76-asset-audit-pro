@@ -26,6 +26,7 @@ interface SidebarProps {
   onLogout: () => void;
   userRoles: UserRole[];
   isCertified?: boolean;
+  isProfileComplete?: boolean;
 }
 
 interface NavItemProps {
@@ -49,20 +50,23 @@ const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick })
   </button>
 );
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, onViewChange, onLogout, userRoles, isCertified }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ 
+  isOpen, onClose, activeView, onViewChange, onLogout, userRoles, isCertified, isProfileComplete 
+}) => {
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
   const isStaff = userRoles.includes('Staff');
 
   // Show Auditor Dashboard if user is certified, regardless of role.
-  const showAuditorDashboard = isCertified;
+  const showAuditorDashboard = isCertified && isProfileComplete;
   
-  const canAccessSchedule = isAdmin || isCoordinator || isSupervisor || isStaff;
-  const canAccessLocations = isAdmin || isCoordinator;
-  const canAccessTeam = isAdmin || isCoordinator;
-  const canAccessDepartments = isAdmin || isCoordinator;
+  const canAccessSchedule = (isAdmin || isCoordinator || isSupervisor || isStaff) && isProfileComplete;
+  const canAccessLocations = (isAdmin || isCoordinator) && isProfileComplete;
+  const canAccessTeam = (isAdmin || isCoordinator) && isProfileComplete;
+  const canAccessDepartments = (isAdmin || isCoordinator) && isProfileComplete;
   const canAccessAdminSettings = isAdmin;
+  const showMainDashboard = isProfileComplete || isAdmin;
 
   return (
     <>
@@ -101,12 +105,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, activeView, o
 
           <nav className="flex-grow space-y-2">
             <div className="px-2 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Main Menu</div>
-            <NavItem 
-              icon={PieChart} 
-              label="Overview" 
-              active={activeView === 'overview'} 
-              onClick={() => { onViewChange('overview'); onClose(); }} 
-            />
+            {showMainDashboard && (
+              <NavItem 
+                icon={PieChart} 
+                label="Overview" 
+                active={activeView === 'overview'} 
+                onClick={() => { onViewChange('overview'); onClose(); }} 
+              />
+            )}
             
             {showAuditorDashboard && (
               <NavItem 

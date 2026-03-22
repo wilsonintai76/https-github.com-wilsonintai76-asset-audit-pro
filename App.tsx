@@ -2095,7 +2095,19 @@ const App: React.FC = () => {
     }
   };
 
+  const checkProfileComplete = (u: User | null) => {
+    if (!u) return false;
+    const isAdmin = (u.roles || []).includes('Admin');
+    if (isAdmin) return true;
+    return !!(u.departmentId && u.contactNumber && u.designation);
+  };
+
   const handleViewChange = (view: AppView) => {
+    if (currentUser && !(currentUser.roles || []).includes('Admin') && !checkProfileComplete(currentUser) && view !== 'profile') {
+      showToast('Please complete your profile first.', 'info');
+      setActiveView('profile');
+      return;
+    }
     setActiveView(view);
   };
 
@@ -2193,6 +2205,7 @@ const App: React.FC = () => {
         userRoles={currentUser.roles}
         isCertified={currentUser.certificationExpiry && new Date(currentUser.certificationExpiry) > new Date()}
         userStatus={currentUser.status}
+        isProfileComplete={checkProfileComplete(currentUser)}
       />
 
       <div className="flex-grow lg:pl-72 flex flex-col h-full min-w-0">
@@ -2210,7 +2223,7 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {currentUser.status !== 'Pending' && (
+            {checkProfileComplete(currentUser) && (
               <>
                 <button
                   onClick={() => setActiveView('knowledge-base')}

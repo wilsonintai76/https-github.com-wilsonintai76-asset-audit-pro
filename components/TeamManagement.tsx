@@ -137,6 +137,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Enforcement: Domain check
+    const allowedDomain = 'poliku.edu.my';
+    if (!formData.email.toLowerCase().endsWith(`@${allowedDomain}`)) {
+      customAlert(`Access restricted. Only emails from the @${allowedDomain} domain are allowed.`);
+      return;
+    }
+
     const assignedRoles = formData.roles;
 
     if (editingId) {

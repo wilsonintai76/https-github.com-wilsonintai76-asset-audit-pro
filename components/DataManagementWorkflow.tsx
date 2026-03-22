@@ -96,7 +96,7 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           const name = (row['DEPARTMENT'] || row['Department'] || row['department'] || row['JABATAN'] || row['Jabatan'] || row['NAME'] || row['Name'] || '').trim();
           const abbr = (row['ABBR'] || row['Abbr'] || row['abbr'] || row['ABBREVIATION'] || '').trim();
           if (name) {
-            newDepts.push({ name, abbr: abbr || name.substring(0, 4).toUpperCase(), headOfDeptId: null, description: '', auditGroup: 'Group A' });
+            newDepts.push({ name, abbr: abbr || name.substring(0, 4).toUpperCase(), headOfDeptId: null, description: '', auditGroupId: null });
           }
         });
         if (newDepts.length > 0) {
@@ -282,17 +282,32 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
     Papa.parse(file, {
       header: true, skipEmptyLines: true,
       complete: (results) => {
+        const allowedDomain = 'poliku.edu.my';
         const entries: { name: string; email: string; department?: string; designation?: string; role?: string }[] = [];
+        let skippedCount = 0;
+
         results.data.forEach((row: any) => {
           const name = (row['Name'] || row['name'] || row['NAME'] || '').trim();
           const email = (row['Email'] || row['email'] || row['EMAIL'] || '').trim();
           const department = (row['department'] || row['Department'] || row['DEPARTMENT'] || '').trim();
           const designation = (row['Designation'] || row['designation'] || row['DESIGNATION'] || '').trim();
           const role = (row['Role'] || row['role'] || row['ROLE'] || '').trim();
+          
+          if (email && !email.toLowerCase().endsWith(`@${allowedDomain}`)) {
+            skippedCount++;
+            return;
+          }
+
           if (name || email) entries.push({ name, email, department: department || undefined, designation: designation || undefined, role: role || undefined });
         });
-        if (entries.length > 0) onBulkActivateStaff(entries);
-        else alert("No valid entries found. Ensure 'Name' and 'Email' columns exist.");
+
+        if (entries.length > 0) {
+          onBulkActivateStaff(entries);
+          if (skippedCount > 0) {
+            alert(`Imported ${entries.length} members. Skipped ${skippedCount} entries because they did not use the @${allowedDomain} domain.`);
+          }
+        }
+        else alert(`No valid entries found. Ensure 'Name' and 'Email' columns exist, and all emails use the @${allowedDomain} domain.`);
       },
       error: () => alert('Failed to parse CSV.'),
     });

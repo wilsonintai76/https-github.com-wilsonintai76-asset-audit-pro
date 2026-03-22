@@ -18,9 +18,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
   });
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const isAdmin = user.roles.includes('Admin');
 
-  // If department and contact are filled, the user has completed their profile
-  const isProfileComplete = Boolean(user.departmentId && user.contactNumber);
+  // If department and contact and designation are filled, the user has completed their profile
+  const isProfileComplete = Boolean(user.departmentId && user.contactNumber && user.designation);
 
   const getRolesForDesignation = (designation: string) => {
     switch (designation) {
@@ -134,7 +135,8 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                         <input 
                           required
                           type="text"
-                          className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+                          readOnly={!isAdmin}
+                          className={`w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all ${!isAdmin ? 'opacity-70 cursor-not-allowed bg-slate-100' : ''}`}
                           placeholder="Enter your full legal name"
                           value={formData.name}
                           onChange={e => setFormData({ ...formData, name: e.target.value })}
