@@ -84,7 +84,7 @@ const App: React.FC = () => {
   const [connectionErrorMessage, setConnectionErrorMessage] = useState<string | null>(null);
 
   const showToast = useCallback((message: string, type: ToastType = 'success') => {
-    const id = `toast-${Date.now()}`;
+    const id = crypto.randomUUID ? crypto.randomUUID() : `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     setToasts(prev => [...prev, { id, type, message }]);
   }, []);
 
@@ -1494,6 +1494,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleBulkRemovePermissions = async (ids: string[]) => {
+    try {
+      if (!ids?.length) return;
+      await gateway.bulkDeletePermissions(ids);
+      setCrossAuditPermissions(await gateway.getPermissions());
+      showToast('Permissions cleared successfully');
+    } catch (e) {
+      showError(e, 'Bulk Removal Failed');
+    }
+  };
+
   const handleRemovePermission = async (id: string) => {
     try {
       await gateway.deletePermission(id);
@@ -2398,6 +2409,7 @@ const App: React.FC = () => {
               onUpdateDepartment={handleUpdateDept}
               onBulkUpdateDepartments={handleBulkUpdateDepts}
               onBulkAddPermissions={handleBulkAddPermissions}
+              onBulkRemovePermissions={handleBulkRemovePermissions}
               showToast={showToast}
               onAddPhase={handleAddPhase}
               onUpdatePhase={handleUpdatePhase}

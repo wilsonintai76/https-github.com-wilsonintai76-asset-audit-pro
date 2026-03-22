@@ -34,6 +34,7 @@ interface CrossAuditManagementProps {
   onDeleteAuditGroup?: (id: string) => Promise<void>;
   onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors?: number) => Promise<void>;
   onBulkAddPermissions?: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
+  onBulkRemovePermissions?: (ids: string[]) => Promise<void>;
   phases?: any[];
   institutionKPIs?: any[];
   showToast?: (message: string, type?: any) => void;
@@ -56,6 +57,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onDeleteAuditGroup,
   onAutoConsolidate,
   onBulkAddPermissions,
+  onBulkRemovePermissions,
   phases = [],
   institutionKPIs = [],
   maxAssetsPerDay = 1000,
@@ -183,12 +185,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       }
 
       // 3. Clear ALL Existing Permissions (Database - Manual & Auto)
-      if (onRemovePermission && permissions.length > 0) {
-        const idsToRemove = permissions.map(p => p.id);
-        // Execute sequentially to ensure data integrity
-        for (const id of idsToRemove) {
-          await onRemovePermission(id);
-        }
+      if (onBulkRemovePermissions && permissions.length > 0) {
+        await onBulkRemovePermissions(permissions.map(p => p.id));
       }
 
     } catch (error) {
@@ -217,19 +215,21 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       // Brief delay to ensure database consistency
       await new Promise(r => setTimeout(r, 1000));
 
-      let skippedVirtuals = 0;
+      const newPerms: Omit<CrossAuditPermission, 'id'>[] = [];
       for (const pair of strategicPlan) {
         for (const auditor of pair.auditors) {
-          if ((auditor as any).isVirtual) {
-            skippedVirtuals++;
-            continue;
-          }
-          await onAddPermission(auditor.id, pair.target.id, false);
+          if ((auditor as any).isVirtual) continue;
+          newPerms.push({
+            auditorDeptId: auditor.id,
+            targetDeptId: pair.target.id,
+            isActive: true,
+            isMutual: false
+          });
         }
       }
 
-      if (skippedVirtuals > 0 && showToast) {
-        showToast(`Stored mappings. Skipped ${skippedVirtuals} virtual simulation placeholders.`, 'info');
+      if (newPerms.length > 0 && onBulkAddPermissions) {
+        await onBulkAddPermissions(newPerms);
       }
 
       setIsApplied(true);
@@ -547,9 +547,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       }
 
       // If we are committing the simulation, we clear old permissions first
-      if (onRemovePermission && permissions.length > 0) {
-          const ids = permissions.map(p => p.id);
-          for (const id of ids) await onRemovePermission(id);
+      if (onBulkRemovePermissions && permissions.length > 0) {
+          await onBulkRemovePermissions(permissions.map(p => p.id));
       }
       
       await onBulkAddPermissions(expandedPairings);

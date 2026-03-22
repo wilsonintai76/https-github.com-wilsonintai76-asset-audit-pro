@@ -601,6 +601,16 @@ class DataGateway {
     throw new Error("Supabase client not initialized");
   }
 
+  async bulkDeletePermissions(ids: string[]) {
+    if (supabase) {
+      if (!ids || ids.length === 0) return;
+      const { error } = await supabase.from('cross_audits').delete().in('id', ids);
+      if (error) throw error;
+      return;
+    }
+    throw new Error("Supabase client not initialized");
+  }
+
   async updatePermission(id: string, updates: Partial<CrossAuditPermission>) {
     if (supabase) {
       const payload: any = { ...updates };
