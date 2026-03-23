@@ -124,8 +124,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
   const PERMISSIONS_LIST = [
     { id: 'view:overview', label: 'Institutional Overview', category: 'General', actions: [{ id: 'view:overview', label: 'Overview Content', icon: Eye }] },
-    { id: 'view:schedule:all', label: 'Inspection Schedule (All Depts)', category: 'Inspection', actions: [{ id: 'view:schedule:all', label: 'View All Depts', icon: Eye }] },
-    { id: 'view:schedule:own', label: 'Inspection Schedule (Own Dept)', category: 'Inspection', actions: [{ id: 'view:schedule:own', label: 'View Own Dept', icon: Eye }] },
+    { id: 'view:schedule', label: 'Inspection Schedule Access', category: 'Inspection', actions: [{ id: 'view:schedule:all', label: 'View All Depts', icon: Eye }, { id: 'view:schedule:own', label: 'View Own Dept', icon: Eye }] },
     { 
       id: 'edit:schedule', 
       label: 'Inspection Planning & Self-Assign', 
@@ -165,6 +164,18 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       if (role === 'Auditor' && permId === 'edit:audit:assign') {
         return;
       }
+      
+      // Validation for Inspection Schedule view toggling
+      if (permId === 'view:schedule:all' || permId === 'view:schedule:own') {
+        const otherId = permId === 'view:schedule:all' ? 'view:schedule:own' : 'view:schedule:all';
+        const otherRoles = rbacMatrix[otherId] || [];
+        if (!otherRoles.includes(role)) {
+            // Both views would be disabled, which is not allowed
+            if (showToast) showToast("At least one schedule view must be active for this role.", "warning");
+            return;
+        }
+      }
+
       newRoles = currentRoles.filter(r => r !== role);
     } else {
       // Prevent adding 'edit:audit:assign' to any role except Auditor
