@@ -94,6 +94,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   const canAutoAssign = hasPerm('edit:audit:auto_assign');
   const canViewAllSchedule = hasPerm('view:schedule:all');
   const canViewOwnSchedule = hasPerm('view:schedule:own');
+  const canViewMatrixSchedule = hasPerm('view:schedule:matrix');
 
   const hasPhases = auditPhases?.length > 0;
   const todayStr = new Date().toISOString().split('T')[0];
@@ -361,22 +362,27 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   const displaySchedules = useMemo(() => {
     return schedules.filter(s => {
       // 1. RBAC Scope Filtering
-      if (!canViewAllSchedule && canViewOwnSchedule) {
-          if (s.departmentId !== currentUser?.departmentId) return false;
-      }
-      if (!canViewAllSchedule && !canViewOwnSchedule) {
-          // If no view permission, show nothing (should be handled by App.tsx redirect, but safe fallback)
-          return false;
-      }
+      let isVisible = false;
 
-      // 2. UI Filter logic
+      // All Depts Permission
+      if (canViewAllSchedule) isVisible = true;
+      
+      // Own Dept Permission
+      if (canViewOwnSchedule && s.departmentId === currentUser?.departmentId) isVisible = true;
+      
+      // Matrix-Based Permission (View only cross-audit targets)
+      if (canViewMatrixSchedule && canAuditDepartment(s.departmentId)) isVisible = true;
+
+      if (!isVisible) return false;
+
+      // 2. UI Filter logic (Building / Level)
       const loc = allLocations.find(l => l.id === s.locationId);
       if (selectedBlock !== 'All' && getBuildingAbbr(loc?.buildingId, loc?.building) !== selectedBlock) return false;
       if (selectedLevel !== 'All' && loc?.level !== selectedLevel) return false;
       
       return true;
     });
-  }, [schedules, selectedBlock, selectedLevel, allLocations, canViewAllSchedule, canViewOwnSchedule, currentUser]);
+  }, [schedules, selectedBlock, selectedLevel, allLocations, canViewAllSchedule, canViewOwnSchedule, canViewMatrixSchedule, currentUser, canAuditDepartment]);
 
   const isAuditLocked = (audit: AuditSchedule) => {
     return !!(audit.date && (audit.auditor1Id || audit.auditor2Id));

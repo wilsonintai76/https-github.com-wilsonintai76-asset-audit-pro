@@ -131,8 +131,9 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       actions: [
         { id: 'view:schedule:all', label: 'View All Depts', icon: Eye }, 
         { id: 'view:schedule:own', label: 'View Own Dept', icon: Eye },
+        { id: 'view:schedule:matrix', label: 'View Audit Matrix', icon: Eye, hint: 'Cross-Audit only' },
         { id: 'edit:audit:date', label: '📅 Set Date', icon: Calendar, hint: 'Scheduling' },
-        { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Inspecting' },
+        { id: 'edit:audit:assign', label: '👤 Self-Assign (Matrix)', icon: UserCheck, hint: 'Inspecting' },
         { id: 'edit:audit:assign:others', label: '👥 Assign Others', icon: Users, hint: 'Management' },
         { id: 'edit:audit:auto_assign', label: '🤖 Auto-Assign', icon: Zap, hint: 'System' }
       ] 

@@ -6,6 +6,7 @@ export const DEFAULT_RBAC_MATRIX: RBACMatrix = {
   'view:overview': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
   'view:schedule:all': ['Admin', 'Coordinator'],
   'view:schedule:own': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
+  'view:schedule:matrix': ['Admin', 'Coordinator', 'Auditor'],
   'edit:audit:date': ['Admin', 'Coordinator', 'Supervisor'],
   'edit:audit:assign': ['Admin', 'Coordinator', 'Supervisor', 'Auditor'],
   'edit:audit:assign:others': ['Admin', 'Coordinator'],
