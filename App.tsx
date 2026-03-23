@@ -8,6 +8,7 @@ import { ItemNotFoundError } from './services/localDB';
 import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, RBACMatrix } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
+import { DemoBanner } from './components/DemoBanner';
 import { NotificationCenter } from './components/NotificationCenter';
 import { TeamManagement } from './components/TeamManagement';
 import { OverviewDashboard } from './components/OverviewDashboard';
@@ -608,6 +609,33 @@ const App: React.FC = () => {
     };
 
     initialize();
+
+    // DEMO MODE CHECK
+    const isDemo = localStorage.getItem('inspectable_is_demo') === 'true';
+    const savedDemoUser = localStorage.getItem('inspectable_demo_user');
+    
+    if (isDemo && savedDemoUser) {
+      try {
+        const user = JSON.parse(savedDemoUser);
+        setCurrentUser(user);
+        setViewState('app');
+        gateway.setDemoMode(true);
+        
+        // Match specialized routing logic for Auditor
+        const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
+        const isAdmin = user.roles.includes('Admin');
+        if (!isAdmin && isCertified) {
+            setActiveView('auditor-dashboard');
+        } else {
+            setActiveView('overview');
+        }
+
+        console.log("Demo Mode Active: Authenticated as", user.name);
+        return; // Skip supabase auth
+      } catch (e) {
+        console.error("Failed to parse demo user", e);
+      }
+    }
 
     // Listen for auth changes
     const { data: { subscription } } = supabase?.auth.onAuthStateChange(async (event, session) => {
@@ -2254,7 +2282,9 @@ const App: React.FC = () => {
   const visibleLocations = isAdmin ? locations : locations.filter(l => l.departmentId === currentUser.departmentId);
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden select-none">
+      <DemoBanner />
+      <div className="flex flex-1 overflow-hidden">
       <AutoUpdater />
       <Sidebar
         isOpen={isSidebarOpen}
@@ -2543,6 +2573,7 @@ const App: React.FC = () => {
       )}
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onClose={closeToast} />
+      </div>
     </div>
   );
 };

@@ -1,20 +1,20 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { RBACProvider } from './contexts/RBACContext';
-import './index.css';
+import { DemoProvider } from './contexts/DemoContext';
 
 const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
+if (!rootElement) throw new Error('Failed to find the root element');
 
 const root = ReactDOM.createRoot(rootElement);
+
 root.render(
   <React.StrictMode>
-    <RBACProvider>
-      <App />
-    </RBACProvider>
+    <DemoProvider>
+      <RBACProvider>
+        <App />
+      </RBACProvider>
+    </DemoProvider>
   </React.StrictMode>
 );

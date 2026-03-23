@@ -6,8 +6,36 @@ import { INITIAL_DEPARTMENTS, INITIAL_LOCATIONS, INITIAL_AUDITS, CURRENT_USER, I
 
 class DataGateway {
   private isDemoMode: boolean = false;
+  private DEMO_DB_KEY = 'inspectable_demo_db';
   
   constructor() {}
+
+  private getDemoDB(): any | null {
+    const saved = localStorage.getItem(this.DEMO_DB_KEY);
+    return saved ? JSON.parse(saved) : null;
+  }
+
+  private saveDemoDB(db: any) {
+    localStorage.setItem(this.DEMO_DB_KEY, JSON.stringify(db));
+  }
+
+  private async initializeDemoDB(): Promise<any> {
+    const { MOCK_PHASES, MOCK_BUILDINGS, MOCK_GROUPS, MOCK_DEPARTMENTS, MOCK_LOCATIONS, MOCK_AUDITS, MOCK_USERS } = await import('./mockData');
+    const db = {
+      phases: MOCK_PHASES,
+      buildings: MOCK_BUILDINGS,
+      groups: MOCK_GROUPS,
+      departments: MOCK_DEPARTMENTS,
+      locations: MOCK_LOCATIONS,
+      audits: MOCK_AUDITS,
+      users: Object.values(MOCK_USERS),
+      kpiTiers: [],
+      institutionKPIs: [],
+      settings: {}
+    };
+    this.saveDemoDB(db);
+    return db;
+  }
   
   private mapDepartmentToDB(dept: Partial<Department>) {
     const payload: any = {};
@@ -111,6 +139,11 @@ class DataGateway {
 
   // --- AUDITS ---
   async getAudits(): Promise<AuditSchedule[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.audits;
+    }
     if (supabase) {
       const { data, error } = await supabase.from('audits').select('*');
       if (error) throw error;
@@ -128,6 +161,14 @@ class DataGateway {
   }
 
   async addAudit(audit: Omit<AuditSchedule, 'id'>): Promise<AuditSchedule> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      const newAudit = { ...audit, id: this.generateId() } as AuditSchedule;
+      db.audits.push(newAudit);
+      this.saveDemoDB(db);
+      return newAudit;
+    }
     if (supabase) {
       const payload = this.mapAuditToDB(audit);
       const { data, error } = await supabase.from('audits').insert([payload]).select().single();
@@ -164,6 +205,14 @@ class DataGateway {
   }
 
   async updateAudit(id: string, updates: Partial<AuditSchedule>) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.audits = db.audits.map((a: AuditSchedule) => a.id === id ? { ...a, ...updates } : a);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const payload = this.mapAuditToDB(updates);
       const { error } = await supabase.from('audits').update(payload).eq('id', id);
@@ -174,6 +223,14 @@ class DataGateway {
   }
 
   async deleteAudit(id: string) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.audits = db.audits.filter((a: AuditSchedule) => a.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('audits').delete().eq('id', id);
       if (error) throw error;
@@ -184,6 +241,11 @@ class DataGateway {
 
   // --- USERS ---
   async getUsers(): Promise<User[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.users;
+    }
     if (supabase) {
       const { data, error } = await supabase.from('users').select('*');
       if (error) throw error;
@@ -203,6 +265,14 @@ class DataGateway {
   }
 
   async addUser(user: User): Promise<User> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.users.push(user);
+        this.saveDemoDB(db);
+      }
+      return user;
+    }
     if (supabase) {
       const payload = this.mapUserToDB(user);
       
@@ -237,6 +307,14 @@ class DataGateway {
   }
 
   async updateUser(id: string, updates: Partial<User>) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.users = db.users.map((u: User) => u.id === id ? { ...u, ...updates } : u);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const payload = this.mapUserToDB(updates);
       // Try updating by ID first
@@ -264,6 +342,22 @@ class DataGateway {
   }
 
   async verifyUser(id: string): Promise<User> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        let updatedUser: User | null = null;
+        db.users = db.users.map((u: User) => {
+          if (u.id === id) {
+            updatedUser = { ...u, isVerified: true, status: 'Active' };
+            return updatedUser;
+          }
+          return u;
+        });
+        this.saveDemoDB(db);
+        if (updatedUser) return updatedUser;
+      }
+      throw new Error("User not found in demo data");
+    }
     if (supabase) {
       const { data, error } = await supabase.from('users').update({ is_verified: true, status: 'Active' }).eq('id', id).select().single();
       if (error) throw error;
@@ -285,6 +379,14 @@ class DataGateway {
   }
 
   async deleteUser(id: string) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.users = db.users.filter((u: User) => u.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('users').delete().eq('id', id);
       if (error) throw error;
@@ -300,6 +402,11 @@ class DataGateway {
 
   // --- DEPARTMENTS ---
   async getDepartments(): Promise<Department[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.departments;
+    }
     if (supabase) {
       const { data, error } = await supabase.from('departments').select('*');
       if (error) throw error;
@@ -314,6 +421,15 @@ class DataGateway {
   }
 
   async addDepartment(dept: Omit<Department, 'id'>): Promise<Department> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      const newDept = { ...dept, id: this.generateId() } as Department;
+      if (db) {
+        db.departments.push(newDept);
+        this.saveDemoDB(db);
+      }
+      return newDept;
+    }
     if (supabase) {
       const payload = this.mapDepartmentToDB(dept);
       const { data, error } = await supabase.from('departments').insert([payload]).select().single();
@@ -331,6 +447,14 @@ class DataGateway {
   }
 
   async updateDepartment(id: string, updates: Partial<Department>) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.departments = db.departments.map((d: Department) => d.id === id ? { ...d, ...updates } : d);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const payload = this.mapDepartmentToDB(updates);
       const { error } = await supabase.from('departments').update(payload).eq('id', id);
@@ -341,6 +465,14 @@ class DataGateway {
   }
 
   async deleteDepartment(id: string) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.departments = db.departments.filter((d: Department) => d.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('departments').delete().eq('id', id);
       if (error) throw error;
@@ -351,6 +483,11 @@ class DataGateway {
 
   // --- LOCATIONS ---
   async getLocations(): Promise<Location[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.locations;
+    }
     if (supabase) {
       const { data, error } = await supabase.from('locations').select('*');
       if (error) throw error;
@@ -366,6 +503,15 @@ class DataGateway {
   }
 
   async addLocation(loc: Omit<Location, 'id'>): Promise<Location> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      const newLoc = { ...loc, id: this.generateId() } as Location;
+      if (db) {
+        db.locations.push(newLoc);
+        this.saveDemoDB(db);
+      }
+      return newLoc;
+    }
     if (supabase) {
       const payload = this.mapLocationToDB(loc);
 
@@ -402,6 +548,14 @@ class DataGateway {
   }
 
   async updateLocation(id: string, updates: Partial<Location>) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.locations = db.locations.map((l: Location) => l.id === id ? { ...l, ...updates } : l);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const payload = this.mapLocationToDB(updates);
       const { error } = await supabase.from('locations').update(payload).eq('id', id);
@@ -412,6 +566,14 @@ class DataGateway {
   }
 
   async deleteLocation(id: string) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.locations = db.locations.filter((l: Location) => l.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('locations').delete().eq('id', id);
       if (error) throw error;
@@ -628,6 +790,11 @@ class DataGateway {
 
   // --- AUDIT PHASES ---
   async getAuditPhases(): Promise<AuditPhase[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.phases;
+    }
     if (supabase) {
       const { data, error } = await supabase.from('audit_phases').select('*');
       if (error) throw error;
@@ -641,6 +808,15 @@ class DataGateway {
   }
 
   async addAuditPhase(phase: Omit<AuditPhase, 'id'>): Promise<AuditPhase> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      const newPhase = { ...phase, id: this.generateId() } as AuditPhase;
+      if (db) {
+        db.phases.push(newPhase);
+        this.saveDemoDB(db);
+      }
+      return newPhase;
+    }
     if (supabase) {
       const payload: any = { ...phase };
       if (phase.startDate) { payload.start_date = phase.startDate; delete payload.startDate; }
@@ -658,6 +834,14 @@ class DataGateway {
   }
 
   async updateAuditPhase(id: string, updates: Partial<AuditPhase>) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.phases = db.phases.map((p: AuditPhase) => p.id === id ? { ...p, ...updates } : p);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const payload: any = { ...updates };
       if (updates.startDate) { payload.start_date = updates.startDate; delete payload.startDate; }
@@ -671,6 +855,14 @@ class DataGateway {
   }
 
   async deleteAuditPhase(id: string) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.phases = db.phases.filter((p: AuditPhase) => p.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('audit_phases').delete().eq('id', id);
       if (error) throw error;
@@ -681,6 +873,11 @@ class DataGateway {
 
   // --- KPI TIERS ---
   async getKPITiers(): Promise<KPITier[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.kpiTiers || [];
+    }
     if (supabase) {
       // Prefer joined targets when the relationship exists (new schema).
       // Fallback to plain select when the join/table doesn't exist yet in the deployed DB.
@@ -721,6 +918,15 @@ class DataGateway {
   }
 
   async addKPITier(tier: Omit<KPITier, 'id'>) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.kpiTiers = db.kpiTiers || [];
+        db.kpiTiers.push({ ...tier, id: this.generateId(), targets: {} });
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const payload: any = { ...tier };
       if (tier.minAssets !== undefined) { payload.min_assets = tier.minAssets; delete payload.minAssets; }
@@ -733,6 +939,14 @@ class DataGateway {
   }
 
   async updateKPITier(id: string, updates: Partial<KPITier>) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.kpiTiers = (db.kpiTiers || []).map((t: KPITier) => t.id === id ? { ...t, ...updates } : t);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const payload: any = { ...updates };
       if (updates.minAssets !== undefined) { payload.min_assets = updates.minAssets; delete payload.minAssets; }
@@ -745,6 +959,14 @@ class DataGateway {
   }
 
   async deleteKPITier(id: string) {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.kpiTiers = (db.kpiTiers || []).filter((t: KPITier) => t.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('kpi_tiers').delete().eq('id', id);
       if (error) throw error;
@@ -804,6 +1026,11 @@ class DataGateway {
 
   // --- AUDIT GROUPS ---
   async getAuditGroups(): Promise<AuditGroup[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.groups || [];
+    }
     if (supabase) {
       const { data, error } = await supabase.from('audit_groups').select('*').order('name');
       if (error) throw error;
@@ -813,6 +1040,16 @@ class DataGateway {
   }
 
   async addAuditGroup(group: Omit<AuditGroup, 'id'>): Promise<AuditGroup> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      const newGroup = { ...group, id: this.generateId() } as AuditGroup;
+      if (db) {
+        db.groups = db.groups || [];
+        db.groups.push(newGroup);
+        this.saveDemoDB(db);
+      }
+      return newGroup;
+    }
     if (supabase) {
       const { data, error } = await supabase.from('audit_groups').insert([group]).select().single();
       if (error) throw error;
@@ -822,6 +1059,14 @@ class DataGateway {
   }
 
   async updateAuditGroup(id: string, updates: Partial<AuditGroup>): Promise<void> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.groups = (db.groups || []).map((g: AuditGroup) => g.id === id ? { ...g, ...updates } : g);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('audit_groups').update(updates).eq('id', id);
       if (error) throw error;
@@ -831,6 +1076,14 @@ class DataGateway {
   }
 
   async deleteAuditGroup(id: string): Promise<void> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.groups = (db.groups || []).filter((g: AuditGroup) => g.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('audit_groups').delete().eq('id', id);
       if (error) throw error;
@@ -840,6 +1093,11 @@ class DataGateway {
   }
 
   async getInstitutionKPIs(): Promise<InstitutionKPITarget[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.institutionKPIs || [];
+    }
     if (supabase) {
       const { data, error } = await supabase.from('institution_kpi_targets').select('*');
       if (error) throw error;
@@ -853,6 +1111,17 @@ class DataGateway {
   }
 
   async updateInstitutionKPI(phaseId: string, percentage: number): Promise<void> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+         db.institutionKPIs = db.institutionKPIs || [];
+         const idx = db.institutionKPIs.findIndex((k: any) => k.phaseId === phaseId);
+         if (idx >= 0) db.institutionKPIs[idx].targetPercentage = percentage;
+         else db.institutionKPIs.push({ phaseId, targetPercentage: percentage });
+         this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('institution_kpi_targets').upsert({
         phase_id: phaseId,
@@ -864,6 +1133,11 @@ class DataGateway {
 
   // --- BUILDINGS ---
   async getBuildings(): Promise<Building[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      return db.buildings || [];
+    }
     if (supabase) {
       const { data, error } = await supabase.from('buildings').select('*').order('name');
       if (error) throw error;
@@ -876,6 +1150,19 @@ class DataGateway {
   }
 
   async updateBuilding(building: Partial<Building>): Promise<Building> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      const id = building.id || this.generateId();
+      const updatedBuilding = { ...building, id, createdAt: new Date().toISOString() } as Building;
+      if (db) {
+        db.buildings = db.buildings || [];
+        const idx = db.buildings.findIndex((b: Building) => b.id === id);
+        if (idx >= 0) db.buildings[idx] = updatedBuilding;
+        else db.buildings.push(updatedBuilding);
+        this.saveDemoDB(db);
+      }
+      return updatedBuilding;
+    }
     if (supabase) {
       const payload = {
         name: building.name,
@@ -898,6 +1185,14 @@ class DataGateway {
   }
 
   async deleteBuilding(id: string): Promise<void> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.buildings = (db.buildings || []).filter((b: Building) => b.id !== id);
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('buildings').delete().eq('id', id);
       if (error) throw error;
@@ -907,6 +1202,12 @@ class DataGateway {
   }
 
   async getSystemSettings(): Promise<SystemSetting[]> {
+    if (this.isDemoMode) {
+      let db = this.getDemoDB();
+      if (!db) db = await this.initializeDemoDB();
+      const settings = db.settings || {};
+      return Object.entries(settings).map(([id, value]) => ({ id, value, updatedAt: new Date().toISOString() }));
+    }
     if (supabase) {
       const { data, error } = await supabase.from('system_settings').select('*');
       if (error) {
@@ -924,6 +1225,15 @@ class DataGateway {
   }
 
   async updateSystemSetting(id: string, value: any): Promise<void> {
+    if (this.isDemoMode) {
+      const db = this.getDemoDB();
+      if (db) {
+        db.settings = db.settings || {};
+        db.settings[id] = value;
+        this.saveDemoDB(db);
+      }
+      return;
+    }
     if (supabase) {
       const { error } = await supabase.from('system_settings').upsert({
         id,

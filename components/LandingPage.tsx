@@ -14,7 +14,8 @@ import {
   Clock,
   ChevronDown,
   Trophy,
-  History
+  History,
+  Zap
 } from 'lucide-react';
 import { AuditPhase, SystemActivity, UserRole, AppView } from '../types';
 import { BRANDING } from '../constants';
@@ -192,13 +193,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
-              <button
-                onClick={onEnter}
-                className="group flex items-center justify-center gap-4 px-10 py-5 bg-slate-900 text-white rounded-2xl text-lg font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95"
-              >
-                Institutional Google ID
-                <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
-              </button>
+              <div className="space-y-4">
+                <button
+                  onClick={onEnter}
+                  className="group flex items-center justify-center gap-4 px-10 py-5 bg-slate-900 text-white rounded-2xl text-lg font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95"
+                >
+                  Institutional Google ID
+                  <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const auditorUser = {
+                        id: 'u-auditor',
+                        name: 'Demo Auditor',
+                        email: 'auditor@demo.local',
+                        roles: ['Staff'],
+                        designation: 'Staff',
+                        departmentId: 'd2',
+                        status: 'Active',
+                        isVerified: true,
+                        certificationIssued: '2026-01-01',
+                        certificationExpiry: '2027-01-01'
+                    };
+                    localStorage.setItem('inspectable_is_demo', 'true');
+                    localStorage.setItem('inspectable_demo_user', JSON.stringify(auditorUser));
+                    window.location.reload();
+                  }}
+                  className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-white border-2 border-indigo-100 text-indigo-600 rounded-2xl text-lg font-bold hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-lg shadow-indigo-100/30"
+                >
+                  <Zap className="w-5 h-5 text-indigo-500 fill-indigo-500" />
+                  Try Demo Mode
+                </button>
+              </div>
               <button
                 onClick={() => setIsTourOpen(true)}
                 className="flex items-center justify-center gap-2 px-8 py-5 bg-white border border-slate-200 text-slate-600 rounded-2xl text-lg font-bold hover:bg-slate-50 transition-all"
