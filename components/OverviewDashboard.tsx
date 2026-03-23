@@ -186,8 +186,43 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     });
   }, [phases]);
 
+  const inspectionStats = useMemo(() => {
+    const stats: Record<string, { total: number; inspected: number; uninspected: number; progress: number }> = {};
+    
+    departments.forEach(dept => {
+      const deptLocs = locations.filter(l => l.departmentId === dept.id && l.isActive);
+      const total = deptLocs.reduce((sum, l) => sum + (l.totalAssets || 0), 0);
+      
+      const inspected = deptLocs.reduce((sum, l) => {
+        const isCompleted = schedules.some(s => s.locationId === l.id && s.status === 'Completed');
+        return sum + (isCompleted ? (l.totalAssets || 0) : 0);
+      }, 0);
+
+      stats[dept.name] = {
+        total,
+        inspected,
+        uninspected: total - inspected,
+        progress: total > 0 ? (inspected / total) * 100 : 0
+      };
+    });
+
+    return stats;
+  }, [departments, locations, schedules]);
+
+  const overallStats = useMemo(() => {
+    const values = Object.values(inspectionStats) as { total: number; inspected: number; uninspected: number; progress: number }[];
+    const total = values.reduce((sum, s) => sum + s.total, 0);
+    const inspected = values.reduce((sum, s) => sum + s.inspected, 0);
+    return {
+      total,
+      inspected,
+      uninspected: total - inspected,
+      progress: total > 0 ? (inspected / total) * 100 : 0
+    };
+  }, [inspectionStats]);
+
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
       <PageHeader
         title={t('dashboard.title')}
         description={t('dashboard.subtitle')}
@@ -217,6 +252,42 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           )}
         </div>
       </PageHeader>
+
+      {/* Institutional Progress Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="rounded-[32px] border-slate-200 shadow-sm p-6 bg-gradient-to-br from-indigo-600 to-indigo-700 text-white md:col-span-2">
+              <div className="flex justify-between items-start mb-6">
+                  <div>
+                      <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest mb-1">Overall Inspection Progress</p>
+                      <h3 className="text-3xl font-black">{overallStats.progress.toFixed(1)}%</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                      <Trophy className="w-6 h-6 text-white" />
+                  </div>
+              </div>
+              <div className="space-y-3">
+                  <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden">
+                      <div className="h-full bg-white rounded-full" style={{ width: `${overallStats.progress}%` }} />
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-indigo-100">
+                      <span>{overallStats.inspected.toLocaleString()} Assets Inspected</span>
+                      <span>Target: {overallStats.total.toLocaleString()}</span>
+                  </div>
+              </div>
+          </Card>
+          
+          <Card className="rounded-[32px] border-slate-200 shadow-sm p-6 flex flex-col justify-center">
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Confirmed Inspected</p>
+              <h3 className="text-2xl font-black text-slate-900">{overallStats.inspected.toLocaleString()}</h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">Total movable assets verified</p>
+          </Card>
+
+          <Card className="rounded-[32px] border-slate-200 shadow-sm p-6 flex flex-col justify-center">
+              <p className="text-rose-500 text-[10px] font-black uppercase tracking-widest mb-1">Pending Inspection</p>
+              <h3 className="text-2xl font-black text-slate-900">{overallStats.uninspected.toLocaleString()}</h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">Assets yet to be audited</p>
+          </Card>
+      </div>
 
       <Card className="rounded-[32px] border-slate-200 shadow-sm overflow-hidden">
         <CardContent className="p-4">
@@ -272,6 +343,63 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               </div>
           </div>
         </CardContent>
+      </Card>
+
+      {/* New Inspection Status Table */}
+      <Card className="rounded-[40px] border-slate-200 shadow-xl overflow-hidden bg-white">
+        <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">Institutional Inspection Status</h3>
+            <p className="text-xs text-slate-500 font-medium">Detailed tracking of assets inspected vs target per department.</p>
+          </div>
+          <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center">
+            <LayoutDashboard className="w-6 h-6 text-indigo-600" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50">
+                <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
+                <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Total Assets</th>
+                <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center text-emerald-600">Inspected</th>
+                <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center text-rose-500">Uninspected</th>
+                <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Progress (%)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(Object.entries(inspectionStats) as [string, { total: number; inspected: number; uninspected: number; progress: number }][]).map(([deptName, stats]) => (
+                <tr key={deptName} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="py-5 px-8">
+                    <span className="text-sm font-bold text-slate-800">{deptName}</span>
+                  </td>
+                  <td className="py-5 px-6 text-center">
+                    <span className="text-sm font-medium text-slate-600">{stats.total.toLocaleString()}</span>
+                  </td>
+                  <td className="py-5 px-6 text-center">
+                    <span className="text-sm font-bold text-emerald-600">{stats.inspected.toLocaleString()}</span>
+                  </td>
+                  <td className="py-5 px-6 text-center">
+                    <span className="text-sm font-bold text-rose-500">{stats.uninspected.toLocaleString()}</span>
+                  </td>
+                  <td className="py-5 px-8">
+                    <div className="flex items-center justify-end gap-3">
+                      <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-1000 ${
+                            stats.progress >= 100 ? 'bg-emerald-500' : stats.progress > 50 ? 'bg-indigo-500' : 'bg-rose-400'
+                          }`}
+                          style={{ width: `${stats.progress}%` }} 
+                        />
+                      </div>
+                      <span className="text-xs font-black text-slate-900 w-12 text-right">{stats.progress.toFixed(1)}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {config.showStats && <StatsCards schedules={filteredSchedules} />}

@@ -1,5 +1,6 @@
 
 import React, { useRef } from 'react';
+import { Button } from './ui/button';
 import Papa from 'papaparse';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import { Department, Location, DepartmentMapping } from '../types';
@@ -336,6 +337,10 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           <h3 className="text-xl font-bold text-slate-900">Data Management Workflow</h3>
           <p className="text-sm text-slate-500">Configure your system data through these sequential modules.</p>
         </div>
+              <div>
+                <h4 className="text-sm font-bold text-slate-800">2. Sync Master Asset Registry</h4>
+                <p className="text-[10px] text-slate-500 font-medium">Upload institutional location CSV to set baseline asset targets for the Overview progress table.</p>
+              </div>
       </div>
 
       {/* Tab Navigation */}
@@ -412,6 +417,14 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                 <button onClick={() => bulkMappingRef.current?.click()} className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95 leading-none">
                   <FileSpreadsheet className="w-4 h-4" /> Import Mapping CSV
                 </button>
+                <Button 
+                variant="outline" 
+                size="sm" 
+                className="rounded-xl text-[10px] font-bold border-indigo-100 text-indigo-600 hover:bg-indigo-50"
+                onClick={() => document.getElementById('loc-upload')?.click()}
+              >
+                Upload Registry
+              </Button>
               </div>
             </div>
 
