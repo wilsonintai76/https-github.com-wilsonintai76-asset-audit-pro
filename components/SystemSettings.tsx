@@ -124,12 +124,13 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
   const PERMISSIONS_LIST = [
     { id: 'view:overview', label: 'Institutional Overview', category: 'General', actions: [{ id: 'view:overview', label: 'Overview Content', icon: Eye }] },
-    { id: 'view:schedule', label: 'Inspection Schedule Access', category: 'Inspection', actions: [{ id: 'view:schedule:all', label: 'View All Depts', icon: Eye }, { id: 'view:schedule:own', label: 'View Own Dept', icon: Eye }] },
     { 
-      id: 'edit:schedule', 
-      label: 'Inspection Planning & Assignments', 
+      id: 'inspection:schedule', 
+      label: 'Inspection Schedule', 
       category: 'Inspection', 
       actions: [
+        { id: 'view:schedule:all', label: 'View All Depts', icon: Eye }, 
+        { id: 'view:schedule:own', label: 'View Own Dept', icon: Eye },
         { id: 'edit:audit:date', label: '📅 Set Date', icon: Calendar, hint: 'Scheduling' },
         { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Inspecting' },
         { id: 'edit:audit:assign:others', label: '👥 Assign Others', icon: Users, hint: 'Management' },
