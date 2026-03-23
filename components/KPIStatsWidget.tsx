@@ -58,16 +58,16 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
           id: d.id,
           name: d.name,
           assets: d.totalAssets,
-          totalAudits: total,
-          completedAudits: completed,
+          totalInspections: total,
+          completedInspections: completed,
           percentage,
           status: (isZeroAsset || percentage >= targetPercentage) ? 'On Track' : 'At Risk'
         };
       }).sort((a, b) => a.percentage - b.percentage); // Sort by lowest completion first (prioritize risk)
 
       // Aggregate for the Tier Level
-      const totalScheduled = deptDetails.reduce((acc, d) => acc + d.totalAudits, 0);
-      const totalCompleted = deptDetails.reduce((acc, d) => acc + d.completedAudits, 0);
+      const totalScheduled = deptDetails.reduce((acc, d) => acc + d.totalInspections, 0);
+      const totalCompleted = deptDetails.reduce((acc, d) => acc + d.completedInspections, 0);
       const actualPercentage = totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0;
       
       return {
@@ -109,7 +109,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
     <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Institutional Performance</h3>
+          <h3 className="text-xl font-bold text-slate-900">Institutional Inspection Performance</h3>
           <p className="text-sm font-bold text-blue-600 uppercase tracking-widest mt-1">
             Current Phase: {activePhase.name}
           </p>
@@ -131,7 +131,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                     <div className="w-10 h-10 bg-white/10 text-blue-400 rounded-xl flex items-center justify-center border border-white/10">
                        <Building2 className="w-5 h-5" />
                     </div>
-                    <h4 className="text-lg font-black uppercase tracking-tight">Global Institutional Progress</h4>
+                    <h4 className="text-lg font-black uppercase tracking-tight">Institutional Inspection Progress</h4>
                  </div>
                  
                  <div className="flex items-baseline gap-2 mb-4">
@@ -162,9 +162,9 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
 
               <div className="w-full md:w-48 shrink-0 flex flex-col items-center justify-center p-6 bg-white/5 rounded-[24px] border border-white/10">
                  <TrendingUp className={`w-8 h-8 mb-3 ${globalStats.isOnTrack ? 'text-emerald-400' : 'text-amber-400'}`} />
-                 <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center mb-1">Audit Velocity</p>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center mb-1">Inspection Velocity</p>
                  <p className="text-2xl font-black">{globalStats.totalCompleted}/{globalStats.totalScheduled}</p>
-                 <p className="text-[10px] text-white/40 font-medium">Locations Audited</p>
+                 <p className="text-[10px] text-white/40 font-medium">Inspections Completed</p>
               </div>
            </div>
 
@@ -254,7 +254,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                                     </div>
                                     <div className="text-right shrink-0 min-w-[60px]">
                                         <div className="text-[9px] text-slate-400 font-mono">
-                                            {dept.assets.toLocaleString()} Asts
+                                            {dept.assets.toLocaleString()} Assets
                                         </div>
                                         <div className="text-[9px] text-slate-400">
                                             {dept.completedAudits}/{dept.totalAudits}

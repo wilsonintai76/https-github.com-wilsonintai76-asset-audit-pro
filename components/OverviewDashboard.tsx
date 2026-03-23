@@ -187,7 +187,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <PageHeader
-        title="Institutional Dashboard"
+        title="Institutional Inspection Dashboard"
         description="Real-time compliance monitoring and institutional performance stats."
         icon={LayoutDashboard}
         activePhase={activePhase}
@@ -358,7 +358,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           {config.showUpcoming && (
             <Card className="rounded-3xl border-slate-200 shadow-sm overflow-hidden">
               <CardHeader className="pb-4">
-                <CardTitle className="text-lg font-bold text-slate-900">Upcoming Audits</CardTitle>
+                <CardTitle className="text-lg font-bold text-slate-900">Upcoming Inspections</CardTitle>
               </CardHeader>
               <CardContent className="p-6 pt-0 space-y-4">
                 {upcomingAudits.map((audit) => {
@@ -384,7 +384,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                 })}
                 {(!upcomingAudits || upcomingAudits.length === 0) && (
                   <div className="text-center py-6">
-                    <p className="text-xs text-slate-400 font-medium italic">No upcoming audits scheduled.</p>
+                    <p className="text-xs text-slate-400 font-medium italic">No upcoming inspections scheduled.</p>
                   </div>
                 )}
                 <Button variant="outline" className="w-full py-3 h-auto text-xs font-bold text-blue-600 border-blue-100 rounded-xl hover:bg-blue-50 transition-colors">

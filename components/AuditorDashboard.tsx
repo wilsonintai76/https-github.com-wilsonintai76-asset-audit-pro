@@ -81,8 +81,8 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
             <h2 className="text-2xl font-black text-slate-900 mb-2">Certification Required</h2>
             <p className="text-slate-500 max-w-md mb-8">
                 {certInfo?.status === 'expired' 
-                    ? "Your auditor certification has expired. You must renew your certification to access the auditor dashboard and perform audits."
-                    : "You do not have an active auditor certification. Please contact an administrator to update your certification status."}
+                    ? "Your inspecting officer certification has expired. You must renew your certification to access the dashboard and perform inspections."
+                    : "You do not have an active inspecting officer certification. Please contact an administrator to update your certification status."}
             </p>
             <button className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">
                 Request Certification
@@ -96,8 +96,8 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="max-w-xl">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Auditor Command Center</h2>
-          <p className="text-slate-500 text-lg mt-1">Welcome back, {currentUser.name}. Here is your personal audit summary.</p>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Inspecting Officer Command Center</h2>
+          <p className="text-slate-500 text-lg mt-1">Welcome back, {currentUser.name}. Here is your personal inspection summary.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
@@ -160,7 +160,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
             <div className="p-6 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-xl font-bold text-slate-900">Your Upcoming Schedule</h3>
               <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[10px] font-bold uppercase">
-                Next {upcomingAudits?.length || 0} Audits
+                Next {upcomingAudits?.length || 0} Inspections
               </span>
             </div>
             <div className="divide-y divide-slate-100">
@@ -217,7 +217,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Calendar className="w-8 h-8 text-slate-300" />
                   </div>
-                  <p className="text-slate-500 font-medium">No upcoming audits assigned to you.</p>
+                  <p className="text-slate-500 font-medium">No upcoming inspections assigned to you.</p>
                 </div>
               )}
             </div>
@@ -243,9 +243,9 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                 </div>
                 
                 <p className="text-white/90 text-sm mb-4 leading-relaxed">
-                  {certInfo.status === 'safe' && `Your institutional auditor certificate expires in ${certInfo.days} days.`}
+                  {certInfo.status === 'safe' && `Your institutional inspecting officer certificate expires in ${certInfo.days} days.`}
                   {certInfo.status === 'warning' && `Urgent: Certification expiring in ${certInfo.days} days. Renew immediately.`}
-                  {certInfo.status === 'expired' && `Critical: Your certificate has expired. Audit operations suspended.`}
+                  {certInfo.status === 'expired' && `Critical: Your certificate has expired. Inspection operations suspended.`}
                 </p>
 
                 <button 
@@ -327,7 +327,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
             <div className="space-y-6">
               <div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Audit Accuracy</span>
+                  <span className="text-xs font-bold text-slate-500 uppercase">Inspection Accuracy</span>
                   <span className="text-xs font-black text-slate-900">98.2%</span>
                 </div>
                 <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">

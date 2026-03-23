@@ -85,7 +85,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
     <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden p-8 mt-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Audit Phases</h3>
+          <h3 className="text-xl font-bold text-slate-900">Movable Asset Inspection Phases</h3>
           <p className="text-sm text-slate-500">
             Set the start date for each phase. The end date is automatically set to 30 days later.
           </p>

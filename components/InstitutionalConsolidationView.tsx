@@ -15,7 +15,7 @@ interface InstitutionalConsolidationViewProps {
 export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidationViewProps> = ({
   departments,
   auditGroups,
-  title = "Institutional Consolidation View",
+  title = "Movable Asset Consolidation View",
   subtitle = "Departmental grouping and asset accumulation summary.",
   isDark = false
 }) => {
@@ -75,7 +75,7 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
           {/* Card Header: Group Identity */}
           <div className="p-6 border-b-2 border-slate-900 bg-yellow-400 flex justify-between items-center">
             <div className="flex flex-col">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900/60 leading-none mb-1">Audit Unit</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900/60 leading-none mb-1">Inspection Unit</span>
               <h4 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">{group.name}</h4>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-lg shadow-inner">
@@ -86,7 +86,7 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
           {/* Card Body: Assets Focus */}
           <div className="p-6 flex-1 flex flex-col space-y-4">
             <div className="flex flex-col">
-              <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest mb-1">Consolidated Assets</span>
+              <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest mb-1">Consolidated Movable Assets</span>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-mono font-black text-slate-900 tracking-tighter">
                   {group.subTotal.toLocaleString()}

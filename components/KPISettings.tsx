@@ -153,7 +153,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
             <Building2 className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-slate-900 leading-tight">Institutional KPI Goals</h3>
+            <h3 className="text-xl font-bold text-slate-900 leading-tight">Institutional Inspection KPI Goals</h3>
             <p className="text-sm text-slate-500">Overarching performance targets for the entire institution across all 3 phases.</p>
           </div>
         </div>
@@ -215,7 +215,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Completion KPI Targets</h3>
+          <h3 className="text-xl font-bold text-slate-900">Inspection Completion KPI Targets</h3>
           <p className="text-sm text-slate-500">
             Set percentage boundaries to group your departments into Small, Medium, and Large.
           </p>
@@ -233,7 +233,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
         <table className="w-full text-left min-w-[800px]">
           <thead className="bg-slate-50/50 border-b border-slate-100">
             <tr>
-              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48">Asset Tier</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48">Movable Asset Tier</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Size Threshold (%)</th>
               {sortedPhases.map(phase => (
                 <th key={phase.id} className="px-4 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">

@@ -63,23 +63,23 @@ export const AuditorAssignmentSlot: React.FC<AuditorAssignmentSlotProps> = ({
   const isDisabled = isAssigned || !canSelfAssignSelf || !userCanAudit || isCurrentUserAssigned || isPast || !isDateValid || !hasPhases || isUserOverLimit;
   
   let disableReason = "";
-  if (isAssigned) {
+    if (isAssigned) {
     disableReason = "Slot already occupied";
   } else if (isUserOverLimit) {
-    disableReason = `Assignment Limit: Adding this audit exceeds your daily asset limit of ${maxAssetsPerDay} assets.`;
+    disableReason = `Assignment Limit: Adding this inspection exceeds your daily asset limit of ${maxAssetsPerDay} assets.`;
   } else if (!hasFieldRole) {
-    disableReason = "Access Denied: Your role does not permit auditing.";
+    disableReason = "Access Denied: Your role does not permit inspecting.";
   } else if (!isCertified) {
     // Customize message based on role for better clarity
     if (isSupervisor || isCoordinator) {
-        disableReason = "Certification Required: Supervisors/Coordinators must hold a valid certificate to audit.";
+        disableReason = "Certification Required: Supervisors/Coordinators must hold a valid certificate to inspect.";
     } else {
-        disableReason = "Certification Required: Your auditor certificate is expired or invalid.";
+        disableReason = "Certification Required: Your inspecting officer certificate is expired or invalid.";
     }
   } else if (!userCanAudit) {
      const myEnt = getEntityName(currentUser?.departmentId || '');
      const targetEnt = getEntityName(audit.departmentId);
-     disableReason = myEnt === targetEnt ? "Conflict of Interest: You cannot audit your own department." : "Unauthorized Target: This location is outside your assigned audit matrix.";
+     disableReason = myEnt === targetEnt ? "Conflict of Interest: You cannot inspect your own department." : "Unauthorized Target: This asset location is outside your assigned inspection matrix.";
   } else if (isCurrentUserAssigned) {
     disableReason = "Already assigned to a slot in this audit instance.";
   } else if (isPast) {

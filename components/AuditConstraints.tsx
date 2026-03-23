@@ -15,8 +15,8 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
 }) => {
   return (
     <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
-      <h3 className="text-xl font-bold text-slate-900 mb-2">Audit Constraints</h3>
-      <p className="text-sm text-slate-500 mb-6">Configure institutional limits to determine auditor recommendations.</p>
+      <h3 className="text-xl font-bold text-slate-900 mb-2">Inspection Constraints</h3>
+      <p className="text-sm text-slate-500 mb-6">Configure institutional limits to determine inspecting officer recommendations.</p>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div className="space-y-4">
@@ -29,7 +29,7 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
             value={maxAssetsPerDay}
             onChange={(e) => onUpdateMaxAssetsPerDay(parseInt(e.target.value, 10) || 1000)}
           />
-          <p className="text-[10px] text-slate-400 font-medium">Limits assets a team can audit in 24 hours.</p>
+          <p className="text-[10px] text-slate-400 font-medium">Limits assets a team can inspect in 24 hours.</p>
         </div>
 
         <div className="space-y-4">

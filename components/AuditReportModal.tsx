@@ -46,8 +46,8 @@ export const AuditReportModal: React.FC<AuditReportModalProps> = ({ audit, onClo
                 <FileText className="w-6 h-6" />
             </div>
             <div>
-                <h3 className="text-lg font-bold text-white">Official Report Generator</h3>
-                <p className="text-slate-400 text-xs">AI-Drafted Compliance Record</p>
+                <h3 className="text-lg font-bold text-white">Movable Asset Inspection Report Generator</h3>
+                <p className="text-slate-400 text-xs">AI-Drafted 1PP Compliance Record</p>
             </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white transition-colors">

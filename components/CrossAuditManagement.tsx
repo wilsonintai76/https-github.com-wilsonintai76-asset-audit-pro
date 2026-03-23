@@ -615,7 +615,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
           <div className="lg:w-1/3">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
               <div>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Cross-Audit Management</h2>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Movable Asset Inspection Management</h2>
                 <p className="text-slate-500 font-medium">Configure institutional consolidation and generate anti-bias pairing strategies.</p>
               </div>
               
@@ -659,9 +659,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4 text-indigo-500" />
-                    <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Simulate Ideal Staffing</span>
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Simulate Ideal Inspecting Staff</span>
                   </div>
-                  <p className="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-tighter">Bypass real auditor shortages for strategic planning</p>
+                  <p className="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-tighter">Bypass real inspecting officer shortages for strategic planning</p>
                 </div>
                 <div className="relative inline-flex items-center ml-4">
                   <input 
@@ -710,7 +710,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
              <div className="mb-8">
                  <div className="flex items-end justify-between mb-4">
                      <div>
-                         <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Projected KPI Achievement</h4>
+                         <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Projected KPI Achievement (Asset Inspection)</h4>
                          <div className="text-3xl font-black text-slate-800 tracking-tighter mt-1">
                              {projectedKPIPercentage.toFixed(1)}% <span className="text-lg text-slate-400 font-bold">/ {targetKPIPercentage}%</span>
                          </div>
@@ -733,7 +733,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                          style={{ left: `${targetKPIPercentage}%` }}
                      ></div>
                  </div>
-                 <p className="text-[10px] font-bold text-slate-400 mt-2 text-right">{projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Total Assets Audited</p>
+                 <p className="text-[10px] font-bold text-slate-400 mt-2 text-right">{projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Total Movable Assets Inspected</p>
              </div>
 
              {/* Manual Overrides */}
@@ -745,8 +745,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         value={manualAuditor}
                         onChange={(e) => setManualAuditor(e.target.value)}
                      >
-                        <option value="">Select Auditing Entity</option>
-                        {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => <option key={e.id} value={e.id}>{e.name} ({e.auditors} Auditors)</option>)}
+                        <option value="">Select Inspecting Entity</option>
+                        {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => <option key={e.id} value={e.id}>{e.name} ({e.auditors} Officers)</option>)}
                      </select>
                      
                      <select 
@@ -755,7 +755,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         onChange={(e) => setManualTarget(e.target.value)}
                      >
                         <option value="">Select Target</option>
-                        {entities.filter(e => e.assets > 0).map(e => <option key={e.id} value={e.id}>{e.name} ({e.assets} Assets)</option>)}
+                        {entities.filter(e => e.assets > 0).map(e => <option key={e.id} value={e.id}>{e.name} ({e.assets} Movable Assets)</option>)}
                      </select>
                      
                      <label className="flex items-center gap-2 cursor-pointer group px-2">
@@ -791,7 +791,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                     <div className="relative group min-w-[200px]">
                         <input 
                             type="text"
-                            placeholder="Filter Auditing Entity..."
+                            placeholder="Filter Inspecting Entity..."
                             className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
                             value={auditorFilter}
                             onChange={(e) => setAuditorFilter(e.target.value)}
@@ -824,9 +824,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                      <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10 backdrop-blur-md">
                            <tr>
-                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50/80">Auditing Entity</th>
+                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50/80">Inspecting Entity</th>
                               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center bg-slate-50/80">Direction</th>
-                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50/80">Target Entity (Assets)</th>
+                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50/80">Target Entity (Movable Assets)</th>
                               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right bg-slate-50/80">Action</th>
                            </tr>
                         </thead>
@@ -861,7 +861,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                             ))}
                                                         </div>
                                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
-                                                            {isSimulatorActive && planAuditor ? planAuditor.auditors : (auditorEntity?.auditors || 0)} Total Auditors
+                                                            {isSimulatorActive && planAuditor ? planAuditor.auditors : (auditorEntity?.auditors || 0)} Total Inspecting Officers
                                                             {planAuditor?.isVirtual && (
                                                                 <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[8px]">
                                                                     <Zap className="w-2 h-2" /> VIRTUAL STRATEGIC
@@ -883,7 +883,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                         Target Capacity: {(() => {
                                                             const assets = targetEntity?.assets || 0;
                                                             return Math.max(2, Math.ceil(assets / maxAssetsPerDay));
-                                                        })()} Auditors
+                                                        })()} Inspecting Officers
                                                     </span>
                                                 </div>
 
@@ -893,7 +893,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                    </div>
                                                    <div>
                                                        <p className="font-bold text-sm text-slate-900">{targetEntity?.name || perm.targetDeptId}</p>
-                                                       <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Assets</p>
+                                                       <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Movable Assets</p>
                                                    </div>
                                                </div>
                                            </td>

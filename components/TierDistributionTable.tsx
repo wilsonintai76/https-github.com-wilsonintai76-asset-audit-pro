@@ -64,13 +64,13 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-6 border-b border-slate-100 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-slate-900">Tier Distribution & Scheduling</h3>
-          <p className="text-xs text-slate-500 mt-1">Status of audits across required phases per department tier.</p>
+          <h3 className="text-lg font-bold text-slate-900">Movable Asset Inspection Schedule</h3>
+          <p className="text-xs text-slate-500 mt-1">Status of inspections across required phases per department tier.</p>
         </div>
         <div className="flex gap-4">
            <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Audit Scheduled</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Inspection Scheduled</span>
            </div>
            <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-slate-200"></div>
@@ -84,7 +84,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
           <thead className="bg-slate-50/95 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
             <tr>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
-              <th id="header-auditors-tier" className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Auditors</th>
+              <th id="header-auditors-tier" className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Inspecting Officers</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Recommended</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assets / Tier</th>
               {sortedPhases.map(phase => (

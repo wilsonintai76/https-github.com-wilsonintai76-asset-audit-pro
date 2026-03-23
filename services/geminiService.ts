@@ -19,12 +19,12 @@ export const analyzeSchedule = async (schedules: AuditSchedule[]): Promise<Audit
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `You are an Audit Operations Risk Analyst. Analyze the following audit schedule (Pending/In Progress items).
+      contents: `You are a Movable Asset Inspection Analyst. Analyze the following inspection schedule (Pending/In Progress items).
       
       Identify:
       1. Immediate Risks: Unassigned slots for dates that are close (today is ${new Date().toISOString().split('T')[0]}).
       2. Bottlenecks: Departments with disproportionately high pending counts.
-      3. Compliance Gaps: Locations with zero auditors assigned.
+      3. Compliance Gaps: Asset Locations with zero inspecting officers assigned.
 
       Return a JSON object with:
       - "summary": A 1-sentence executive summary of the current risk level (Low/Medium/High) and why.
@@ -107,7 +107,7 @@ export const generateAuditReport = async (audit: AuditSchedule): Promise<string>
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Generate a formal "Audit Completion Certificate" text for the following completed audit.
+      contents: `Generate a formal "Movable Asset Inspection Report" text for the following completed inspection.
       
       Context:
       - Location: ${audit.locationId}
@@ -118,9 +118,9 @@ export const generateAuditReport = async (audit: AuditSchedule): Promise<string>
       - ID: ${audit.id}
 
       Format:
-      - Start with a formal uppercase header "OFFICIAL AUDIT RECORD".
+      - Start with a formal uppercase header "OFFICIAL MOVABLE ASSET INSPECTION RECORD".
       - Include a "Certification Statement" declaring the assets verified.
-      - Include a "Scope of Verification" section summarizing the department and location.
+      - Include a "Scope of Verification" section summarizing the department and asset location.
       - End with a placeholder for "Digital Signature".
       - Keep the tone highly professional, bureaucratic, and authoritative.
       - Do not use markdown bolding/italics, just plain text layout.`,

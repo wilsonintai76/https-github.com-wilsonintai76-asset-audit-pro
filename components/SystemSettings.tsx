@@ -124,18 +124,18 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
   const PERMISSIONS_LIST = [
     { id: 'view:overview', label: 'Institutional Overview', category: 'General', actions: [{ id: 'view:overview', label: 'Overview Content', icon: Eye }] },
-    { id: 'view:schedule:all', label: 'Audit Schedule (All Depts)', category: 'Audit', actions: [{ id: 'view:schedule:all', label: 'View All Depts', icon: Eye }] },
-    { id: 'view:schedule:own', label: 'Audit Schedule (Own Dept)', category: 'Audit', actions: [{ id: 'view:schedule:own', label: 'View Own Dept', icon: Eye }] },
+    { id: 'view:schedule:all', label: 'Inspection Schedule (All Depts)', category: 'Inspection', actions: [{ id: 'view:schedule:all', label: 'View All Depts', icon: Eye }] },
+    { id: 'view:schedule:own', label: 'Inspection Schedule (Own Dept)', category: 'Inspection', actions: [{ id: 'view:schedule:own', label: 'View Own Dept', icon: Eye }] },
     { 
       id: 'edit:schedule', 
-      label: 'Audit Planning & Self-Assign', 
-      category: 'Audit', 
+      label: 'Inspection Planning & Self-Assign', 
+      category: 'Inspection', 
       actions: [
         { id: 'edit:audit:date', label: '📅 Set Date', icon: Calendar, hint: 'Scheduling' },
-        { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Auditing' }
+        { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Inspecting' }
       ] 
     },
-    { id: 'view:audit:assigned', label: 'Auditor Dashboard', category: 'Audit', actions: [{ id: 'view:audit:assigned', label: 'Access Dashboard', icon: Eye, hint: 'Requires Cert' }] },
+    { id: 'view:audit:assigned', label: 'Inspecting Officer Dashboard', category: 'Inspection', actions: [{ id: 'view:audit:assigned', label: 'Access Dashboard', icon: Eye, hint: 'Requires Cert' }] },
     { 
       id: 'view:team:group', 
       label: 'Team Management', 
@@ -276,7 +276,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                     : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
                   }`}
                 >
-                  {role === 'Staff' ? 'Staff (Guest)' : role === 'Auditor' ? 'Accredited Auditor' : role}
+                  {role === 'Staff' ? 'Staff (Guest)' : role === 'Auditor' ? 'Accredited Inspecting Officer' : role}
                 </button>
               ))}
             </div>
@@ -338,7 +338,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 <AlertCircle className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
                   <span className="font-black text-indigo-700 uppercase tracking-widest mr-2 underline">Institutional Note:</span> 
-                  Permissions applied to <span className="font-bold text-slate-900">{activeRole === 'Staff' ? 'Staff (Guest)' : activeRole === 'Auditor' ? 'Accredited Auditor' : activeRole}</span> are strictly enforced. Auditor self-assignment REQUIRES an active institutional certificate, even if the permission is enabled here. Other roles like Supervisors or Coordinators can manage dates and assignments without certified status for administrative oversight.
+                  Permissions applied to <span className="font-bold text-slate-900">{activeRole === 'Staff' ? 'Staff (Guest)' : activeRole === 'Auditor' ? 'Accredited Inspecting Officer' : activeRole}</span> are strictly enforced. Inspecting officer self-assignment REQUIRES an active institutional certificate, even if the permission is enabled here. Other roles like Supervisors or Coordinators can manage dates and assignments without certified status for administrative oversight.
                 </p>
             </div>
         </div>
@@ -364,7 +364,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="relative flex items-center gap-3">
                   <Zap className="w-5 h-5 text-emerald-400" />
-                  Rebalance Audit Schedule
+                  Rebalance Inspection Schedule
                 </div>
               </button>
             </div>

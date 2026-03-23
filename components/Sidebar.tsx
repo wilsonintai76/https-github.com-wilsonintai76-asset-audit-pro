@@ -122,7 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {showAuditorDashboard && (
               <NavItem 
                 icon={LayoutDashboard} 
-                label="Auditor Dashboard" 
+                label="Inspecting Officer Dashboard" 
                 active={activeView === 'auditor-dashboard'} 
                 onClick={() => { onViewChange('auditor-dashboard'); onClose(); }} 
               />
@@ -131,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canAccessSchedule && (
               <NavItem 
                 icon={CalendarDays} 
-                label="Audit Schedule" 
+                label="Inspection Schedule" 
                 active={activeView === 'schedule'} 
                 onClick={() => { onViewChange('schedule'); onClose(); }} 
               />
@@ -162,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canAccessLocations && (
               <NavItem 
                 icon={MapPin} 
-                label="Locations" 
+                label="Asset Locations" 
                 active={activeView === 'locations'} 
                 onClick={() => { onViewChange('locations'); onClose(); }} 
               />

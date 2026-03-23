@@ -216,9 +216,9 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     if (!isCertified) {
       let disableReason = "";
       if (isSupervisor || isCoordinator || isAuditor) {
-        disableReason = "Certification Required: Supervisors/Coordinators/Auditors must hold a valid certificate to audit.";
+        disableReason = "Certification Required: Supervisors/Coordinators/Inspecting Officers must hold a valid certificate to inspect.";
       } else {
-        disableReason = "Certification Required: Your auditor certificate is expired or invalid.";
+        disableReason = "Certification Required: Your inspecting officer certificate is expired or invalid.";
       }
       alert(`ACTION BLOCKED: ${disableReason}`);
       return;
@@ -232,7 +232,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     if (!canAuditDepartment(audit.departmentId)) {
       const myEnt = getEntityName(currentUser?.departmentId || '');
       const targetEnt = getEntityName(audit.departmentId);
-      const reason = myEnt === targetEnt ? "You cannot audit your own department." : "This location is outside your assigned audit matrix.";
+      const reason = myEnt === targetEnt ? "You cannot inspect your own department." : "This asset location is outside your assigned inspection matrix.";
       alert(`PAIRING RESTRICTION: ${reason}`);
       return;
     }
@@ -301,10 +301,10 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   return (
     <div className="space-y-6 flex flex-col flex-1 min-h-0">
       <PageHeader
-        title="Audit Schedules"
+        title="Movable Asset Inspection Schedules"
         icon={Calendar}
         activePhase={activePhase}
-        description="Plan and manage institutional audit windows and auditor assignments."
+        description="Plan and manage institutional inspection windows and inspecting officer assignments."
       />
 
       {hasFieldRole && !isCertified && (
@@ -316,7 +316,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
             <div>
               <h4 className="font-black text-sm uppercase tracking-widest">Self-Assignment Locked</h4>
               <p className="text-xs text-rose-100 font-medium">
-                {isSupervisor || isCoordinator || isAuditor ? 'Management override disabled.' : 'Authorization revoked.'} Your certification is expired.
+                {isSupervisor || isCoordinator || isAuditor ? 'Management override disabled.' : 'Authorization revoked.'} Your inspecting officer certification is expired.
               </p>
             </div>
           </div>
@@ -438,9 +438,9 @@ export const AuditTable: React.FC<AuditTableProps> = ({
             <thead className="bg-slate-50/50 border-b border-slate-100 sticky top-0 z-20">
               <tr>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48 sticky left-0 bg-slate-50 z-30 border-r border-slate-100">Date</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64 sticky left-48 bg-slate-50 z-30 border-r border-slate-100">Location</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64 sticky left-48 bg-slate-50 z-30 border-r border-slate-100">Asset Location</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Site Supervisor</th>
-                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Auditors</th>
+                <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Inspecting Officers</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-32 text-center">Status</th>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-16 text-center"></th>
               </tr>
@@ -631,7 +631,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                         <div className="w-20 h-20 bg-slate-50 rounded-[24px] flex items-center justify-center mx-auto mb-6">
                           <Search className="w-10 h-10 text-slate-200" />
                         </div>
-                        <h4 className="text-slate-900 font-bold mb-2">No Audits Found</h4>
+                        <h4 className="text-slate-900 font-bold mb-2">No Inspections Found</h4>
                         <p className="text-xs text-slate-400 font-medium">Try adjusting your filters or search terms.</p>
                     </div>
                   </td>
