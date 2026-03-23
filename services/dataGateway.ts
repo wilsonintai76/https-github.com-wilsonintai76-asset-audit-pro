@@ -137,6 +137,82 @@ class DataGateway {
     this.isDemoMode = enabled;
   }
 
+  async replicateFromSupabase() {
+    // 1. Fetch ALL data from Supabase directly
+    const [
+      { data: audits },
+      { data: users },
+      { data: departments },
+      { data: locations },
+      { data: phases },
+      { data: buildings },
+      { data: groups },
+      { data: kpiTiers },
+      { data: institutionKPIs },
+      { data: settings }
+    ] = await Promise.all([
+      supabase.from('audits').select('*'),
+      supabase.from('users').select('*'),
+      supabase.from('departments').select('*'),
+      supabase.from('locations').select('*'),
+      supabase.from('audit_phases').select('*'),
+      supabase.from('buildings').select('*'),
+      supabase.from('audit_groups').select('*'),
+      supabase.from('kpi_tiers').select('*'),
+      supabase.from('institution_kpi_targets').select('*'),
+      supabase.from('system_settings').select('*')
+    ]);
+
+    // 2. Map & Prepare for Demo DB
+    const db = {
+      phases: phases || [],
+      buildings: buildings || [],
+      groups: groups || [],
+      departments: (departments || []).map((d: any) => ({
+        ...d,
+        headOfDeptId: d.head_of_dept_id,
+        auditGroupId: d.audit_group_id,
+        totalAssets: d.total_assets
+      })),
+      locations: (locations || []).map((l: any) => ({
+        ...l,
+        departmentId: l.department_id,
+        supervisorId: l.supervisor_id,
+        totalAssets: l.total_assets,
+        isActive: l.is_active ?? true
+      })),
+      audits: (audits || []).map((a: any) => ({
+        ...a,
+        departmentId: a.department_id,
+        locationId: a.location_id,
+        supervisorId: a.supervisor_id,
+        auditor1Id: a.auditor1_id,
+        auditor2Id: a.auditor2_id,
+        phaseId: a.phase_id
+      })),
+      users: (users || []).map((u: any) => ({
+        ...u,
+        roles: Array.isArray(u.roles) ? u.roles : ['Staff'],
+        departmentId: u.department_id,
+        contactNumber: u.contact_number,
+        isVerified: u.is_verified,
+        lastActive: u.last_active,
+        certificationIssued: u.certification_issued,
+        certificationExpiry: u.certification_expiry,
+        dashboardConfig: u.dashboard_config,
+      })),
+      kpiTiers: kpiTiers || [],
+      institutionKPIs: institutionKPIs || [],
+      settings: (settings || []).reduce((acc: any, s: any) => {
+        acc[s.id] = s.value;
+        return acc;
+      }, {})
+    };
+
+    // 3. Save to Demo DB
+    this.saveDemoDB(db);
+  }
+
   // --- AUDITS ---
   async getAudits(): Promise<AuditSchedule[]> {
     if (this.isDemoMode) {
@@ -208,12 +284,30 @@ class DataGateway {
     if (this.isDemoMode) {
       const db = this.getDemoDB();
       if (db) {
+        // Validation: Certification Check for Auditors
+        const auditors = db.users as User[];
+        const checkCert = (userId: string | null) => {
+          if (!userId) return true;
+          const u = auditors.find(user => user.id === userId);
+          if (!u || !u.certificationExpiry) return false;
+          return new Date(u.certificationExpiry) > new Date();
+        };
+
+        if (updates.auditor1Id !== undefined && !checkCert(updates.auditor1Id)) {
+          throw new Error("Action Blocked: The user assigned to Auditor Slot 1 does not hold a valid institutional certificate.");
+        }
+        if (updates.auditor2Id !== undefined && !checkCert(updates.auditor2Id)) {
+          throw new Error("Action Blocked: The user assigned to Auditor Slot 2 does not hold a valid institutional certificate.");
+        }
+
         db.audits = db.audits.map((a: AuditSchedule) => a.id === id ? { ...a, ...updates } : a);
         this.saveDemoDB(db);
       }
       return;
     }
     if (supabase) {
+      // For Supabase, we should ideally have a DB function, but for now we rely on the Frontend logic
+      // to filter and check before calling updateAudit.
       const payload = this.mapAuditToDB(updates);
       const { error } = await supabase.from('audits').update(payload).eq('id', id);
       if (error) throw error;

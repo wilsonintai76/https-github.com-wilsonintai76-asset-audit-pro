@@ -9,6 +9,7 @@ interface DemoContextType {
   enterDemoMode: (role: 'admin' | 'coordinator' | 'supervisor' | 'auditor' | 'staff') => void;
   exitDemoMode: () => void;
   resetDemoData: () => void;
+  syncLiveToDemo: () => Promise<void>;
 }
 
 const DemoContext = createContext<DemoContextType | undefined>(undefined);
@@ -52,8 +53,13 @@ export const DemoProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.location.reload();
   };
 
+  const syncLiveToDemo = async () => {
+    await gateway.replicateFromSupabase();
+    window.location.reload();
+  };
+
   return (
-    <DemoContext.Provider value={{ isDemoMode, demoUser, enterDemoMode, exitDemoMode, resetDemoData }}>
+    <DemoContext.Provider value={{ isDemoMode, demoUser, enterDemoMode, exitDemoMode, resetDemoData, syncLiveToDemo }}>
       {children}
     </DemoContext.Provider>
   );

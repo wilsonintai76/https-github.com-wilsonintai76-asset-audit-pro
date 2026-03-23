@@ -268,7 +268,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                     : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
                   }`}
                 >
-                  {role === 'Staff' ? 'Staff (Guest)' : role === 'Auditor' ? 'Auditor (Certified)' : role}
+                  {role === 'Staff' ? 'Staff (Guest)' : role === 'Auditor' ? 'Accredited Auditor' : role}
                 </button>
               ))}
             </div>
@@ -327,7 +327,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 <AlertCircle className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
                   <span className="font-black text-indigo-700 uppercase tracking-widest mr-2 underline">Institutional Note:</span> 
-                  Permissions applied to <span className="font-bold text-slate-900">{activeRole === 'Staff' ? 'Staff (Guest)' : activeRole === 'Auditor' ? 'Auditor (Certified)' : activeRole}</span> are strictly enforced. Auditor self-assignment REQUIRES an active institutional certificate, even if the permission is enabled here. Other roles like Supervisors or Coordinators can manage dates and assignments without certified status for administrative oversight.
+                  Permissions applied to <span className="font-bold text-slate-900">{activeRole === 'Staff' ? 'Staff (Guest)' : activeRole === 'Auditor' ? 'Accredited Auditor' : activeRole}</span> are strictly enforced. Auditor self-assignment REQUIRES an active institutional certificate, even if the permission is enabled here. Other roles like Supervisors or Coordinators can manage dates and assignments without certified status for administrative oversight.
                 </p>
             </div>
         </div>

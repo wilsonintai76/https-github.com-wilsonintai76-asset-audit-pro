@@ -961,18 +961,25 @@ const App: React.FC = () => {
 
   const handleAssign = async (id: string, slot: 1 | 2, userId: string) => {
     try {
+      const u = users.find(user => user.id === userId);
+      const isCertified = u?.certificationExpiry && new Date(u.certificationExpiry) > new Date();
+      
+      if (!isCertified) {
+        throw new Error("Action Blocked: The selected user does not hold a valid institutional certificate. Assignments are restricted to certified auditors only.");
+      }
+
       const updates: Partial<AuditSchedule> = slot === 1 ? { auditor1Id: userId } : { auditor2Id: userId };
       await gateway.updateAudit(id, updates);
       setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
       
-      const auditor = users.find(u => u.id === userId);
       const audit = schedules.find(s => s.id === id);
       const loc = locations.find(l => l.id === audit?.locationId);
-      if (auditor && loc) {
-        logActivity('AUDITOR_ASSIGNED', `${auditor.name} assigned to audit at ${loc.name}`, id);
+      if (u && loc) {
+        logActivity('AUDITOR_ASSIGNED', `${u.name} assigned to audit at ${loc.name}`, id);
       }
+      showToast('Auditor assigned successfully');
     } catch (e) {
-      showError(e, 'Assignment Failed');
+      showError(e, 'Assignment Denied');
     }
   };
 

@@ -1,9 +1,9 @@
 import React from 'react';
 import { useDemo } from '../contexts/DemoContext';
-import { ShieldAlert, RefreshCcw, LogOut, Info } from 'lucide-react';
+import { ShieldAlert, RefreshCcw, RotateCcw, LogOut, Info } from 'lucide-react';
 
 export const DemoBanner: React.FC = () => {
-  const { isDemoMode, demoUser, exitDemoMode, resetDemoData } = useDemo();
+  const { isDemoMode, demoUser, exitDemoMode, resetDemoData, syncLiveToDemo } = useDemo();
 
   if (!isDemoMode) return null;
 
@@ -24,7 +24,31 @@ export const DemoBanner: React.FC = () => {
           </div>
         </div>
         
-        {/* Actions removed - use Logout to exit and reset */}
+        <div className="flex items-center gap-2">
+           <button 
+            onClick={() => {
+              if (window.confirm("Sync live data to this demo session? Current local changes will be lost.")) {
+                syncLiveToDemo();
+              }
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 active:scale-95"
+          >
+            <RefreshCcw className="w-3 h-3" />
+            Sync Live Data
+          </button>
+
+          <button 
+            onClick={() => {
+              if (window.confirm("Reset all demo data to initial mock state?")) {
+                resetDemoData();
+              }
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 active:scale-95"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Reset Data
+          </button>
+        </div>
       </div>
     </div>
   );
