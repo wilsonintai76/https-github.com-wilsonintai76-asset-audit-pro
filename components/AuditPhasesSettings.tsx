@@ -101,7 +101,8 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
           <p className="text-xs text-slate-400">Phases will be automatically created. Contact your administrator.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sortedPhases.map(phase => {
             const isActive = checkIsActive(phase);
             const isEditing = editingId === phase.id;
@@ -234,6 +235,7 @@ export const AuditPhasesSettings: React.FC<AuditPhasesSettingsProps> = ({ phases
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>
