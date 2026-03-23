@@ -1,11 +1,12 @@
 import React, { useMemo, useRef } from 'react';
 import { CrossAuditPermission, Department, User, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup } from '../types';
+import { useRBAC } from '../contexts/RBACContext';
 import { CrossAuditManagement } from './CrossAuditManagement';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
 import { KPISettings } from './KPISettings';
 import { TierDistributionTable } from './TierDistributionTable';
 import { DataManagementWorkflow } from './DataManagementWorkflow';
-import { Zap, Sliders, Lock, Unlock, AlertCircle } from 'lucide-react';
+import { Zap, Sliders, Lock, Unlock, AlertCircle, Check } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 
 interface SystemSettingsProps {
@@ -51,7 +52,6 @@ interface SystemSettingsProps {
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup: (id: string) => Promise<void>;
   onAutoConsolidate: (threshold: number, excludedIds: string[]) => Promise<void>;
-  onBulkAddPermissions: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
   onBulkRemovePermissions: (ids: string[]) => Promise<void>;
   showToast?: (message: string, type?: any) => void;
 }
@@ -104,6 +104,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onUpdateInstitutionKPI,
   showToast
 }) => {
+  const { rbacMatrix, updateRBAC } = useRBAC();
   const isAdmin = (userRoles || []).includes('Admin');
 
   const activePhase = useMemo(() => {
@@ -129,6 +130,43 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       }
     }
   };
+
+  const PERMISSIONS_LIST = [
+    { id: 'view:overview', label: 'Institutional Overview', category: 'General' },
+    { id: 'view:schedule:all', label: 'Audit Schedule (All Depts)', category: 'Audit' },
+    { id: 'view:schedule:own', label: 'Audit Schedule (Own Dept)', category: 'Audit' },
+    { id: 'edit:schedule', label: 'Audit Assignment & Dates', category: 'Audit' },
+    { id: 'view:audit:assigned', label: 'Auditor Dashboard', category: 'Audit', hint: 'Requires Certification' },
+    { id: 'view:team:all', label: 'Team Management (View All)', category: 'Team' },
+    { id: 'view:team:own', label: 'Team Management (Own Dept)', category: 'Team' },
+    { id: 'edit:team', label: 'Add/Edit Team & Certificates', category: 'Team' },
+    { id: 'manage:departments', label: 'Department Registry', category: 'Data' },
+    { id: 'manage:locations', label: 'Location Registry', category: 'Data' },
+    { id: 'manage:system', label: 'System Settings', category: 'System' },
+  ];
+
+  const toggleMatrixPerm = async (permId: string, role: UserRole) => {
+    // Safety: Don't allow removing 'manage:system' from Admin
+    if (role === 'Admin' && permId === 'manage:system' && rbacMatrix[permId]?.includes('Admin')) {
+        return;
+    }
+
+    const currentRoles = rbacMatrix[permId] || [];
+    let newRoles: UserRole[] = [];
+    
+    if (currentRoles.includes(role)) {
+      newRoles = currentRoles.filter(r => r !== role);
+    } else {
+      newRoles = [...currentRoles, role];
+    }
+
+    updateRBAC({
+      ...rbacMatrix,
+      [permId]: newRoles
+    });
+  };
+
+  const ALL_ROLES: UserRole[] = ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
@@ -197,6 +235,74 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
         showToast={showToast}
       />
+
+      {isAdmin && rbacMatrix && (
+        <div className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+                    <Lock className="w-6 h-6" />
+                </div>
+                <div>
+                    <h3 className="text-xl font-bold text-slate-900">RBAC Matrix Table</h3>
+                    <p className="text-sm text-slate-500">Fine-tune institutional access levels per role and feature.</p>
+                </div>
+            </div>
+
+            <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                        <tr className="border-b border-slate-100">
+                            <th className="py-4 px-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Feature / View</th>
+                            {ALL_ROLES.map(role => (
+                                <th key={role} className="py-4 px-4 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest">{role}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                        {PERMISSIONS_LIST.map(perm => (
+                            <tr key={perm.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-4 px-4">
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-bold text-slate-700">{perm.label}</span>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[8px] font-black uppercase tracking-tighter text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100">{perm.category}</span>
+                                            {perm.hint && <span className="text-[9px] text-slate-400 italic">({perm.hint})</span>}
+                                        </div>
+                                    </div>
+                                </td>
+                                {ALL_ROLES.map(role => {
+                                    const isChecked = rbacMatrix[perm.id]?.includes(role);
+                                    const isLocked = role === 'Admin' && perm.id === 'manage:system';
+
+                                    return (
+                                        <td key={role} className="py-4 px-4 text-center">
+                                            <button
+                                                onClick={() => !isLocked && toggleMatrixPerm(perm.id, role)}
+                                                className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center mx-auto ${
+                                                    isChecked 
+                                                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
+                                                    : 'bg-white border-slate-200 text-transparent hover:border-slate-300'
+                                                } ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-90'}`}
+                                            >
+                                                <Check className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="mt-8 p-4 bg-slate-50 rounded-2xl flex items-start gap-3 border border-slate-100">
+                <AlertCircle className="w-5 h-5 text-indigo-500 shrink-0" />
+                <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                    Access is strictly enforced across the platform. Changes to the matrix take effect immediately for all sessions. 
+                    <span className="font-bold text-indigo-600 ml-1 underline">Note:</span> Staff roles without "Coordinator" or "Supervisor" designation will still default to "Staff" permissions even if they are within the same department.
+                </p>
+            </div>
+        </div>
+      )}
 
       {(phases?.length > 0 && kpiTiers?.length > 0) && (
         <div className="space-y-8">

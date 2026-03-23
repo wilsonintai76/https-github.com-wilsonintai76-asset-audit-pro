@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Location, UserRole, Department, User, AuditPhase, Building } from '../types';
+import { useRBAC } from '../contexts/RBACContext';
 import { Network, ChevronDown, MapPin, Landmark, User as UserIcon, Phone, Pencil, Trash2, MapPinned, Building2, Layers, Plus } from 'lucide-react';
 import { LocationModal } from './LocationModal';
 import { PageHeader } from './PageHeader';
@@ -21,6 +22,7 @@ interface LocationManagementProps {
 export const LocationManagement: React.FC<LocationManagementProps> = ({ 
   locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [], buildings, onAddBuilding
 }) => {
+  const { rbacMatrix } = useRBAC();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('All');
@@ -32,6 +34,12 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
+
+  const canManage = (() => {
+     if (!rbacMatrix) return isAdmin || isCoordinator;
+     const allowedRoles = rbacMatrix['manage:locations'] || [];
+     return (userRoles || []).some(r => allowedRoles.includes(r as any));
+  })();
 
   const getBuildingAbbr = (buildingId?: string, buildingName?: string) => {
     if (buildingId) {
@@ -159,7 +167,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
         activePhase={activePhase}
         description={(isCoordinator && !isAdmin) ? `Managing locations for ${userDeptId}` : 'Institutional site mapping and audit execution points.'}
       >
-        {(isAdmin || (isCoordinator && !isAdmin)) && (
+        {canManage && (
           <button 
             onClick={startAdd}
             className={`px-4 py-2 rounded-2xl text-[13px] font-bold shadow-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap active:scale-95 ${
@@ -304,14 +312,14 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                       </span>
                     </td>
                     <td className="px-6 py-4 align-middle">
-                      {(isAdmin || isCoordinator || isSupervisor) && (
+                      {canManage && (
                         <div className="flex gap-1">
-                          {(isAdmin || isCoordinator || isSupervisor) && (
+                          {canManage && (
                             <button onClick={() => startEdit(loc)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors" title={isSupervisor && !isAdmin && !isCoordinator ? 'Edit Level / Total Assets' : 'Edit Location'}>
                               <Pencil className="w-4 h-4" />
                             </button>
                           )}
-                          {(isAdmin || isCoordinator) && (
+                          {canManage && (
                             <button onClick={() => onDelete(loc.id)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors">
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -347,9 +355,9 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
         initialData={editingLocation}
         departments={departments}
         users={users}
-        isAdmin={isAdmin}
-        isCoordinator={isCoordinator}
-        isSupervisor={isSupervisor && !isAdmin && !isCoordinator}
+        isAdmin={canManage}
+        isCoordinator={isCoordinator && canManage}
+        isSupervisor={isSupervisor && !isAdmin && !isCoordinator && canManage}
         userDeptId={userDeptId}
         buildings={buildings}
         onAddBuilding={onAddBuilding}

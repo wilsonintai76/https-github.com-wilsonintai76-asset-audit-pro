@@ -162,3 +162,5 @@ export interface SystemSetting {
   value: any;
   updatedAt?: string;
 }
+
+export type RBACMatrix = Record<string, UserRole[]>;

@@ -2,12 +2,12 @@
 import React, { useState, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { User, UserRole, Department } from '../types';
+import { useRBAC } from '../contexts/RBACContext';
 import { IssueCertificateModal } from './IssueCertificateModal';
 import { gateway } from '../services/dataGateway';
 import { Filter, Plus, User as UserIcon, Check, X, Award, Stamp, Pencil, Trash2, Key, ChevronDown } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
-
 interface TeamManagementProps {
   users: User[];
   onAddMember: (user: User) => void;
@@ -23,11 +23,13 @@ interface TeamManagementProps {
   phases?: AuditPhase[];
   selectedDeptFilter?: string;
   onDeptFilterChange?: (deptId: string) => void;
+  currentUserId?: string;
 }
 
 export const TeamManagement: React.FC<TeamManagementProps> = ({ 
-  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert, phases = [], selectedDeptFilter: propSelectedDeptFilter, onDeptFilterChange 
+  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert, phases = [], selectedDeptFilter: propSelectedDeptFilter, onDeptFilterChange, currentUserId 
 }) => {
+  const { hasPermission, rbacMatrix } = useRBAC();
   const [internalSelectedDeptFilter, setInternalSelectedDeptFilter] = useState('All');
   
   const selectedDeptFilter = propSelectedDeptFilter !== undefined ? propSelectedDeptFilter : internalSelectedDeptFilter;
@@ -55,6 +57,14 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   });
 
   const isAdmin = currentUserRoles.includes('Admin');
+  
+  const hasPerm = (perm: string) => hasPermission(perm, currentUserRoles);
+
+  const canViewAll = hasPerm('view:team:all');
+  const canViewOwn = hasPerm('view:team:own');
+  const canEditTeam = hasPerm('edit:team');
+
+  const currentUserData = users.find(u => u.id === currentUserId);
 
   // Pending users logic
   const pendingUsers = useMemo(() => {
@@ -64,10 +74,24 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
 
   const filteredUsers = useMemo(() => {
     return users
-      .filter(u => selectedStatusFilter === 'Pending' ? u.status === 'Pending' : u.status !== 'Pending')
-      .filter(u => selectedStatusFilter !== 'All' && selectedStatusFilter !== 'Pending' ? u.status === selectedStatusFilter : true)
-      .filter(u => selectedDeptFilter === 'All' || u.departmentId === selectedDeptFilter);
-  }, [users, selectedDeptFilter, selectedStatusFilter]);
+      .filter(u => {
+          // 1. RBAC Scope Filtering
+          if (!canViewAll && canViewOwn) {
+              if (u.departmentId !== currentUserData?.departmentId) return false;
+          }
+          if (!canViewAll && !canViewOwn) return false;
+
+          // 2. Status Filtering
+          if (selectedStatusFilter === 'Pending') return u.status === 'Pending';
+          if (selectedStatusFilter !== 'All' && u.status !== selectedStatusFilter) return false;
+          if (selectedStatusFilter === 'All' && u.status === 'Pending') return false;
+
+          // 3. Dept Filtering
+          if (selectedDeptFilter !== 'All' && u.departmentId !== selectedDeptFilter) return false;
+          
+          return true;
+      });
+  }, [users, selectedDeptFilter, selectedStatusFilter, canViewAll, canViewOwn, currentUserData]);
 
   const handleVerify = async (user: User) => {
       try {
@@ -241,7 +265,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
           </div>
         </div>
 
-        {isAdmin && (
+        {canEditTeam && (
           <button 
             onClick={() => { resetForm(); setIsFormOpen(true); }}
             className="group px-8 py-3.5 bg-slate-900 text-white rounded-[20px] text-xs font-black uppercase tracking-widest shadow-2xl shadow-slate-900/10 hover:bg-blue-600 hover:-translate-y-1 transition-all flex items-center gap-3 active:scale-95"
@@ -492,7 +516,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        {isAdmin && (
+                        {canEditTeam && (
                           <>
                             <button 
                               onClick={() => setCertifyingUser(user)}
@@ -503,7 +527,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
                             </button>
                           </>
                         )}
-                        {isAdmin && (
+                        {canEditTeam && (
                           <>
                             <button 
                               onClick={() => startEdit(user)}

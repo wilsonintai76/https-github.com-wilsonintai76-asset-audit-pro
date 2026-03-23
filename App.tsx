@@ -1,10 +1,11 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { useRBAC } from './contexts/RBACContext';
 import { gateway } from './services/dataGateway';
 import { supabase } from './services/supabase';
 import { authService } from './services/auth';
 import { ItemNotFoundError } from './services/localDB';
-import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building } from './types';
+import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, RBACMatrix } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { NotificationCenter } from './components/NotificationCenter';
@@ -55,6 +56,8 @@ const App: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  const { rbacMatrix, hasPermission, updateRBAC } = useRBAC();
 
   // --- ROLE CHECKS ---
   const isAdmin = (currentUser?.roles || []).includes('Admin');
@@ -2121,11 +2124,50 @@ const App: React.FC = () => {
   };
 
   const handleViewChange = (view: AppView) => {
-    if (currentUser && !(currentUser.roles || []).includes('Admin') && !checkProfileComplete(currentUser) && view !== 'profile') {
-      showToast('Please complete your profile first.', 'info');
-      setActiveView('profile');
-      return;
+    if (!currentUser) return;
+
+    const hasPerm = (perm: string) => {
+      const allowedRoles = rbacMatrix[perm] || [];
+      return (currentUser.roles || []).some(r => allowedRoles.includes(r as UserRole));
+    };
+
+    // 1. Profile Completion Check
+    // If it's NOT profile and NOT overview (or overview is not public), check completion
+    if (view !== 'profile' && view !== 'overview') {
+        if (!checkProfileComplete(currentUser)) {
+            showToast('Please complete your profile first.', 'info');
+            setActiveView('profile');
+            return;
+        }
     }
+
+    // 2. Permission Matrix Check
+    const viewToPerm: Record<string, string> = {
+      'overview': 'view:overview',
+      'schedule': 'view:schedule:all',
+      'team': 'view:team:all',
+      'settings': 'manage:system',
+      'departments': 'manage:departments',
+      'locations': 'manage:locations',
+      'auditor-dashboard': 'view:audit:assigned'
+    };
+
+    const permId = viewToPerm[view];
+    if (permId) {
+      let isAllowed = hasPerm(permId);
+      
+      // Fallback for "Own" scopes if "All" fails
+      if (!isAllowed) {
+        if (view === 'schedule' && hasPerm('view:schedule:own')) isAllowed = true;
+        if (view === 'team' && hasPerm('view:team:own')) isAllowed = true;
+      }
+
+      if (!isAllowed) {
+        showToast('Access Denied: You do not have permission to view this section.', 'warning');
+        return;
+      }
+    }
+
     setActiveView(view);
   };
 
@@ -2224,6 +2266,7 @@ const App: React.FC = () => {
         isCertified={currentUser.certificationExpiry && new Date(currentUser.certificationExpiry) > new Date()}
         userStatus={currentUser.status}
         isProfileComplete={checkProfileComplete(currentUser)}
+        rbacMatrix={rbacMatrix}
       />
 
       <div className="flex-grow lg:pl-72 flex flex-col h-full min-w-0">
@@ -2287,6 +2330,7 @@ const App: React.FC = () => {
               auditGroups={auditGroups}
               institutionKPIs={institutionKPIs}
               buildings={buildings}
+              rbacMatrix={rbacMatrix}
             />
           )}
           {activeView === 'auditor-dashboard' && (
@@ -2344,6 +2388,7 @@ const App: React.FC = () => {
               phases={auditPhases}
               selectedDeptFilter={selectedDept}
               onDeptFilterChange={setSelectedDept}
+              currentUserId={currentUser.id}
             />
           )}
           {activeView === 'departments' && (
@@ -2366,6 +2411,7 @@ const App: React.FC = () => {
                 setSelectedDept(deptId);
                 setActiveView('team');
               }}
+              currentUserRoles={currentUser.roles}
             />
           )}
           {activeView === 'locations' && (
@@ -2442,7 +2488,6 @@ const App: React.FC = () => {
               onDeleteDepartmentMapping={handleDeleteDepartmentMapping}
               onSyncLocationMappings={handleSyncLocationMappings}
               onUpsertLocations={handleUpsertLocations}
-              auditGroups={auditGroups}
               onAddAuditGroup={handleAddAuditGroup}
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}

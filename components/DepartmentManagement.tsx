@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Department, Location, User, AuditGroup } from '../types';
+import { Department, Location, User, AuditGroup, UserRole } from '../types';
 import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, UserPlus } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
+import { useRBAC } from '../contexts/RBACContext';
 import { DepartmentModal } from './DepartmentModal';
 
 interface DepartmentManagementProps {
@@ -19,6 +20,7 @@ interface DepartmentManagementProps {
   onUpdateGroup?: (id: string, group: Partial<AuditGroup>) => void;
   onDeleteGroup?: (id: string) => void;
   onAddAuditor: (deptId: string) => void;
+  currentUserRoles?: UserRole[];
 }
 
 export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
@@ -31,9 +33,17 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   phases = [],
   auditGroups = [],
   onAddAuditor,
+  currentUserRoles = []
 }) => {
+  const { rbacMatrix } = useRBAC();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
+
+  const canManage = (() => {
+    if (!rbacMatrix) return isAdmin;
+    const allowedRoles = rbacMatrix['manage:departments'] || [];
+    return (currentUserRoles || []).some(r => allowedRoles.includes(r as any));
+  })();
 
   const handleSave = (data: Omit<Department, 'id'> | Partial<Department>) => {
     if (editingDept) {
@@ -183,7 +193,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                       </div>
                     </td>
                     <td className="px-6 py-4 text-left align-middle">
-                      {isAdmin && (
+                      {canManage && (
                         <div className="flex gap-1 justify-start">
                           <button
                             onClick={() => onUpdate(dept.id, { isExempted: !dept.isExempted })}

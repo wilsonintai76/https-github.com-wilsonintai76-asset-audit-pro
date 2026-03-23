@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase, Building as BuildingType } from '../types';
+import { useRBAC } from '../contexts/RBACContext';
 import { AuditReportModal } from './AuditReportModal';
 import { 
   ShieldOff, 
@@ -53,6 +54,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   maxAssetsPerDay,
   buildings = []
 }) => {
+  const { hasPermission, rbacMatrix } = useRBAC();
   const [reportAudit, setReportAudit] = useState<AuditSchedule | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('All');
   const [selectedLevel, setSelectedLevel] = useState('All');
@@ -82,9 +84,11 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   // Combined concept: Eligible Field Auditor
   const canSelfAssignSelf = hasFieldRole && isCertified;
 
-  // Permission Logic for Management Actions (Not assignment/unassignment)
-  const canManageAssignments = false; // Manual assignment/unassignment by admins is now disabled
-  const canToggleStatus = isAdmin || isCoordinator || isSupervisor;
+  const hasPerm = (perm: string) => hasPermission(perm, userRoles);
+
+  const canEditSchedule = hasPerm('edit:schedule');
+  const canViewAllSchedule = hasPerm('view:schedule:all');
+  const canViewOwnSchedule = hasPerm('view:schedule:own');
 
   const hasPhases = auditPhases?.length > 0;
   const todayStr = new Date().toISOString().split('T')[0];
@@ -250,17 +254,26 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     }
   };
 
-  // Filter based on selected filters
+  // Filter based on selected filters AND RBAC Scope
   const displaySchedules = useMemo(() => {
     return schedules.filter(s => {
+      // 1. RBAC Scope Filtering
+      if (!canViewAllSchedule && canViewOwnSchedule) {
+          if (s.departmentId !== currentUser?.departmentId) return false;
+      }
+      if (!canViewAllSchedule && !canViewOwnSchedule) {
+          // If no view permission, show nothing (should be handled by App.tsx redirect, but safe fallback)
+          return false;
+      }
+
+      // 2. UI Filter logic
       const loc = allLocations.find(l => l.id === s.locationId);
-      
       if (selectedBlock !== 'All' && getBuildingAbbr(loc?.buildingId, loc?.building) !== selectedBlock) return false;
       if (selectedLevel !== 'All' && loc?.level !== selectedLevel) return false;
       
       return true;
     });
-  }, [schedules, selectedBlock, selectedLevel, allLocations]);
+  }, [schedules, selectedBlock, selectedLevel, allLocations, canViewAllSchedule, canViewOwnSchedule, currentUser]);
 
   const isAuditLocked = (audit: AuditSchedule) => {
     return !!(audit.date && (audit.auditor1Id || audit.auditor2Id));
@@ -453,7 +466,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                         <input 
                           type="date" 
                           value={audit.date || ''}
-                          disabled={!hasPhases || isLocked}
+                          disabled={!hasPhases || isLocked || !canEditSchedule}
                           onChange={(e) => handleDateChange(audit.id, e.target.value, audit.phaseId)}
                           className={`w-full px-4 py-2.5 rounded-xl text-xs font-bold border outline-none transition-all ${
                             isLocked
@@ -528,7 +541,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             audit={audit}
                             users={users}
                             currentUser={currentUser}
-                            canManageAssignments={canManageAssignments && !isLocked}
+                            canManageAssignments={canEditSchedule && !isLocked}
                             canSelfAssignSelf={canSelfAssignSelf && !isLocked}
                             userCanAudit={userCanAudit}
                             isCurrentUserAssigned={isCurrentUserAssigned}
@@ -552,12 +565,12 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
                     <td className="px-8 py-6 align-top text-center">
                       <button 
-                        onClick={() => canToggleStatus && onToggleStatus(audit.id)}
-                        disabled={!canToggleStatus || audit.status === 'Pending'}
-                        className={`inline-flex items-center px-4 py-2 rounded-xl text-[10px] font-black uppercase border tracking-widest transition-all active:scale-95 ${getStatusBadgeStyles(audit.status)} ${!canToggleStatus && 'opacity-50 pointer-events-none'}`}
+                        onClick={() => canEditSchedule && onToggleStatus(audit.id)}
+                        disabled={!canEditSchedule || audit.status === 'Pending'}
+                        className={`inline-flex items-center px-4 py-2 rounded-xl text-[10px] font-black uppercase border tracking-widest transition-all active:scale-95 ${getStatusBadgeStyles(audit.status)} ${!canEditSchedule && 'opacity-50 pointer-events-none'}`}
                       >
                         {audit.status}
-                        {canToggleStatus && audit.status !== 'Pending' && <RotateCcw className="w-2 h-2 ml-2 opacity-40" />}
+                        {canEditSchedule && audit.status !== 'Pending' && <RotateCcw className="w-2 h-2 ml-2 opacity-40" />}
                       </button>
                     </td>
 

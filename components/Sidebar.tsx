@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { UserRole, AppView } from '../types';
+import { useRBAC } from '../contexts/RBACContext';
 import { BRANDING } from '../constants';
 import { 
   ShieldCheck, 
@@ -53,20 +54,23 @@ const NavItem: React.FC<NavItemProps> = ({ icon: Icon, label, active, onClick })
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isOpen, onClose, activeView, onViewChange, onLogout, userRoles, isCertified, isProfileComplete 
 }) => {
+  const { hasPermission } = useRBAC();
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
   const isStaff = userRoles.includes('Staff');
 
+  const hasPerm = (perm: string) => hasPermission(perm, userRoles);
+
   // Show Auditor Dashboard if user is certified, regardless of role.
-  const showAuditorDashboard = isCertified && isProfileComplete;
+  const showAuditorDashboard = isCertified && isProfileComplete && hasPerm('view:audit:assigned');
   
-  const canAccessSchedule = (isAdmin || isCoordinator || isSupervisor || isStaff) && isProfileComplete;
-  const canAccessLocations = (isAdmin || isCoordinator) && isProfileComplete;
-  const canAccessTeam = (isAdmin || isCoordinator) && isProfileComplete;
-  const canAccessDepartments = (isAdmin || isCoordinator) && isProfileComplete;
-  const canAccessAdminSettings = isAdmin;
-  const showMainDashboard = isProfileComplete || isAdmin;
+  const canAccessSchedule = (hasPerm('view:schedule:all') || hasPerm('view:schedule:own')) && isProfileComplete;
+  const canAccessLocations = hasPerm('manage:locations') && isProfileComplete;
+  const canAccessTeam = hasPerm('view:team:all') && isProfileComplete;
+  const canAccessDepartments = hasPerm('manage:departments') && isProfileComplete;
+  const canAccessAdminSettings = hasPerm('manage:system');
+  const showMainDashboard = (isProfileComplete || isAdmin) && hasPerm('view:overview');
 
   return (
     <>
