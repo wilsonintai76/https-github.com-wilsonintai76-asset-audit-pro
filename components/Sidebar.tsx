@@ -182,29 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
 
           <div className="mt-auto pt-6 space-y-4">
-            {/* Language Toggle */}
-            <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-xl mb-2">
-              <button
-                onClick={() => setLocale('en')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                  locale === 'en' 
-                    ? 'bg-white text-blue-600 shadow-sm' 
-                    : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                English
-              </button>
-              <button
-                onClick={() => setLocale('ms')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
-                  locale === 'ms' 
-                    ? 'bg-white text-blue-600 shadow-sm' 
-                    : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                Bahasa
-              </button>
-            </div>
+            {/* Language Selection Removed (v1.9.6) */}
             <div className="bg-slate-900 rounded-2xl p-4 text-white relative overflow-hidden">
               <div className="relative z-10">
                 <p className="text-xs font-medium text-slate-400 mb-1">Database Connection</p>

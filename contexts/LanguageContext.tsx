@@ -62,65 +62,12 @@ const translations: Record<Locale, Record<string, string>> = {
     'dashboard.dept_breakdown': 'Department Breakdown',
     'dashboard.current_phase': 'Current Phase',
     'dashboard.phase_ends': 'Phase Ends'
-  },
-  ms: {
-    // Nav Labels
-    'nav.overview': 'Gambaran Keseluruhan',
-    'nav.inspection_schedule': 'Jadual Pemeriksaan',
-    'nav.inspecting_officer_dashboard': 'Papan Pegawai',
-    'nav.user_management': 'Pengurusan Pengguna',
-    'nav.departments': 'Jabatan',
-    'nav.asset_locations': 'Lokasi Aset',
-    'nav.system_settings': 'Tetapan Sistem',
-    'nav.profile': 'Profil Saya',
-    'nav.logout': 'Log Keluar',
-    
-    // MOF Terms
-    'term.inspection_schedule': 'Jadual Pemeriksaan Aset Alih',
-    'term.inspection': 'Pemeriksaan Aset Alih',
-    'term.inspection_report': 'Laporan Pemeriksaan Aset Alih',
-    'term.inspecting_officer': 'Pegawai Pemeriksa',
-    'term.head_of_department': 'Ketua Jabatan',
-    'term.asset_location': 'Lokasi Aset',
-    
-    // UI Elements
-    'ui.main_menu': 'Menu Utama',
-    'ui.administration': 'Pentadbiran',
-    'ui.database_connection': 'Sambungan Pangkalan Data',
-    'ui.cloud_instance': 'Instansi Awan',
-    'ui.language': 'Bahasa',
-    
-    // Dashboard Specific
-    'dashboard.title': 'Papan Pemuka Pemeriksaan Institusi',
-    'dashboard.subtitle': 'Prestasi masa nyata dan pemantauan pematuhan semua jabatan.',
-    'dashboard.stats_inspections': 'Jumlah Pemeriksaan',
-    'dashboard.stats_completed': 'Selesai',
-    'dashboard.stats_pending': 'Belum Selesai',
-    'dashboard.stats_open_slots': 'Slot Terbuka',
-    'dashboard.stats_on_track': 'Menepati Masa',
-    'dashboard.stats_assets': 'Aset Diperiksa',
-    'dashboard.upcoming': 'Pemeriksaan Akan Datang',
-    'dashboard.no_upcoming': 'Tiada pemeriksaan akan datang dijadualkan',
-    'dashboard.velocity': 'Kelajuan Pemeriksaan',
-    'dashboard.compliance': 'Prestasi',
-    'dashboard.performance': 'Prestasi Pemeriksaan Institusi',
-    'dashboard.progress': 'Kemajuan Pemeriksaan Institusi',
-    'dashboard.overall_completion': 'Keseluruhan Selesai',
-    'dashboard.global_goal': 'Matlamat Global',
-    'dashboard.status': 'Status',
-    'dashboard.on_track': 'Menepati Masa',
-    'dashboard.at_risk': 'Berisiko',
-    'dashboard.tier_progress': 'Kemajuan Tahap Jabatan',
-    'dashboard.dept_breakdown': 'Pecahan Jabatan',
-    'dashboard.current_phase': 'Fasa Semasa',
-    'dashboard.phase_ends': 'Fasa Berakhir'
   }
 };
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [locale, setLocaleState] = useState<Locale>(() => {
-    const saved = localStorage.getItem('inspectable_locale');
-    return (saved === 'en' || saved === 'ms') ? saved : 'en';
+    return 'en';
   });
 
   const setLocale = (newLocale: Locale) => {
