@@ -76,6 +76,7 @@ export interface Location {
   supervisorId: string | null;
   contact: string;
   totalAssets?: number;
+  uninspectedAssetCount?: number;
   isActive?: boolean;
   status?: 'Active' | 'Archived' | 'Pending_Delete';
 }

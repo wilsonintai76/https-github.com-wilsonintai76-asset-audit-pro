@@ -1294,6 +1294,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateUninspectedAssetCounts = async (updates: { id: string, uninspectedCount: number }[]) => {
+    try {
+      await Promise.all(updates.map(u => gateway.updateLocation(u.id, { uninspectedAssetCount: u.uninspectedCount })));
+      const updated = await gateway.getLocations();
+      setLocations(updated);
+      showToast('Uninspected asset counts updated successfully');
+      logActivity('UPDATE', 'Uploaded uninspected asset registry');
+    } catch (e) {
+      showError(e, 'Failed to update uninspected counts');
+    }
+  };
+
   const handleDeleteLoc = async (id: string) => {
     const loc = locations.find(l => String(l.id) === String(id));
     if (!loc) return;
@@ -2586,6 +2598,7 @@ const App: React.FC = () => {
               onDeleteDepartmentMapping={handleDeleteDepartmentMapping}
               onSyncLocationMappings={handleSyncLocationMappings}
               onUpsertLocations={handleUpsertLocations}
+              onUpdateUninspectedAssets={handleUpdateUninspectedAssetCounts}
               onAddAuditGroup={handleAddAuditGroup}
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}

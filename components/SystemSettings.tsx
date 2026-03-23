@@ -48,6 +48,7 @@ interface SystemSettingsProps {
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
+  onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[]) => Promise<void>;
   auditGroups: AuditGroup[];
   onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
@@ -94,6 +95,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onDeleteDepartmentMapping,
   onSyncLocationMappings,
   onUpsertLocations,
+  onUpdateUninspectedAssets,
   auditGroups,
   onAddAuditGroup,
   onUpdateAuditGroup,
@@ -104,7 +106,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   kpiTierTargets,
   institutionKPIs,
   onUpdateInstitutionKPI,
-  showToast
+  showToast,
+  locations
 }) => {
   const { rbacMatrix, updateRBAC } = useRBAC();
   const isAdmin = (userRoles || []).includes('Admin');
@@ -215,12 +218,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         <DataManagementWorkflow
           departments={departments}
           departmentMappings={departmentMappings}
+          locations={locations}
           onBulkAddDepts={onBulkAddDepts}
           onBulkActivateStaff={onBulkActivateStaff}
           onAddDepartmentMapping={onAddDepartmentMapping}
           onDeleteDepartmentMapping={onDeleteDepartmentMapping}
           onSyncLocationMappings={onSyncLocationMappings}
           onUpsertLocations={onUpsertLocations}
+          onUpdateUninspectedAssets={onUpdateUninspectedAssets}
         />
       )}
 

@@ -62,6 +62,7 @@ class DataGateway {
     if (loc.description !== undefined) payload.description = loc.description;
     if (loc.contact !== undefined) payload.contact = loc.contact;
     if (loc.totalAssets !== undefined) payload.total_assets = loc.totalAssets;
+    if (loc.uninspectedAssetCount !== undefined) payload.uninspected_asset_count = loc.uninspectedAssetCount;
     if (loc.isActive !== undefined) payload.is_active = loc.isActive;
     
     if (loc.departmentId !== undefined) {
@@ -179,6 +180,7 @@ class DataGateway {
         departmentId: l.department_id,
         supervisorId: l.supervisor_id,
         totalAssets: l.total_assets,
+        uninspectedAssetCount: l.uninspected_asset_count,
         isActive: l.is_active ?? true
       })),
       audits: (audits || []).map((a: any) => ({
@@ -590,6 +592,7 @@ class DataGateway {
         departmentId: l.department_id,
         supervisorId: l.supervisor_id,
         totalAssets: l.total_assets,
+        uninspectedAssetCount: l.uninspected_asset_count,
         isActive: l.is_active ?? true
       })) as Location[];
     }
@@ -618,6 +621,7 @@ class DataGateway {
         departmentId: result.department_id,
         supervisorId: result.supervisor_id,
         totalAssets: result.total_assets,
+        uninspectedAssetCount: result.uninspected_asset_count,
         isActive: result.is_active
       } as Location;
     }
@@ -635,6 +639,7 @@ class DataGateway {
         departmentId: l.department_id,
         supervisorId: l.supervisor_id,
         totalAssets: l.total_assets,
+        uninspectedAssetCount: l.uninspected_asset_count,
         isActive: l.is_active
       })) as Location[];
     }

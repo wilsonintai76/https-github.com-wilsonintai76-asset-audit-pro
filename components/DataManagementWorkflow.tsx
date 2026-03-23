@@ -3,7 +3,7 @@ import React, { useRef } from 'react';
 import { Button } from './ui/button';
 import Papa from 'papaparse';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
-import { Department, Location, DepartmentMapping } from '../types';
+import type { Department, Location, DepartmentMapping } from '../types';
 import { MappingRules } from './MappingRules';
 import { FileSpreadsheet, UserCheck, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -38,21 +38,26 @@ interface DataManagementWorkflowProps {
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
+  onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[]) => Promise<void>;
+  locations: Location[];
 }
 
 export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   departments,
   departmentMappings,
+  locations,
   onBulkAddDepts,
   onBulkActivateStaff,
   onAddDepartmentMapping,
   onDeleteDepartmentMapping,
   onSyncLocationMappings,
   onUpsertLocations,
+  onUpdateUninspectedAssets,
 }) => {
   const staffFileInputRef = useRef<HTMLInputElement>(null);
   const deptFileInputRef = useRef<HTMLInputElement>(null);
   const assetSyncRef = useRef<HTMLInputElement>(null);
+  const uninspectedAssetRef = useRef<HTMLInputElement>(null);
   const bulkMappingRef = useRef<HTMLInputElement>(null);
 
   const [isAssetSyncing, setIsAssetSyncing] = React.useState(false);
@@ -262,6 +267,110 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
       reader.readAsArrayBuffer(file);
     }
   };
+  
+  const handleUninspectedAssetUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !['csv', 'xlsx', 'xls'].includes(ext)) {
+      alert('Please upload a .csv, .xls or .xlsx file.');
+      return;
+    }
+    setIsAssetSyncing(true);
+    setAssetSyncStatus(null);
+
+    const processUninspected = async (rows: string[][]) => {
+      try {
+        if (rows.length < 2) throw new Error('File appears empty.');
+        const header = rows[0].map(h => String(h || '').toLowerCase().trim());
+        const labelCol = header.findIndex(h => h === 'label' || h.includes('label'));
+        const bahagianCol = header.findIndex(h => h.includes('bahagian') || h === 'department' || h === 'unit');
+        const lokasiCol = header.findIndex(h => h.includes('lokasi') || h.includes('location'));
+        
+        if (labelCol === -1 || bahagianCol === -1 || lokasiCol === -1) {
+            throw new Error('Required columns missing. Need "Label", "Bahagian", and "Lokasi".');
+        }
+
+        const seenLabels = new Set<string>();
+        const locationCounts: Record<string, number> = {};
+        
+        for (const row of rows.slice(1)) {
+          const label = String(row[labelCol] || '').trim();
+          const bahagian = String(row[bahagianCol] || '').trim();
+          const lokasi = String(row[lokasiCol] || '').trim();
+          if (!label || !bahagian || !lokasi) continue;
+          if (seenLabels.has(label)) continue;
+          seenLabels.add(label);
+          
+          locationCounts[`${lokasi}|||${bahagian}`] = (locationCounts[`${lokasi}|||${bahagian}`] || 0) + 1;
+        }
+
+        const deptByNorm: Record<string, string> = {};
+        departments.forEach(d => {
+          deptByNorm[d.name.trim().toLowerCase()] = d.id;
+          if (d.abbr) deptByNorm[d.abbr.trim().toLowerCase()] = d.id;
+        });
+
+        const resolveBahagian = (bahagian: string): string | undefined => {
+          const bLow = bahagian.toLowerCase().trim();
+          const dbMap = departmentMappings.find(m => m.sourceName.trim().toLowerCase() === bLow);
+          if (dbMap) return dbMap.targetDepartmentId;
+          if (deptByNorm[bLow]) return deptByNorm[bLow];
+          const bNorm = bLow.replace(/\s*&\s*/g, ' dan ').replace(/\s+/g, ' ');
+          for (const [name, id] of Object.entries(deptByNorm)) {
+            if (name.replace(/\s*&\s*/g, ' dan ').replace(/\s+/g, ' ') === bNorm) return id;
+          }
+          return undefined;
+        };
+
+        const updates: { id: string, uninspectedCount: number }[] = [];
+        for (const [locKey, count] of Object.entries(locationCounts)) {
+          const [lokasiName, bahagian] = locKey.split('|||');
+          const deptId = resolveBahagian(bahagian);
+          if (!deptId) continue;
+          
+          // Try to find the existing location
+          // Note: In a real system we'd use IDs, but here we match by name + dept
+          const existingLoc = locations.find(l => 
+            l.name.toLowerCase() === lokasiName.toLowerCase() && 
+            l.departmentId === deptId
+          );
+          
+          if (existingLoc) {
+            updates.push({ id: existingLoc.id, uninspectedCount: count });
+          }
+        }
+
+        if (updates.length > 0) {
+          await onUpdateUninspectedAssets(updates);
+          setAssetSyncStatus({
+            type: 'success',
+            message: `Successfully updated uninspected counts for ${updates.length} locations.`,
+          });
+        } else {
+          setAssetSyncStatus({ type: 'warn', message: 'No matching locations found in the system. Ensure Master Registry is synced first.' });
+        }
+      } catch (err: any) {
+        setAssetSyncStatus({ type: 'error', message: err.message || 'Update failed' });
+      } finally {
+        setIsAssetSyncing(false);
+        if (uninspectedAssetRef.current) uninspectedAssetRef.current.value = '';
+      }
+    };
+
+    if (ext === 'csv') {
+      Papa.parse(file, { header: false, skipEmptyLines: true, complete: (r) => processUninspected(r.data as string[][]) });
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const buffer = ev.target?.result as ArrayBuffer;
+        const wb = xlsxRead(buffer, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        processUninspected(xlsxUtils.sheet_to_json(ws, { header: 1, defval: '' }) as string[][]);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  };
 
   // ────────────────────────────────────────────────────────────
   // Staff: Optional
@@ -318,7 +427,7 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   // ────────────────────────────────────────────────────────────
   // Render
   // ────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = React.useState<'departments' | 'mappings' | 'sync' | 'staff'>('departments');
+  const [activeTab, setActiveTab] = React.useState<'departments' | 'mappings' | 'sync' | 'uninspected' | 'staff'>('departments');
 
   // ────────────────────────────────────────────────────────────
   // Render
@@ -326,8 +435,9 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   const tabs = [
     { id: 'departments', label: '1. Departments', icon: FileSpreadsheet, color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-100' },
     { id: 'mappings', label: '2. Mappings', icon: RefreshCw, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
-    { id: 'sync', label: '3. Asset Sync', icon: CheckCircle, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-100' },
-    { id: 'staff', label: '4. Staff (Opt)', icon: UserCheck, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' },
+    { id: 'sync', label: '3. Master Registry', icon: CheckCircle, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-100' },
+    { id: 'uninspected', label: '4. Uninspected Assets', icon: AlertCircle, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-100' },
+    { id: 'staff', label: '5. Staff (Opt)', icon: UserCheck, color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' },
   ] as const;
 
   return (
@@ -338,8 +448,8 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           <p className="text-sm text-slate-500">Configure your system data through these sequential modules.</p>
         </div>
               <div>
-                <h4 className="text-sm font-bold text-slate-800">2. Sync Master Asset Registry</h4>
-                <p className="text-[10px] text-slate-500 font-medium">Upload institutional location CSV to set baseline asset targets for the Overview progress table.</p>
+                <h4 className="text-sm font-bold text-slate-800">Master Data Configuration</h4>
+                <p className="text-[10px] text-slate-500 font-medium">Use sequential tabs to synchronize institutional registries.</p>
               </div>
       </div>
 
@@ -369,6 +479,8 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
         {/* Hidden file inputs */}
         <input type="file" ref={staffFileInputRef} className="hidden" accept=".csv" onChange={handleStaffFileUpload} />
         <input type="file" ref={deptFileInputRef} className="hidden" accept=".csv" onChange={handleDeptFileUpload} />
+        <input type="file" ref={assetSyncRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={handleAssetSync} />
+        <input type="file" ref={uninspectedAssetRef} className="hidden" accept=".csv,.xlsx,.xls" onChange={handleUninspectedAssetUpload} />
         <input type="file" ref={bulkMappingRef} className="hidden" accept=".csv" onChange={handleBulkMappingUpload} />
 
         {activeTab === 'departments' && (
@@ -418,12 +530,9 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                   <FileSpreadsheet className="w-4 h-4" /> Import Mapping CSV
                 </button>
                 <Button 
-                variant="outline" 
-                size="sm" 
-                className="rounded-xl text-[10px] font-bold border-indigo-100 text-indigo-600 hover:bg-indigo-50"
-                onClick={() => document.getElementById('loc-upload')?.click()}
+                onClick={() => setActiveTab('sync')}
               >
-                Upload Registry
+                Go to Registry Sync
               </Button>
               </div>
             </div>
@@ -449,11 +558,11 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                 </div>
                 <div>
                   <p className="text-xs font-black text-violet-600 uppercase tracking-widest leading-none mb-1">Module 03</p>
-                  <h4 className="text-lg font-bold text-slate-900 leading-none caps-none">Sync Assets & Locations</h4>
+                  <h4 className="text-lg font-bold text-slate-900 leading-none caps-none">Master Asset Registry Sync</h4>
                 </div>
               </div>
               <p className="text-sm text-slate-600 mb-6 max-w-2xl">
-                Upload [location.csv] or [senarai aset.csv]. The system will use your mapping rules to aggregate asset totals and create location units automatically.
+                Upload [location.csv] or [senarai aset.csv] to define the institutional baseline. This creates location units and sets "Total Asset" targets.
               </p>
               <div className="flex flex-wrap gap-3 items-center">
                 <button
@@ -462,9 +571,53 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                   className="px-6 py-3 bg-violet-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-500/20 hover:bg-violet-700 transition-all flex items-center gap-2 disabled:opacity-60 active:scale-95 leading-none"
                 >
                   <RefreshCw className={`w-4 h-4 ${isAssetSyncing ? 'animate-spin' : ''}`} />
-                  Sync Assets & Locations
+                  Upload Master Registry
                 </button>
                 <input ref={assetSyncRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleAssetSync} />
+                {assetSyncStatus && (
+                  <div className={`flex items-start gap-3 px-5 py-3 rounded-2xl text-xs font-medium border flex-1 max-w-md ${
+                    assetSyncStatus.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : assetSyncStatus.type === 'warn' ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-red-50 border-red-200 text-red-800'
+                  }`}>
+                    {assetSyncStatus.type === 'success'
+                      ? <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
+                      : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+                    <div>
+                      <div className="font-bold">{assetSyncStatus.message}</div>
+                      {assetSyncStatus.detail && <div className="opacity-70 mt-1">{assetSyncStatus.detail}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'uninspected' && (
+          <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+            <div className="p-8 bg-amber-50/50 rounded-3xl border border-amber-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-amber-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-amber-600 uppercase tracking-widest leading-none mb-1">Module 04</p>
+                  <h4 className="text-lg font-bold text-slate-900 leading-none caps-none">Uninspected Assets Tracking</h4>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 mb-6 max-w-2xl">
+                Upload [senarai aset belum diperiksa]. The system will count uninspected assets per location and update the Overview Hub statistics accordingly.
+              </p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button
+                  onClick={() => uninspectedAssetRef.current?.click()}
+                  disabled={isAssetSyncing}
+                  className="px-6 py-3 bg-amber-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 hover:bg-amber-700 transition-all flex items-center gap-2 disabled:opacity-60 active:scale-95 leading-none"
+                >
+                  <FileSpreadsheet className={`w-4 h-4 ${isAssetSyncing ? 'animate-spin' : ''}`} />
+                  Import Uninspected CSV
+                </button>
                 {assetSyncStatus && (
                   <div className={`flex items-start gap-3 px-5 py-3 rounded-2xl text-xs font-medium border flex-1 max-w-md ${
                     assetSyncStatus.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'

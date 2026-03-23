@@ -198,10 +198,15 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         return sum + (isCompleted ? (l.totalAssets || 0) : 0);
       }, 0);
 
+      const uninspected = deptLocs.reduce((sum, l) => sum + (l.uninspectedAssetCount || 0), 0);
+      
+      // Use explicit uninspected count if available (>0), otherwise fallback to (total - inspected)
+      const finalUninspected = uninspected > 0 ? uninspected : Math.max(0, total - inspected);
+
       stats[dept.name] = {
         total,
         inspected,
-        uninspected: total - inspected,
+        uninspected: finalUninspected,
         progress: total > 0 ? (inspected / total) * 100 : 0
       };
     });
