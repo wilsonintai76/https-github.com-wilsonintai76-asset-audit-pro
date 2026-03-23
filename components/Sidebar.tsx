@@ -123,7 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
             )}
             
-            {isAdmin && (
+            {hasPerm('view:admin:dashboard') && (
               <NavItem 
                 icon={ShieldAlert} 
                 label="Admin Hub" 
@@ -135,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {showAuditorDashboard && (
               <NavItem 
                 icon={LayoutDashboard} 
-                label={t('nav.inspecting_officer_dashboard')} 
+                label="Officer Hub" 
                 active={activeView === 'auditor-dashboard'} 
                 onClick={() => { onViewChange('auditor-dashboard'); onClose(); }} 
               />

@@ -17,7 +17,8 @@ export const DEFAULT_RBAC_MATRIX: RBACMatrix = {
   'edit:team': ['Admin', 'Coordinator'],
   'manage:departments': ['Admin', 'Coordinator'],
   'manage:locations': ['Admin', 'Coordinator'],
-  'manage:system': ['Admin']
+  'manage:system': ['Admin'],
+  'view:admin:dashboard': ['Admin']
 };
 
 interface RBACContextType {

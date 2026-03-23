@@ -15,7 +15,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Nav Labels
     'nav.overview': 'Overview',
     'nav.inspection_schedule': 'Inspection Schedule',
-    'nav.inspecting_officer_dashboard': 'Officer Dashboard',
+    'nav.inspecting_officer_dashboard': 'Officer Hub',
     'nav.user_management': 'User Management',
     'nav.departments': 'Departments',
     'nav.asset_locations': 'Asset Locations',
