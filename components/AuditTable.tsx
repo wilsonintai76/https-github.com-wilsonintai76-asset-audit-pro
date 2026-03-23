@@ -64,10 +64,11 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
+  const isAuditor = userRoles.includes('Auditor');
   const isStaff = userRoles.includes('Staff');
 
   // New Logic: Any of these roles *can* audit if they are certified.
-  const hasFieldRole = isAdmin || isCoordinator || isSupervisor || isStaff;
+  const hasFieldRole = isAdmin || isCoordinator || isSupervisor || isAuditor || isStaff;
 
   // Find Current User Data for Certification Check
   const currentUser = users.find(u => u.name === currentUserName);
@@ -86,7 +87,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
   const hasPerm = (perm: string) => hasPermission(perm, userRoles);
 
-  const canEditSchedule = hasPerm('edit:schedule');
+  const canEditDates = hasPerm('edit:audit:date');
+  const canSelfAssignPerm = hasPerm('edit:audit:assign');
   const canViewAllSchedule = hasPerm('view:schedule:all');
   const canViewOwnSchedule = hasPerm('view:schedule:own');
 
@@ -212,7 +214,13 @@ export const AuditTable: React.FC<AuditTableProps> = ({
       return;
     }
     if (!isCertified) {
-      alert("ACTION BLOCKED: Your institutional certification is invalid. Even Supervisors/Coordinators must hold an active certificate to self-assign to field work.");
+      let disableReason = "";
+      if (isSupervisor || isCoordinator || isAuditor) {
+        disableReason = "Certification Required: Supervisors/Coordinators/Auditors must hold a valid certificate to audit.";
+      } else {
+        disableReason = "Certification Required: Your auditor certificate is expired or invalid.";
+      }
+      alert(`ACTION BLOCKED: ${disableReason}`);
       return;
     }
     if (!hasPhases) {
@@ -308,7 +316,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
             <div>
               <h4 className="font-black text-sm uppercase tracking-widest">Self-Assignment Locked</h4>
               <p className="text-xs text-rose-100 font-medium">
-                {isSupervisor || isCoordinator ? 'Management override disabled.' : 'Authorization revoked.'} Your certification is expired.
+                {isSupervisor || isCoordinator || isAuditor ? 'Management override disabled.' : 'Authorization revoked.'} Your certification is expired.
               </p>
             </div>
           </div>
@@ -462,34 +470,59 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                 return (
                   <tr key={audit.id} className={`hover:bg-slate-50/50 transition-colors ${isLocked ? 'bg-slate-50/30 opacity-90' : ''}`}>
                     <td className="px-8 py-6 align-top sticky left-0 bg-white z-10 border-r border-slate-100">
-                      <div className="relative group">
-                        <input 
-                          type="date" 
-                          value={audit.date || ''}
-                          disabled={!hasPhases || isLocked || !canEditSchedule}
-                          onChange={(e) => handleDateChange(audit.id, e.target.value, audit.phaseId)}
-                          className={`w-full px-4 py-2.5 rounded-xl text-xs font-bold border outline-none transition-all ${
-                            isLocked
-                              ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                              : !hasPhases
-                              ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                              : !audit.date 
-                              ? 'bg-amber-50 border-amber-100 text-amber-600 focus:ring-amber-500/20' 
-                              : !isDateValid
-                              ? 'bg-rose-50 border-rose-200 text-rose-600'
-                              : 'bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-500/20 group-hover:bg-white'
-                          }`}
-                        />
-                        {isLocked && (
-                          <div className="absolute -top-3 right-0">
-                            <div className="px-1.5 py-0.5 bg-slate-800 text-white text-[8px] font-black uppercase rounded flex items-center gap-1 shadow-sm">
-                              <Lock className="w-2 h-2" /> Locked
-                            </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="relative group flex items-center gap-2">
+                          <div className="relative flex-1 min-w-[130px]">
+                            <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none z-10 ${
+                              !audit.date ? 'text-amber-500' : 'text-slate-400'
+                            }`} />
+                            <input 
+                              type="date" 
+                              value={audit.date || ''}
+                              disabled={!hasPhases || isLocked || !canEditDates}
+                              onChange={(e) => handleDateChange(audit.id, e.target.value, audit.phaseId)}
+                              className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-xs font-bold border outline-none transition-all ${
+                                isLocked
+                                  ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                  : !hasPhases
+                                  ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                                  : !audit.date 
+                                  ? 'bg-amber-50 border-amber-100 text-amber-600 focus:ring-amber-500/20' 
+                                  : !isDateValid
+                                  ? 'bg-rose-50 border-rose-200 text-rose-600'
+                                  : 'bg-slate-50 border-slate-200 text-slate-900 focus:ring-blue-500/20 group-hover:bg-white'
+                              }`}
+                            />
+                            {isLocked && (
+                              <div className="absolute -top-3 right-0 z-20">
+                                <div className="px-1.5 py-0.5 bg-slate-800 text-white text-[8px] font-black uppercase rounded flex items-center gap-1 shadow-sm">
+                                  <Lock className="w-2 h-2" /> Locked
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {isDateValid === false && (
-                          <div className="absolute -bottom-5 left-0 text-[9px] font-bold text-red-500 whitespace-nowrap">
-                            Date outside phase window
+                          
+                          {!isLocked && canEditDates && hasPhases && !audit.date && (
+                            <button
+                              onClick={() => {
+                                const today = new Date().toISOString().split('T')[0];
+                                const phase = auditPhases.find(p => p.id === audit.phaseId);
+                                if (isDateInValidPhase(today, audit.phaseId)) {
+                                  handleDateChange(audit.id, today, audit.phaseId);
+                                } else if (phase) {
+                                  handleDateChange(audit.id, phase.startDate, audit.phaseId);
+                                }
+                              }}
+                              className="shrink-0 px-3 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 text-[10px] font-black uppercase tracking-widest active:scale-95"
+                              title="Quick Pick: Set to Today or Phase Start"
+                            >
+                              Pick
+                            </button>
+                          )}
+                        </div>
+                        {isDateValid === false && audit.date && (
+                          <div className="text-[9px] font-bold text-red-500 whitespace-nowrap bg-red-50 px-2 py-1 rounded-lg border border-red-100 w-fit">
+                            Outside phase window
                           </div>
                         )}
                       </div>
@@ -541,7 +574,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             audit={audit}
                             users={users}
                             currentUser={currentUser}
-                            canManageAssignments={canEditSchedule && !isLocked}
+                            canManageAssignments={(canEditDates || canSelfAssignPerm) && !isLocked}
                             canSelfAssignSelf={canSelfAssignSelf && !isLocked}
                             userCanAudit={userCanAudit}
                             isCurrentUserAssigned={isCurrentUserAssigned}
@@ -553,6 +586,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             isCertified={isCertified}
                             isSupervisor={isSupervisor}
                             isCoordinator={isCoordinator}
+                            isAuditor={isAuditor}
                             onAssign={handleSelfAssign}
                             onUnassign={onUnassign}
                             getUserContact={getUserContact}
@@ -565,12 +599,12 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
                     <td className="px-8 py-6 align-top text-center">
                       <button 
-                        onClick={() => canEditSchedule && onToggleStatus(audit.id)}
-                        disabled={!canEditSchedule || audit.status === 'Pending'}
-                        className={`inline-flex items-center px-4 py-2 rounded-xl text-[10px] font-black uppercase border tracking-widest transition-all active:scale-95 ${getStatusBadgeStyles(audit.status)} ${!canEditSchedule && 'opacity-50 pointer-events-none'}`}
+                        onClick={() => (canEditDates || isAdmin) && onToggleStatus(audit.id)}
+                        disabled={!(canEditDates || isAdmin) || audit.status === 'Pending'}
+                        className={`inline-flex items-center px-4 py-2 rounded-xl text-[10px] font-black uppercase border tracking-widest transition-all active:scale-95 ${getStatusBadgeStyles(audit.status)} ${!(canEditDates || isAdmin) && 'opacity-50 pointer-events-none'}`}
                       >
                         {audit.status}
-                        {canEditSchedule && audit.status !== 'Pending' && <RotateCcw className="w-2 h-2 ml-2 opacity-40" />}
+                        {(canEditDates || isAdmin) && audit.status !== 'Pending' && <RotateCcw className="w-2 h-2 ml-2 opacity-40" />}
                       </button>
                     </td>
 

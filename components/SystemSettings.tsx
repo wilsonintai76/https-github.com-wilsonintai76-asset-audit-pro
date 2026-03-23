@@ -6,7 +6,7 @@ import { AuditPhasesSettings } from './AuditPhasesSettings';
 import { KPISettings } from './KPISettings';
 import { TierDistributionTable } from './TierDistributionTable';
 import { DataManagementWorkflow } from './DataManagementWorkflow';
-import { Zap, Sliders, Lock, Unlock, AlertCircle, Check } from 'lucide-react';
+import { Zap, Sliders, Lock, Unlock, AlertCircle, Check, Eye, Calendar, UserCheck, Users, UserPlus, Edit } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 
 interface SystemSettingsProps {
@@ -37,6 +37,7 @@ interface SystemSettingsProps {
   onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
   onBulkAddDepts: (depts: Omit<Department, 'id'>[]) => void;
   onBulkActivateStaff: (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => void;
+  maxAssetsPerDay: number;
   onUpdateMaxAssetsPerDay: (val: number) => void;
   maxLocationsPerDay: number;
   onUpdateMaxLocationsPerDay: (val: number) => void;
@@ -52,6 +53,7 @@ interface SystemSettingsProps {
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup: (id: string) => Promise<void>;
   onAutoConsolidate: (threshold: number, excludedIds: string[]) => Promise<void>;
+  onBulkAddPermissions: (auditorDept: string, targetDept: string, isMutual: boolean) => Promise<void>;
   onBulkRemovePermissions: (ids: string[]) => Promise<void>;
   showToast?: (message: string, type?: any) => void;
 }
@@ -107,7 +109,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   const { rbacMatrix, updateRBAC } = useRBAC();
   const isAdmin = (userRoles || []).includes('Admin');
 
-  const activePhase = useMemo(() => {
+  const activePhase = React.useMemo(() => {
     const today = new Date();
     return phases.find(p => {
       const start = new Date(p.startDate);
@@ -118,31 +120,35 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     });
   }, [phases]);
 
-  const handlePermissionChange = (auditorDept: string, targetDept: string, desiredStatus: boolean) => {
-    const existingPerm = permissions.find(p => p.auditorDept === auditorDept && p.targetDept === targetDept);
-    if (existingPerm) {
-      if (existingPerm.isActive !== desiredStatus) {
-        onTogglePermission(existingPerm.id, desiredStatus);
-      }
-    } else {
-      if (desiredStatus) {
-        onAddPermission(auditorDept, targetDept, false);
-      }
-    }
-  };
+  const [activeRole, setActiveRole] = React.useState<UserRole>('Admin');
 
   const PERMISSIONS_LIST = [
-    { id: 'view:overview', label: 'Institutional Overview', category: 'General' },
-    { id: 'view:schedule:all', label: 'Audit Schedule (All Depts)', category: 'Audit' },
-    { id: 'view:schedule:own', label: 'Audit Schedule (Own Dept)', category: 'Audit' },
-    { id: 'edit:schedule', label: 'Audit Assignment & Dates', category: 'Audit' },
-    { id: 'view:audit:assigned', label: 'Auditor Dashboard', category: 'Audit', hint: 'Requires Certification' },
-    { id: 'view:team:all', label: 'Team Management (View All)', category: 'Team' },
-    { id: 'view:team:own', label: 'Team Management (Own Dept)', category: 'Team' },
-    { id: 'edit:team', label: 'Add/Edit Team & Certificates', category: 'Team' },
-    { id: 'manage:departments', label: 'Department Registry', category: 'Data' },
-    { id: 'manage:locations', label: 'Location Registry', category: 'Data' },
-    { id: 'manage:system', label: 'System Settings', category: 'System' },
+    { id: 'view:overview', label: 'Institutional Overview', category: 'General', actions: [{ id: 'view:overview', label: 'Overview Content', icon: Eye }] },
+    { id: 'view:schedule:all', label: 'Audit Schedule (All Depts)', category: 'Audit', actions: [{ id: 'view:schedule:all', label: 'View All Depts', icon: Eye }] },
+    { id: 'view:schedule:own', label: 'Audit Schedule (Own Dept)', category: 'Audit', actions: [{ id: 'view:schedule:own', label: 'View Own Dept', icon: Eye }] },
+    { 
+      id: 'edit:schedule', 
+      label: 'Audit Planning & Self-Assign', 
+      category: 'Audit', 
+      actions: [
+        { id: 'edit:audit:date', label: '📅 Set Date', icon: Calendar, hint: 'Scheduling' },
+        { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Auditing' }
+      ] 
+    },
+    { id: 'view:audit:assigned', label: 'Auditor Dashboard', category: 'Audit', actions: [{ id: 'view:audit:assigned', label: 'Access Dashboard', icon: Eye, hint: 'Requires Cert' }] },
+    { 
+      id: 'view:team:group', 
+      label: 'Team Management', 
+      category: 'Team', 
+      actions: [
+        { id: 'view:team:all', label: 'View All', icon: Eye },
+        { id: 'view:team:own', label: 'View Own', icon: Users },
+        { id: 'edit:team', label: 'Add/Edit', icon: UserPlus }
+      ] 
+    },
+    { id: 'manage:departments', label: 'Department Registry', category: 'Data', actions: [{ id: 'manage:departments', label: 'Manage Entries', icon: Edit }] },
+    { id: 'manage:locations', label: 'Location Registry', category: 'Data', actions: [{ id: 'manage:locations', label: 'Manage Entries', icon: Edit }] },
+    { id: 'manage:system', label: 'System Settings', category: 'System', actions: [{ id: 'manage:system', label: 'Admin Access', icon: Lock }] },
   ];
 
   const toggleMatrixPerm = async (permId: string, role: UserRole) => {
@@ -166,7 +172,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     });
   };
 
-  const ALL_ROLES: UserRole[] = ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
+  const ALL_ROLES: UserRole[] = ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
@@ -237,68 +243,91 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       />
 
       {isAdmin && rbacMatrix && (
-        <div className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center gap-4 mb-8">
-                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-                    <Lock className="w-6 h-6" />
-                </div>
-                <div>
-                    <h3 className="text-xl font-bold text-slate-900">RBAC Matrix Table</h3>
-                    <p className="text-sm text-slate-500">Fine-tune institutional access levels per role and feature.</p>
+        <div className="bg-white rounded-[40px] p-8 md:p-12 border border-slate-200 shadow-xl animate-in fade-in slide-in-from-bottom-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+                <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 bg-indigo-600 rounded-[20px] flex items-center justify-center text-white shadow-2xl shadow-indigo-500/40">
+                        <Lock className="w-7 h-7" />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">Robust RBAC Matrix</h3>
+                        <p className="text-sm text-slate-500 font-medium">Tab-based granular access control for institutional security.</p>
+                    </div>
                 </div>
             </div>
 
-            <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[800px]">
+            {/* Role Tabs */}
+            <div className="flex flex-wrap gap-2 mb-10 p-1.5 bg-slate-100/80 rounded-2xl w-fit">
+              {ALL_ROLES.map(role => (
+                <button
+                  key={role}
+                  onClick={() => setActiveRole(role)}
+                  className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                    activeRole === role 
+                    ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-200' 
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+                  }`}
+                >
+                  {role === 'Staff' ? 'Staff (Guest)' : role === 'Auditor' ? 'Auditor (Certified)' : role}
+                </button>
+              ))}
+            </div>
+
+            <div className="overflow-hidden border border-slate-100 rounded-[32px] bg-slate-50/30">
+                <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="border-b border-slate-100">
-                            <th className="py-4 px-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Feature / View</th>
-                            {ALL_ROLES.map(role => (
-                                <th key={role} className="py-4 px-4 text-center text-[10px] font-black uppercase text-slate-400 tracking-widest">{role}</th>
-                            ))}
+                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                            <th className="py-6 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest w-1/3">Feature / View</th>
+                            <th className="py-6 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Robust Access Control / Actions</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
-                        {PERMISSIONS_LIST.map(perm => (
-                            <tr key={perm.id} className="hover:bg-slate-50/50 transition-colors">
-                                <td className="py-4 px-4">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-bold text-slate-700">{perm.label}</span>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <span className="text-[8px] font-black uppercase tracking-tighter text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100">{perm.category}</span>
-                                            {perm.hint && <span className="text-[9px] text-slate-400 italic">({perm.hint})</span>}
+                    <tbody className="divide-y divide-slate-100">
+                        {PERMISSIONS_LIST.map(feature => (
+                            <tr key={feature.id} className="hover:bg-white transition-colors group">
+                                <td className="py-6 px-8">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-sm font-bold text-slate-800">{feature.label}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[8px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">{feature.category}</span>
                                         </div>
                                     </div>
                                 </td>
-                                {ALL_ROLES.map(role => {
-                                    const isChecked = rbacMatrix[perm.id]?.includes(role);
-                                    const isLocked = role === 'Admin' && perm.id === 'manage:system';
-
-                                    return (
-                                        <td key={role} className="py-4 px-4 text-center">
+                                <td className="py-6 px-8">
+                                    <div className="flex flex-wrap items-center justify-center gap-4">
+                                        {feature.actions.map(action => {
+                                          const isChecked = rbacMatrix[action.id]?.includes(activeRole);
+                                          const isSystemLocked = activeRole === 'Admin' && action.id === 'manage:system';
+                                          const Icon = action.icon;
+                                          
+                                          return (
                                             <button
-                                                onClick={() => !isLocked && toggleMatrixPerm(perm.id, role)}
-                                                className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center mx-auto ${
-                                                    isChecked 
-                                                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
-                                                    : 'bg-white border-slate-200 text-transparent hover:border-slate-300'
-                                                } ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer active:scale-90'}`}
+                                              key={action.id}
+                                              disabled={isSystemLocked}
+                                              onClick={() => toggleMatrixPerm(action.id, activeRole)}
+                                              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${
+                                                isChecked
+                                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20 active:scale-95'
+                                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600 active:scale-95'
+                                              } ${isSystemLocked ? 'opacity-50 cursor-not-allowed border-indigo-100 bg-indigo-50 text-indigo-300 shadow-none' : ''}`}
                                             >
-                                                <Check className="w-4 h-4" />
+                                              <Icon className="w-4 h-4" />
+                                              {action.label}
+                                              {action.hint && <span className={`text-[8px] opacity-60 font-medium normal-case ${isChecked ? 'text-indigo-100' : 'text-slate-400'}`}>({action.hint})</span>}
                                             </button>
-                                        </td>
-                                    );
-                                })}
+                                          );
+                                        })}
+                                    </div>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
-            <div className="mt-8 p-4 bg-slate-50 rounded-2xl flex items-start gap-3 border border-slate-100">
-                <AlertCircle className="w-5 h-5 text-indigo-500 shrink-0" />
-                <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                    Access is strictly enforced across the platform. Changes to the matrix take effect immediately for all sessions. 
-                    <span className="font-bold text-indigo-600 ml-1 underline">Note:</span> Staff roles without "Coordinator" or "Supervisor" designation will still default to "Staff" permissions even if they are within the same department.
+            <div className="mt-8 p-5 bg-indigo-50/50 rounded-2xl flex items-start gap-4 border border-indigo-100/50">
+                <AlertCircle className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                  <span className="font-black text-indigo-700 uppercase tracking-widest mr-2 underline">Institutional Note:</span> 
+                  Permissions applied to <span className="font-bold text-slate-900">{activeRole === 'Staff' ? 'Staff (Guest)' : activeRole === 'Auditor' ? 'Auditor (Certified)' : activeRole}</span> are strictly enforced. Auditor self-assignment REQUIRES an active institutional certificate, even if the permission is enabled here. Other roles like Supervisors or Coordinators can manage dates and assignments without certified status for administrative oversight.
                 </p>
             </div>
         </div>

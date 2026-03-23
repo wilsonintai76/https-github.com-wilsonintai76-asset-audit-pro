@@ -204,20 +204,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                 <button
                   onClick={() => {
-                    const auditorUser = {
-                        id: 'u-auditor',
-                        name: 'Demo Auditor',
-                        email: 'auditor@demo.local',
-                        roles: ['Staff'],
-                        designation: 'Staff',
-                        departmentId: 'd2',
+                    const adminUser = {
+                        id: 'u-admin',
+                        name: 'Institutional Admin (Demo)',
+                        email: 'admin@demo.local',
+                        roles: ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
+                        designation: 'Admin',
+                        departmentId: 'd1',
                         status: 'Active',
                         isVerified: true,
                         certificationIssued: '2026-01-01',
                         certificationExpiry: '2027-01-01'
                     };
                     localStorage.setItem('inspectable_is_demo', 'true');
-                    localStorage.setItem('inspectable_demo_user', JSON.stringify(auditorUser));
+                    localStorage.setItem('inspectable_demo_user', JSON.stringify(adminUser));
                     window.location.reload();
                   }}
                   className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-white border-2 border-indigo-100 text-indigo-600 rounded-2xl text-lg font-bold hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-lg shadow-indigo-100/30"

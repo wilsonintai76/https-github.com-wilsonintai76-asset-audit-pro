@@ -58,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
+  const isAuditor = userRoles.includes('Auditor');
   const isStaff = userRoles.includes('Staff');
 
   const hasPerm = (perm: string) => hasPermission(perm, userRoles);

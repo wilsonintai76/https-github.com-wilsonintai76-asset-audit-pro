@@ -64,6 +64,7 @@ const App: React.FC = () => {
   const isAdmin = (currentUser?.roles || []).includes('Admin');
   const isCoordinator = (currentUser?.roles || []).includes('Coordinator');
   const isSupervisor = (currentUser?.roles || []).includes('Supervisor');
+  const isAuditor = (currentUser?.roles || []).includes('Auditor');
 
   // UI State
   const [selectedDept, setSelectedDept] = useState<string>('All');
@@ -294,7 +295,7 @@ const App: React.FC = () => {
       
       const auditors = users.filter(u => 
         u.departmentId === dept.id &&
-        ['Staff', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
+        ['Staff', 'Auditor', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
         u.status === 'Active'
       ).length;
 
@@ -331,7 +332,7 @@ const App: React.FC = () => {
         const totalAssets = Math.max(d.totalAssets || 0, calculatedAssets);
         const auditors = allUsers.filter(u => 
           u.departmentId === d.id &&
-          ['Staff', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
+          ['Staff', 'Auditor', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
           u.status === 'Active'
         ).length;
         
@@ -423,7 +424,7 @@ const App: React.FC = () => {
     } else if (!isAdmin && isCertified) {
       setViewState('app');
       setActiveView('auditor-dashboard');
-    } else if (!isAdmin && !(finalUser.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+    } else if (!isAdmin && !(finalUser.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor', 'Auditor'].includes(r))) {
       setViewState('app');
       setActiveView('profile');
     } else {
@@ -436,9 +437,10 @@ const App: React.FC = () => {
 
   const determineMockRoles = (role: UserRole): UserRole[] => {
     switch (role) {
-      case 'Admin': return ['Admin', 'Coordinator', 'Supervisor', 'Staff'];
-      case 'Coordinator': return ['Coordinator', 'Supervisor', 'Staff'];
-      case 'Supervisor': return ['Supervisor', 'Staff'];
+      case 'Admin': return ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'];
+      case 'Coordinator': return ['Coordinator', 'Supervisor', 'Auditor', 'Staff'];
+      case 'Supervisor': return ['Supervisor', 'Auditor', 'Staff'];
+      case 'Auditor': return ['Auditor', 'Staff'];
       case 'Staff': return ['Staff'];
       default: return ['Staff'];
     }
@@ -497,6 +499,11 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      if (localStorage.getItem('inspectable_is_demo') === 'true') {
+        localStorage.removeItem('inspectable_is_demo');
+        localStorage.removeItem('inspectable_demo_user');
+        localStorage.removeItem('inspectable_demo_db');
+      }
       await authService.logout();
     } catch (e) {
       console.error("[App] Logout error:", e);
@@ -531,7 +538,7 @@ const App: React.FC = () => {
             setActiveView('profile');
           } else if (!isAdmin && isCertified) {
             setActiveView('auditor-dashboard');
-          } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+          } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor', 'Auditor'].includes(r))) {
             setActiveView('profile');
           } else {
             setActiveView('overview');
@@ -579,7 +586,7 @@ const App: React.FC = () => {
               const isAdmin = (user.roles || []).includes('Admin');
               if (!isAdmin && isCertified) {
                 setActiveView('auditor-dashboard');
-              } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+              } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor', 'Auditor'].includes(r))) {
                 setActiveView('profile');
               } else {
                 setActiveView('overview');
@@ -653,7 +660,7 @@ const App: React.FC = () => {
               const isAdmin = user.roles.includes('Admin');
               if (!isAdmin && isCertified) {
                 setActiveView('auditor-dashboard');
-              } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor'].includes(r))) {
+              } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor', 'Auditor'].includes(r))) {
                 setActiveView('profile');
               } else {
                 setActiveView('overview');

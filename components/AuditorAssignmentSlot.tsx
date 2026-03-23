@@ -19,6 +19,7 @@ interface AuditorAssignmentSlotProps {
   isCertified: boolean;
   isSupervisor: boolean;
   isCoordinator: boolean;
+  isAuditor: boolean;
   onAssign: (id: string, slot: 1 | 2, date: string, phaseId: string) => void;
   onUnassign: (id: string, slot: 1 | 2) => void;
   getUserContact: (userId: string) => string | null;

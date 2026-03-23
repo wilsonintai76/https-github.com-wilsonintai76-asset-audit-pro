@@ -94,7 +94,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
         activePhase={activePhase}
         description="Configure institutional structure, departments, and unit heads."
       >
-        {isAdmin && (
+        {canManage && (
           <button
             onClick={startAdd}
             className={`px-5 py-2.5 rounded-2xl text-sm font-bold shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 ${activePhase

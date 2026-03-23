@@ -24,23 +24,7 @@ export const DemoBanner: React.FC = () => {
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={resetDemoData}
-            className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold bg-white/10 hover:bg-white/20 rounded-full transition-all backdrop-blur-md border border-white/10"
-            title="Reset all demo data to initial state"
-          >
-            <RefreshCcw className="w-3 h-3" />
-            Reset Data
-          </button>
-          <button 
-            onClick={exitDemoMode}
-            className="flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold bg-white text-indigo-600 hover:bg-indigo-50 rounded-full transition-all shadow-sm"
-          >
-            <LogOut className="w-3 h-3" />
-            Exit Demo
-          </button>
-        </div>
+        {/* Actions removed - use Logout to exit and reset */}
       </div>
     </div>
   );

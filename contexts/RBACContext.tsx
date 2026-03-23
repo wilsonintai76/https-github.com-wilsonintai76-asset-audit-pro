@@ -3,11 +3,12 @@ import { RBACMatrix, UserRole } from '../types';
 import { gateway } from '../services/dataGateway';
 
 export const DEFAULT_RBAC_MATRIX: RBACMatrix = {
-  'view:overview': ['Admin', 'Coordinator', 'Supervisor', 'Staff'],
+  'view:overview': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
   'view:schedule:all': ['Admin', 'Coordinator'],
-  'view:schedule:own': ['Admin', 'Coordinator', 'Supervisor', 'Staff'],
-  'edit:schedule': ['Admin', 'Coordinator', 'Supervisor'],
-  'view:audit:assigned': ['Admin', 'Coordinator', 'Supervisor', 'Staff'],
+  'view:schedule:own': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
+  'edit:audit:date': ['Admin', 'Coordinator', 'Supervisor'],
+  'edit:audit:assign': ['Admin', 'Coordinator', 'Supervisor', 'Auditor'],
+  'view:audit:assigned': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
   'view:team:all': ['Admin', 'Coordinator'],
   'view:team:own': ['Admin', 'Coordinator', 'Supervisor'],
   'edit:team': ['Admin', 'Coordinator'],
