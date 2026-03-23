@@ -156,7 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canAccessDepartments && (
               <NavItem 
                 icon={Network} 
-                label="Departments" 
+                label={t('nav.departments')} 
                 active={activeView === 'departments'} 
                 onClick={() => { onViewChange('departments'); onClose(); }} 
               />
@@ -165,7 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canAccessLocations && (
               <NavItem 
                 icon={MapPin} 
-                label="Asset Locations" 
+                label={t('nav.asset_locations')} 
                 active={activeView === 'locations'} 
                 onClick={() => { onViewChange('locations'); onClose(); }} 
               />
