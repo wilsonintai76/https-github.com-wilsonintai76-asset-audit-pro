@@ -33,7 +33,6 @@
 ### ⚙️ Automation & Pipeline
 - **Auto-Versioning**: Semantic versioning (SemVer) automated via GitHub Actions on every push.
 - **Cloudflare Integration**: Built for edge deployment via Cloudflare Pages.
-- **Hybrid Deployment**: Support for Docker-based self-hosted services alongside cloud-based Supabase persistence.
 
 ## 🛠️ Technology Stack
 
@@ -77,8 +76,7 @@
 ## 🚢 CI/CD Workflow
 
 This project uses an automated CI/CD pipeline:
-- **Pushes to `master`**: Automatically bumps the patch version in `package.json`, creates a GitHub Tag, and triggers a Cloudflare Pages deployment.
-- **Self-Hosted Components**: Uses a `self-hosted` runner for Docker-based server synchronization as defined in `.github/workflows/deploy.yml`.
+- **Pushes to `main`**: Automatically bumps the patch version in `package.json`, creates a GitHub Tag, and triggers a Cloudflare Pages deployment.
 
 ### 🔢 Versioning Standards (SemVer)
 The system follows [Semantic Versioning](https://semver.org/) automatically based on your commit messages:

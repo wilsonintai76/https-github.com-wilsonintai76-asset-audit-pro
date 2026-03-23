@@ -3,7 +3,7 @@ name: Auto Version Bump
 on:
   push:
     branches:
-      - master
+      - main
     paths-ignore:
       - 'package.json'
       - '.github/workflows/**'
@@ -48,4 +48,4 @@ jobs:
           
       - name: Push Changes
         run: |
-          git push origin master --follow-tags
+          git push origin main --follow-tags
