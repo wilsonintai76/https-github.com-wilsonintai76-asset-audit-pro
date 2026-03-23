@@ -96,8 +96,8 @@ export const AuditorAssignmentSlot: React.FC<AuditorAssignmentSlotProps> = ({
     if (!canAssignOthers) return [];
     
     return users.filter(officer => {
-      // 1. Basic role/cert/past check
-      if (officer.role !== 'Auditor' || !officer.certificationExpiry || new Date(officer.certificationExpiry) <= new Date() || isPast) return false;
+      // 1. Basic cert/past check (Role is decoupled, Admin decides via RBAC)
+      if (!officer.certificationExpiry || new Date(officer.certificationExpiry) <= new Date() || isPast) return false;
       
       // 2. Conflict Check (Entity level)
       const myEntityId = getEntityName(officer.departmentId || '');

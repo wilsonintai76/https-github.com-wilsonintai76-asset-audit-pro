@@ -283,7 +283,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     }
 
     const eligibleOfficers = users.filter(u => {
-      return u.role === 'Auditor' && u.certificationExpiry && new Date(u.certificationExpiry) > new Date();
+      // Include any user that is certified, regardless of role (Admin decides via RBAC)
+      return u.certificationExpiry && new Date(u.certificationExpiry) > new Date();
     });
 
     if (eligibleOfficers.length === 0) {
