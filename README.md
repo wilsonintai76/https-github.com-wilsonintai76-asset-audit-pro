@@ -12,6 +12,7 @@
 - **Real-time Stats**: Track global asset counts, auditor availability, and overall compliance progress.
 - **KPI Tiering**: Dynamic classification of departments into **Small/Medium/Large** tiers with custom compliance targets.
 - **Phase Management**: Multi-phase audit scheduling with automated progress tracking.
+- **Smart Auto-Assignment**: Institutional-grade allocation engine that automatically assigns certified officers to inspections based on cross-audit permissions and workload balancing (v1.9.0).
 
 ### 🏢 Consolidation Units
 - **Auto-First Grouping**: Instantly consolidate small, unbalanced departments based on a dynamic asset threshold into perfectly balanced generic units (e.g., Group A, Group B).
