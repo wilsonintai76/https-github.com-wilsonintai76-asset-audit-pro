@@ -140,9 +140,9 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     },
     { id: 'view:audit:assigned', label: 'Officer Dashboard', category: 'Inspection', actions: [{ id: 'view:audit:assigned', label: 'Access Dashboard', icon: Eye, hint: 'Requires Cert' }] },
     { 
-      id: 'view:team:group', 
-      label: 'Team Management', 
-      category: 'Team', 
+      id: 'view:users:group', 
+      label: 'User Management', 
+      category: 'Users', 
       actions: [
         { id: 'view:team:all', label: 'View All', icon: Eye },
         { id: 'view:team:own', label: 'View Own', icon: Users },

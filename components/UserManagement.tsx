@@ -8,7 +8,7 @@ import { gateway } from '../services/dataGateway';
 import { Filter, Plus, User as UserIcon, Check, X, Award, Stamp, Pencil, Trash2, Key, ChevronDown } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
-interface TeamManagementProps {
+interface UserManagementProps {
   users: User[];
   onAddMember: (user: User) => void;
   onBulkAddMembers: (users: User[]) => void;
@@ -26,7 +26,7 @@ interface TeamManagementProps {
   currentUserId?: string;
 }
 
-export const TeamManagement: React.FC<TeamManagementProps> = ({ 
+export const UserManagement: React.FC<UserManagementProps> = ({ 
   users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert, phases = [], selectedDeptFilter: propSelectedDeptFilter, onDeptFilterChange, currentUserId 
 }) => {
   const { hasPermission, rbacMatrix } = useRBAC();
@@ -250,7 +250,7 @@ export const TeamManagement: React.FC<TeamManagementProps> = ({
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Team Management"
+        title="User Management"
         icon={UserIcon}
         activePhase={activePhase}
         description="Manage user access, roles, and institutional certification status."

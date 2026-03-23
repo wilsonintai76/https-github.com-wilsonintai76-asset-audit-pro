@@ -16,7 +16,7 @@ export const SetupGuide: React.FC = () => {
     },
     { 
       title: "03. Authorize Audit Teams", 
-      desc: "Go to Team Management and issue 'Auditor Certificates'. Staff cannot self-assign to audits if their certificate is expired or missing.",
+      desc: "Go to User Management and issue 'Auditor Certificates'. Staff cannot self-assign to audits if their certificate is expired or missing.",
       tip: "Admin signature is required for certificate validity."
     },
     { 

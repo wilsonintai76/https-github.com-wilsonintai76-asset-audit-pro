@@ -10,7 +10,7 @@ import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
 import { DemoBanner } from './components/DemoBanner';
 import { NotificationCenter } from './components/NotificationCenter';
-import { TeamManagement } from './components/TeamManagement';
+import { UserManagement } from './components/UserManagement';
 import { OverviewDashboard } from './components/OverviewDashboard';
 import { BuildingManagement } from './components/BuildingManagement';
 import { AuditorDashboard } from './components/AuditorDashboard';
@@ -2417,7 +2417,7 @@ const App: React.FC = () => {
             </div>
           )}
           {activeView === 'team' && (
-            <TeamManagement
+            <UserManagement
               users={visibleUsers}
               departments={visibleDepartments}
               onAddMember={handleAddMember}

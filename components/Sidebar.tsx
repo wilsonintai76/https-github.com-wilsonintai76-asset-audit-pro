@@ -147,7 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canAccessTeam && (
               <NavItem 
                 icon={Users} 
-                label={t('nav.team_management')} 
+                label={t('nav.user_management')} 
                 active={activeView === 'team'} 
                 onClick={() => { onViewChange('team'); onClose(); }} 
               />
