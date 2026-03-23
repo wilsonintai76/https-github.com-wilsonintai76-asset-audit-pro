@@ -14,7 +14,7 @@ export interface AuditSchedule {
 export type Designation = 'Head Of Department' | 'Coordinator' | 'Supervisor' | 'Staff';
 
 export type UserRole = 'Admin' | 'Coordinator' | 'Supervisor' | 'Auditor' | 'Staff';
-export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard' | 'buildings';
+export type AppView = 'overview' | 'schedule' | 'team' | 'settings' | 'departments' | 'locations' | 'profile' | 'knowledge-base' | 'auditor-dashboard' | 'buildings' | 'admin-dashboard';
 
 export interface User {
   id: string;
@@ -77,6 +77,7 @@ export interface Location {
   contact: string;
   totalAssets?: number;
   isActive?: boolean;
+  status?: 'Active' | 'Archived' | 'Pending_Delete';
 }
 
 export interface DashboardConfig {
@@ -144,7 +145,7 @@ export interface DepartmentMapping {
 
 export interface SystemActivity {
   id: string;
-  type: 'SCHEDULE_DATE' | 'AUDITOR_ASSIGNED' | 'LOCATION_CREATED' | 'AUDIT_COMPLETED' | 'ADMIN_RESET';
+  type: 'SCHEDULE_DATE' | 'AUDITOR_ASSIGNED' | 'LOCATION_CREATED' | 'LOCATION_UPDATED' | 'LOCATION_ARCHIVED' | 'LOCATION_DELETED' | 'AUDIT_COMPLETED' | 'ADMIN_RESET' | 'CREATE' | 'UPDATE' | 'DELETE' | 'ARCHIVE' | 'LOGIN_TASK_COMPLETED';
   userId: string | null;
   auditId?: string;
   message: string;

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Location, UserRole, Department, User, AuditPhase, Building } from '../types';
+import { Location, UserRole, Department, User, AuditPhase, Building, AuditSchedule } from '../types';
 import { useRBAC } from '../contexts/RBACContext';
 import { Network, ChevronDown, MapPin, Landmark, User as UserIcon, Phone, Pencil, Trash2, MapPinned, Building2, Layers, Plus } from 'lucide-react';
 import { LocationModal } from './LocationModal';
@@ -17,10 +17,11 @@ interface LocationManagementProps {
   phases?: AuditPhase[];
   buildings: Building[];
   onAddBuilding: (building: Partial<Building>) => Promise<Building>;
+  schedules: AuditSchedule[];
 }
 
 export const LocationManagement: React.FC<LocationManagementProps> = ({ 
-  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [], buildings, onAddBuilding
+  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [], buildings, onAddBuilding, schedules
 }) => {
   const { rbacMatrix } = useRBAC();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -320,9 +321,27 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                             </button>
                           )}
                           {canManage && (
-                            <button onClick={() => onDelete(loc.id)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            (() => {
+                              const isAssigned = schedules.some(s => s.locationId === loc.id && (s.date || s.auditor1Id || s.auditor2Id));
+                              const isPendingDelete = loc.status === 'Pending_Delete';
+                              
+                              return (
+                                <button 
+                                  onClick={() => !isAssigned && onDelete(loc.id)} 
+                                  disabled={isAssigned}
+                                  className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-all ${
+                                    isAssigned 
+                                      ? 'bg-slate-50 border-slate-100 text-slate-200 cursor-not-allowed' 
+                                      : isPendingDelete
+                                        ? 'bg-amber-50 border-amber-200 text-amber-500'
+                                        : 'bg-white border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200'
+                                  }`}
+                                  title={isAssigned ? "Cannot delete: Location has active assignments" : isPendingDelete ? "Archive request pending" : "Request Archiving"}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              );
+                            })()
                           )}
                         </div>
                       )}

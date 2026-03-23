@@ -17,7 +17,8 @@ import {
   LogOut,
   Building,
   LayoutDashboard,
-  Languages
+  Languages,
+  ShieldAlert
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -119,6 +120,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 label={t('nav.overview')} 
                 active={activeView === 'overview'} 
                 onClick={() => { onViewChange('overview'); onClose(); }} 
+              />
+            )}
+            
+            {isAdmin && (
+              <NavItem 
+                icon={ShieldAlert} 
+                label="Admin Hub" 
+                active={activeView === 'admin-dashboard'} 
+                onClick={() => { onViewChange('admin-dashboard'); onClose(); }} 
               />
             )}
             

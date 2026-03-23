@@ -21,6 +21,7 @@ import { UserProfile } from './components/UserProfile';
 import { LandingPage } from './components/LandingPage';
 import { KnowledgeBase } from './components/KnowledgeBase';
 import { AutoUpdater } from './components/AutoUpdater';
+import { AdminDashboard } from './components/AdminDashboard';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X } from 'lucide-react';
 
@@ -787,6 +788,7 @@ const App: React.FC = () => {
       });
       setSchedules(prev => [...prev, newAudit]);
       showToast('Audit added successfully');
+      logActivity('CREATE', `Created audit schedule for ${dept?.abbr || audit.departmentId}`, newAudit.id, { auditId: newAudit.id });
       return newAudit;
     } catch (e) {
       showError(e, 'Failed to Add Audit');
@@ -946,8 +948,10 @@ const App: React.FC = () => {
     customConfirm("Delete Audit", "Are you sure you want to delete this audit schedule? This action cannot be undone.", async () => {
       try {
         await gateway.deleteAudit(id);
+        const audit = schedules.find(s => s.id === id);
         setSchedules(prev => prev.filter(s => s.id !== id));
         showToast('Audit deleted successfully');
+        logActivity('DELETE', `Deleted audit schedule: ${audit?.id || id}`, undefined, { auditId: id });
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -1040,18 +1044,19 @@ const App: React.FC = () => {
       const updatedLocs = await gateway.getLocations();
       setLocations(updatedLocs);
       
-      logActivity('LOCATION_CREATED', `New location created: ${loc.name} (${loc.departmentId})`);
+      logActivity('LOCATION_CREATED', `New location created: ${newLoc.name} (${newLoc.departmentId})`);
       
       setNotifications(prev => [{
         id: `auto-${Date.now()}`,
         title: 'Auto-Schedule Created',
-        message: `New audit schedule generated for ${loc.name}.`,
+        message: `New audit schedule generated for ${newLoc.name}.`,
         timestamp: new Date().toISOString(),
         type: 'success',
         read: false
       }, ...prev]);
       showToast('Location added successfully');
       await refreshDepartmentTotals();
+      logActivity('CREATE', `Created location: ${newLoc.name}`, undefined, { locationId: newLoc.id });
     } catch (e) {
       showError(e, 'Failed to Add Location');
     }
@@ -1283,6 +1288,7 @@ const App: React.FC = () => {
       }
       showToast('Location updated successfully');
       await refreshDepartmentTotals();
+      logActivity('UPDATE', `Updated location: ${oldLoc?.name || id}`, undefined, { locationId: id, updates });
     } catch (e) {
       showError(e, 'Location Update Failed');
     }
@@ -1290,45 +1296,72 @@ const App: React.FC = () => {
 
   const handleDeleteLoc = async (id: string) => {
     const loc = locations.find(l => String(l.id) === String(id));
+    if (!loc) return;
 
-    if (loc) {
-      const locAudits = schedules.filter(s => s.locationId === loc.id && s.departmentId === loc.departmentId);
-      const hasActiveAssignments = locAudits.some(s => s.auditor1Id || s.auditor2Id);
+    const locAudits = schedules.filter(s => s.locationId === loc.id && s.departmentId === loc.departmentId);
+    const hasActiveAssignments = locAudits.some(s => s.date || s.auditor1Id || s.auditor2Id);
 
-      if (hasActiveAssignments) {
-        customAlert("Cannot delete this location because it has active audit assignments. Please unassign auditors first.");
+    if (hasActiveAssignments) {
+        customAlert("Action Blocked: This location is currently bound to an audit (Date or Officer assigned). Please unassign them before decommissioning.");
         return;
-      }
     }
 
-    customConfirm("Delete Location", `Are you sure you want to delete ${loc?.name || 'this location'}?`, async () => {
-      try {
-        await gateway.deleteLocation(id);
-        setLocations(await gateway.getLocations());
-        showToast('Location deleted successfully');
-        await refreshDepartmentTotals();
-      } catch (e: any) {
-        console.error("Delete failed:", e);
-        if (e?.code === '23503') {
-          customConfirm("Force Delete", "This location has pending audit schedules (unassigned). Do you want to delete the location and these pending schedules?", async () => {
-            try {
-              if (loc) {
-                await gateway.forceDeleteLocation(id);
-              } else {
-                await gateway.deleteLocation(id);
-              }
-              setLocations(await gateway.getLocations());
-              setSchedules(await gateway.getAudits());
-              customAlert("Location and pending schedules deleted successfully.");
-            } catch (forceErr: any) {
-              showError(forceErr, 'Force Deletion Failed');
-            }
-          });
-        } else {
+    if (isAdmin) {
+      customConfirm("Permanently Delete Location?", `Are you sure you want to permanently remove "${loc.name}"? This action is irreversible.`, async () => {
+        try {
+          const unassignedAudits = locAudits.filter(s => !s.date && !s.auditor1Id && !s.auditor2Id);
+          if (unassignedAudits.length > 0) {
+              await gateway.forceDeleteLocation(id);
+          } else {
+              await gateway.deleteLocation(id);
+          }
+          setLocations(prev => prev.filter(l => l.id !== id));
+          showToast('Location permanently deleted');
+          await refreshDepartmentTotals();
+          logActivity('DELETE', `Permanently deleted location: ${loc.name}`, undefined, { locationId: id });
+        } catch (e: any) {
           showError(e, 'Deletion Failed');
         }
-      }
-    });
+      });
+    } else {
+      customConfirm("Request Decommission?", `Are you sure you want to request archiving for "${loc.name}"? An admin must approve this.`, async () => {
+        try {
+          const updated = await gateway.updateLocation(id, { status: 'Pending_Delete' });
+          setLocations(prev => prev.map(l => l.id === id ? updated : l));
+          showToast('Decommission request sent to Admin');
+          logActivity('ARCHIVE', `Requested decommission for location: ${loc.name}`, undefined, { locationId: id });
+        } catch (e) {
+          showError(e, 'Archive Request Failed');
+        }
+      });
+    }
+  };
+
+  const handleApproveArchive = async (locationId: string) => {
+    const loc = locations.find(l => l.id === locationId);
+    if (!loc) return;
+    try {
+      await gateway.forceDeleteLocation(locationId);
+      setLocations(prev => prev.filter(l => l.id !== locationId));
+      showToast('Decommission approved');
+      await refreshDepartmentTotals();
+      logActivity('DELETE', `Approved decommission for: ${loc.name}`, undefined, { locationId });
+    } catch (e) {
+      showError(e, 'Approval Failed');
+    }
+  };
+
+  const handleRejectArchive = async (locationId: string) => {
+    const loc = locations.find(l => l.id === locationId);
+    if (!loc) return;
+    try {
+      const updated = await gateway.updateLocation(locationId, { status: 'Active' });
+      setLocations(prev => prev.map(l => l.id === locationId ? updated : l));
+      showToast('Decommission request rejected');
+      logActivity('UPDATE', `Rejected decommission for: ${loc.name}`, undefined, { locationId });
+    } catch (e) {
+      showError(e, 'Rejection Failed');
+    }
   };
 
   const handleAddDept = async (dept: Omit<Department, 'id'>) => {
@@ -1369,6 +1402,7 @@ const App: React.FC = () => {
       }
       setDepartments(await gateway.getDepartments());
       showToast('Department added successfully');
+      logActivity('CREATE', `Created department: ${dept.name}`, undefined, { departmentId: createdDept.id });
       if (finalHeadId && finalHeadId !== dept.headOfDeptId) {
         setUsers(await gateway.getUsers());
       }
@@ -1453,6 +1487,7 @@ const App: React.FC = () => {
       await gateway.updateDepartment(id, updates);
       setDepartments(await gateway.getDepartments());
       showToast('Department updated successfully');
+      logActivity('UPDATE', `Updated department: ${id}`, undefined, { departmentId: id, updates });
     } catch (e) {
       showError(e, 'Department Update Failed');
     }
@@ -1492,6 +1527,7 @@ const App: React.FC = () => {
         await gateway.deleteDepartment(id);
         setDepartments(await gateway.getDepartments());
         showToast('Department deleted successfully');
+        logActivity('DELETE', `Deleted department: ${dept?.name || id}`, undefined, { departmentId: id });
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -2054,6 +2090,7 @@ const App: React.FC = () => {
       await gateway.addUser(user);
       setUsers(await gateway.getUsers());
       showToast('Member added successfully');
+      logActivity('CREATE', `Added new member: ${user.name}`, undefined, { userId: user.id });
     } catch (e) {
       showError(e, 'Failed to Add Member');
     }
@@ -2104,6 +2141,7 @@ const App: React.FC = () => {
         await gateway.updateUser(id, updates);
         setUsers(await gateway.getUsers());
         showToast('Profile updated successfully');
+        logActivity('UPDATE', `Updated member profile: ${id}`, undefined, { userId: id, updates });
         if (currentUser?.id === id) {
           setCurrentUser(prev => {
             if (!prev) return null;
@@ -2125,9 +2163,11 @@ const App: React.FC = () => {
   const handleDeleteMember = async (id: string) => {
     if (confirm("Remove user?")) {
       try {
+        const user = users.find(u => u.id === id);
         await gateway.deleteUser(id);
         setUsers(await gateway.getUsers());
         showToast('Member removed successfully');
+        logActivity('DELETE', `Removed member: ${user?.name || id}`, undefined, { userId: id });
       } catch (e: any) {
         console.error("Delete failed:", e);
         if (e?.code === '23503') {
@@ -2472,8 +2512,22 @@ const App: React.FC = () => {
               phases={auditPhases}
               buildings={buildings}
               onAddBuilding={handleUpdateBuilding}
+              schedules={schedules}
             />
-          )}
+           )}
+           {activeView === 'admin-dashboard' && (
+             <AdminDashboard 
+               users={users}
+               locations={locations}
+               schedules={schedules}
+               activities={activities}
+               departments={departmentsWithAssets}
+               buildings={buildings}
+               phases={auditPhases}
+               onApproveArchive={handleApproveArchive}
+               onRejectArchive={handleRejectArchive}
+             />
+           )}
           {activeView === 'buildings' && (
             <BuildingManagement 
               buildings={buildings}
