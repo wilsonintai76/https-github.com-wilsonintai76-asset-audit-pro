@@ -133,7 +133,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                     <div className="w-10 h-10 bg-white/10 text-blue-400 rounded-xl flex items-center justify-center border border-white/10">
                        <Building2 className="w-5 h-5" />
                     </div>
-                    <h4 className="text-lg font-black uppercase tracking-tight">Institutional Inspection Progress</h4>
+                    <h4 className="text-lg font-black uppercase tracking-tight">{t('dashboard.progress')}</h4>
                  </div>
                  
                  <div className="flex items-baseline gap-2 mb-4">
