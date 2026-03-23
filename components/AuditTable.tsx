@@ -17,7 +17,8 @@ import {
   FileText, 
   Search,
   Filter,
-  Calendar
+  Calendar,
+  Zap
 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
@@ -89,6 +90,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
   const canEditDates = hasPerm('edit:audit:date');
   const canSelfAssignPerm = hasPerm('edit:audit:assign');
+  const canAssignOthers = hasPerm('edit:audit:assign:others');
+  const canAutoAssign = hasPerm('edit:audit:auto_assign');
   const canViewAllSchedule = hasPerm('view:schedule:all');
   const canViewOwnSchedule = hasPerm('view:schedule:own');
 
@@ -205,22 +208,26 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     onUpdateDate(id, newDate);
   };
 
-  const handleSelfAssign = (auditId: string, slot: 1 | 2, date: string, phaseId: string) => {
+  const handleSelfAssign = (auditId: string, slot: 1 | 2, date: string, phaseId: string, manualUserId?: string) => {
     const audit = schedules.find(s => s.id === auditId);
     if (!audit) return;
 
-    if (!hasFieldRole) {
+    const assignUserId = manualUserId || currentUser?.id;
+    if (!assignUserId) return;
+    
+    const assignUser = users.find(u => u.id === assignUserId);
+    const isSelf = assignUserId === currentUser?.id;
+
+    if (isSelf && !hasFieldRole) {
       alert("ACTION BLOCKED: Your current role does not permit performing audits.");
       return;
     }
-    if (!isCertified) {
-      let disableReason = "";
-      if (isSupervisor || isCoordinator || isAuditor) {
-        disableReason = "Certification Required: Supervisors/Coordinators/Inspecting Officers must hold a valid certificate to inspect.";
-      } else {
-        disableReason = "Certification Required: Your inspecting officer certificate is expired or invalid.";
-      }
-      alert(`ACTION BLOCKED: ${disableReason}`);
+
+    const certExpiry = assignUser?.certificationExpiry;
+    const isUserCertified = certExpiry && new Date(certExpiry) > new Date();
+
+    if (!isUserCertified) {
+      alert(`ACTION BLOCKED: Certification Required. ${isSelf ? 'Your' : 'The selected officer\'s'} certificate is expired or invalid.`);
       return;
     }
     if (!hasPhases) {
@@ -229,11 +236,23 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     }
 
     // Explicit Pairing Check (Defense in Depth)
-    if (!canAuditDepartment(audit.departmentId)) {
-      const myEnt = getEntityName(currentUser?.departmentId || '');
-      const targetEnt = getEntityName(audit.departmentId);
-      const reason = myEnt === targetEnt ? "You cannot inspect your own department." : "This asset location is outside your assigned inspection matrix.";
-      alert(`PAIRING RESTRICTION: ${reason}`);
+    const officerDeptId = assignUser?.departmentId || '';
+    const myEntityId = getEntityName(officerDeptId);
+    const targetEntityId = getEntityName(audit.departmentId);
+
+    if (myEntityId === targetEntityId && !isAdmin) {
+      alert(`PAIRING RESTRICTION: ${isSelf ? 'You' : 'The selected officer'} cannot inspect ${isSelf ? 'your' : 'their'} own department.`);
+      return;
+    }
+
+    const hasCrossPerm = isAdmin || crossAuditPermissions.some(p => 
+      p.auditorDeptId === myEntityId && 
+      p.targetDeptId === targetEntityId && 
+      p.isActive
+    );
+
+    if (!hasCrossPerm) {
+      alert(`PAIRING RESTRICTION: This asset location is outside the assigned inspection matrix for ${isSelf ? 'you' : 'the selected officer'}.`);
       return;
     }
 
@@ -245,12 +264,88 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         alert("The current date set for this audit is not within its valid phase. Please update the date first.");
         return;
     }
-    const hasConflict = checkDateConflict(date, auditId);
+    const hasConflict = schedules.some(s => s.id !== auditId && s.date === date && (s.auditor1Id === assignUserId || s.auditor2Id === assignUserId));
     if (hasConflict) {
-      alert("Schedule Conflict: You are already assigned to another audit on this date.");
+      alert(`Schedule Conflict: ${isSelf ? 'You are' : 'The selected officer is'} already assigned to another audit on this date.`);
       return;
     }
-    onAssign(auditId, slot, currentUser?.id || '');
+    onAssign(auditId, slot, assignUserId);
+  };
+
+  const handleAutoAssign = async () => {
+    if (!canAutoAssign) return;
+    
+    const pendingSchedules = schedules.filter(s => s.status === 'Pending' && s.date && (!s.auditor1Id || !s.auditor2Id));
+    if (pendingSchedules.length === 0) {
+      alert("No pending inspections with dates need assignment.");
+      return;
+    }
+
+    const eligibleOfficers = users.filter(u => {
+      return u.role === 'Auditor' && u.certificationExpiry && new Date(u.certificationExpiry) > new Date();
+    });
+
+    if (eligibleOfficers.length === 0) {
+      alert("No certified inspecting officers available for auto-assignment.");
+      return;
+    }
+
+    let assignmentCount = 0;
+    
+    for (const audit of pendingSchedules) {
+      const targetDeptId = audit.departmentId;
+      const targetLoc = allLocations.find(l => l.id === audit.locationId);
+      const targetAssets = targetLoc?.totalAssets || 0;
+
+      for (const slot of [1, 2] as const) {
+        const slotKey = slot === 1 ? 'auditor1Id' : 'auditor2Id';
+        if (audit[slotKey]) continue; 
+
+        // Find best candidate for this slot
+        const candidates = eligibleOfficers.filter(officer => {
+          const myEntityId = getEntityName(officer.departmentId || '');
+          const targetEntityId = getEntityName(targetDeptId);
+          if (myEntityId === targetEntityId) return false;
+
+          const hasCrossPerm = isAdmin || crossAuditPermissions.some(p => 
+            p.auditorDeptId === myEntityId && 
+            p.targetDeptId === targetEntityId && 
+            p.isActive
+          );
+          if (!hasCrossPerm) return false;
+
+          const auditsOnDate = schedules.filter(s => s.date === audit.date && (s.auditor1Id === officer.id || s.auditor2Id === officer.id));
+          const totalAssetsOnDate = auditsOnDate.reduce((sum, s) => {
+            const l = allLocations.find(loc => loc.id === s.locationId);
+            return sum + (l?.totalAssets || 0);
+          }, 0);
+          
+          if (totalAssetsOnDate + targetAssets > maxAssetsPerDay) return false;
+          if (audit.auditor1Id === officer.id || audit.auditor2Id === officer.id) return false;
+
+          return true;
+        });
+
+        if (candidates.length > 0) {
+          const sorted = candidates.sort((a, b) => {
+             const getLoad = (officerId: string) => schedules
+               .filter(s => s.date === audit.date && (s.auditor1Id === officerId || s.auditor2Id === officerId))
+               .reduce((sum, s) => sum + (allLocations.find(loc => loc.id === s.locationId)?.totalAssets || 0), 0);
+             return getLoad(a.id) - getLoad(b.id);
+          });
+          
+          const chosen = sorted[0];
+          onAssign(audit.id, slot, chosen.id);
+          assignmentCount++;
+        }
+      }
+    }
+
+    if (assignmentCount > 0) {
+      alert(`Auto-assignment complete. Successfully assigned ${assignmentCount} slots.`);
+    } else {
+      alert("Auto-assignment could not find eligible officers for the remaining slots based on the audit matrix and daily limits.");
+    }
   };
 
 
@@ -305,7 +400,17 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         icon={Calendar}
         activePhase={activePhase}
         description="Plan and manage institutional inspection windows and inspecting officer assignments."
-      />
+      >
+        {canAutoAssign && (
+          <button
+            onClick={handleAutoAssign}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
+          >
+            <Zap className="w-4 h-4" />
+            Smart Auto-Assign
+          </button>
+        )}
+      </PageHeader>
 
       {hasFieldRole && !isCertified && (
         <div className="bg-rose-600 text-white px-6 py-4 rounded-3xl shadow-xl shadow-rose-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
@@ -574,7 +679,8 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             audit={audit}
                             users={users}
                             currentUser={currentUser}
-                            canManageAssignments={(canEditDates || canSelfAssignPerm) && !isLocked}
+                            canManageAssignments={(canEditDates || canSelfAssignPerm || canAssignOthers) && !isLocked}
+                            canAssignOthers={canAssignOthers && !isLocked}
                             canSelfAssignSelf={canSelfAssignSelf && !isLocked}
                             userCanAudit={userCanAudit}
                             isCurrentUserAssigned={isCurrentUserAssigned}

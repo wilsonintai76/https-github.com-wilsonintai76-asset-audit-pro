@@ -127,11 +127,13 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     { id: 'view:schedule', label: 'Inspection Schedule Access', category: 'Inspection', actions: [{ id: 'view:schedule:all', label: 'View All Depts', icon: Eye }, { id: 'view:schedule:own', label: 'View Own Dept', icon: Eye }] },
     { 
       id: 'edit:schedule', 
-      label: 'Inspection Planning & Self-Assign', 
+      label: 'Inspection Planning & Assignments', 
       category: 'Inspection', 
       actions: [
         { id: 'edit:audit:date', label: '📅 Set Date', icon: Calendar, hint: 'Scheduling' },
-        { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Inspecting' }
+        { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Inspecting' },
+        { id: 'edit:audit:assign:others', label: '👥 Assign Others', icon: Users, hint: 'Management' },
+        { id: 'edit:audit:auto_assign', label: '🤖 Auto-Assign', icon: Zap, hint: 'System' }
       ] 
     },
     { id: 'view:audit:assigned', label: 'Officer Dashboard', category: 'Inspection', actions: [{ id: 'view:audit:assigned', label: 'Access Dashboard', icon: Eye, hint: 'Requires Cert' }] },
