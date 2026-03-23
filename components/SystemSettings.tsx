@@ -134,7 +134,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         { id: 'edit:audit:assign', label: '👤 Self-Assign', icon: UserCheck, hint: 'Inspecting' }
       ] 
     },
-    { id: 'view:audit:assigned', label: 'Inspecting Officer Dashboard', category: 'Inspection', actions: [{ id: 'view:audit:assigned', label: 'Access Dashboard', icon: Eye, hint: 'Requires Cert' }] },
+    { id: 'view:audit:assigned', label: 'Officer Dashboard', category: 'Inspection', actions: [{ id: 'view:audit:assigned', label: 'Access Dashboard', icon: Eye, hint: 'Requires Cert' }] },
     { 
       id: 'view:team:group', 
       label: 'Team Management', 
@@ -191,7 +191,13 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     });
   };
 
-  const ALL_ROLES: UserRole[] = ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'];
+  const ROLE_CONFIG: { role: UserRole; label: string }[] = [
+    { role: 'Admin', label: 'Admin' },
+    { role: 'Coordinator', label: 'Coordinator' },
+    { role: 'Supervisor', label: 'Supervisor' },
+    { role: 'Auditor', label: 'Officer' },
+    { role: 'Staff', label: 'Staff (Guest)' }
+  ];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
@@ -277,17 +283,17 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
             {/* Role Tabs */}
             <div className="flex flex-wrap gap-2 mb-10 p-1.5 bg-slate-100/80 rounded-2xl w-fit">
-              {ALL_ROLES.map(role => (
+              {ROLE_CONFIG.map(config => (
                 <button
-                  key={role}
-                  onClick={() => setActiveRole(role)}
+                  key={config.role}
+                  onClick={() => setActiveRole(config.role)}
                   className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                    activeRole === role 
+                    activeRole === config.role 
                     ? 'bg-white text-indigo-600 shadow-md ring-1 ring-slate-200' 
                     : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
                   }`}
                 >
-                  {role === 'Staff' ? 'Staff (Guest)' : role === 'Auditor' ? 'Accredited Inspecting Officer' : role}
+                  {config.label}
                 </button>
               ))}
             </div>
@@ -349,7 +355,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 <AlertCircle className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
                   <span className="font-black text-indigo-700 uppercase tracking-widest mr-2 underline">Institutional Note:</span> 
-                  Permissions applied to <span className="font-bold text-slate-900">{activeRole === 'Staff' ? 'Staff (Guest)' : activeRole === 'Auditor' ? 'Accredited Inspecting Officer' : activeRole}</span> are strictly enforced. Inspecting officer self-assignment REQUIRES an active institutional certificate, even if the permission is enabled here. Other roles like Supervisors or Coordinators can manage dates and assignments without certified status for administrative oversight.
+                  Permissions applied to <span className="font-bold text-slate-900">{ROLE_CONFIG.find(c => c.role === activeRole)?.label || activeRole}</span> are strictly enforced. Inspecting officer self-assignment REQUIRES an active institutional certificate, even if the permission is enabled here. Other roles like Supervisors or Coordinators can manage dates and assignments without certified status for administrative oversight.
                 </p>
             </div>
         </div>

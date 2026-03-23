@@ -15,7 +15,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Nav Labels
     'nav.overview': 'Overview',
     'nav.inspection_schedule': 'Inspection Schedule',
-    'nav.inspecting_officer_dashboard': 'Inspecting Officer Dashboard',
+    'nav.inspecting_officer_dashboard': 'Officer Dashboard',
     'nav.team_management': 'Team Management',
     'nav.departments': 'Departments',
     'nav.asset_locations': 'Asset Locations',
@@ -67,7 +67,7 @@ const translations: Record<Locale, Record<string, string>> = {
     // Nav Labels
     'nav.overview': 'Gambaran Keseluruhan',
     'nav.inspection_schedule': 'Jadual Pemeriksaan',
-    'nav.inspecting_officer_dashboard': 'Papan Pemuka Pegawai Pemeriksa',
+    'nav.inspecting_officer_dashboard': 'Papan Pegawai',
     'nav.team_management': 'Pengurusan Pasukan',
     'nav.departments': 'Jabatan',
     'nav.asset_locations': 'Lokasi Aset',
