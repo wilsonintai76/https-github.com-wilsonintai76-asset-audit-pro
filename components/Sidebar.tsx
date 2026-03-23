@@ -16,8 +16,10 @@ import {
   Database, 
   LogOut,
   Building,
-  LayoutDashboard
+  LayoutDashboard,
+  Languages
 } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -55,6 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen, onClose, activeView, onViewChange, onLogout, userRoles, isCertified, isProfileComplete 
 }) => {
   const { hasPermission } = useRBAC();
+  const { locale, setLocale, t } = useLanguage();
   const isAdmin = userRoles.includes('Admin');
   const isCoordinator = userRoles.includes('Coordinator');
   const isSupervisor = userRoles.includes('Supervisor');
@@ -109,11 +112,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           <nav className="flex-grow space-y-2">
-            <div className="px-2 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Main Menu</div>
+            <div className="px-2 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('ui.main_menu')}</div>
             {showMainDashboard && (
               <NavItem 
                 icon={PieChart} 
-                label="Overview" 
+                label={t('nav.overview')} 
                 active={activeView === 'overview'} 
                 onClick={() => { onViewChange('overview'); onClose(); }} 
               />
@@ -122,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {showAuditorDashboard && (
               <NavItem 
                 icon={LayoutDashboard} 
-                label="Inspecting Officer Dashboard" 
+                label={t('nav.inspecting_officer_dashboard')} 
                 active={activeView === 'auditor-dashboard'} 
                 onClick={() => { onViewChange('auditor-dashboard'); onClose(); }} 
               />
@@ -131,20 +134,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canAccessSchedule && (
               <NavItem 
                 icon={CalendarDays} 
-                label="Inspection Schedule" 
+                label={t('nav.inspection_schedule')} 
                 active={activeView === 'schedule'} 
                 onClick={() => { onViewChange('schedule'); onClose(); }} 
               />
             )}
             
             {(canAccessLocations || canAccessTeam || canAccessDepartments || canAccessAdminSettings) && (
-              <div className="px-2 pt-6 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Administration</div>
+              <div className="px-2 pt-6 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('ui.administration')}</div>
             )}
 
             {canAccessTeam && (
               <NavItem 
                 icon={Users} 
-                label="Team Management" 
+                label={t('nav.team_management')} 
                 active={activeView === 'team'} 
                 onClick={() => { onViewChange('team'); onClose(); }} 
               />
@@ -171,7 +174,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {canAccessAdminSettings && (
               <NavItem 
                 icon={Settings} 
-                label="System Settings" 
+                label={t('nav.system_settings')} 
                 active={activeView === 'settings'}
                 onClick={() => { onViewChange('settings'); onClose(); }} 
               />
@@ -179,6 +182,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
 
           <div className="mt-auto pt-6 space-y-4">
+            {/* Language Toggle */}
+            <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-xl mb-2">
+              <button
+                onClick={() => setLocale('en')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                  locale === 'en' 
+                    ? 'bg-white text-blue-600 shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                English
+              </button>
+              <button
+                onClick={() => setLocale('ms')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                  locale === 'ms' 
+                    ? 'bg-white text-blue-600 shadow-sm' 
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                Bahasa
+              </button>
+            </div>
             <div className="bg-slate-900 rounded-2xl p-4 text-white relative overflow-hidden">
               <div className="relative z-10">
                 <p className="text-xs font-medium text-slate-400 mb-1">Database Connection</p>

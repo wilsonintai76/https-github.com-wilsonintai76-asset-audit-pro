@@ -8,6 +8,7 @@ import { TierDistributionTable } from './TierDistributionTable';
 import { Sliders, GraduationCap, Filter, ChevronDown, LayoutDashboard, Trophy } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { PageHeader } from './PageHeader';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -42,6 +43,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   institutionKPIs = [],
   buildings = []
 }) => {
+  const { t } = useLanguage();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedBlock, setSelectedBlock] = useState('All');
@@ -187,8 +189,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <PageHeader
-        title="Institutional Inspection Dashboard"
-        description="Real-time compliance monitoring and institutional performance stats."
+        title={t('dashboard.title')}
+        description={t('dashboard.subtitle')}
         icon={LayoutDashboard}
         activePhase={activePhase}
       >

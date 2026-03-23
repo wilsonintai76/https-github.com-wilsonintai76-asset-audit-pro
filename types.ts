@@ -164,3 +164,5 @@ export interface SystemSetting {
 }
 
 export type RBACMatrix = Record<string, UserRole[]>;
+
+export type Locale = 'en' | 'ms';

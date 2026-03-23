@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { AuditPhase, KPITier, Department, AuditSchedule, InstitutionKPITarget } from '../types';
 import { ChevronDown, Building2, TrendingUp, AlertCircle, CheckCircle2, Trophy } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface KPIStatsWidgetProps {
   phases: AuditPhase[];
@@ -12,6 +13,7 @@ interface KPIStatsWidgetProps {
 }
 
 export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers, departments, schedules, institutionKPIs }) => {
+  const { t } = useLanguage();
   const [expandedTierId, setExpandedTierId] = useState<string | null>(null);
   const today = new Date();
   
@@ -109,13 +111,13 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
     <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Institutional Inspection Performance</h3>
+          <h3 className="text-xl font-bold text-slate-900">{t('dashboard.performance')}</h3>
           <p className="text-sm font-bold text-blue-600 uppercase tracking-widest mt-1">
-            Current Phase: {activePhase.name}
+            {t('dashboard.current_phase')}: {activePhase.name}
           </p>
         </div>
         <div className="bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100 hidden sm:block">
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest text-right">Phase Ends</p>
+            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest text-right">{t('dashboard.phase_ends')}</p>
             <p className="text-sm font-black text-slate-700">{activePhase.endDate}</p>
         </div>
       </div>
@@ -184,7 +186,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
       <div className="space-y-6">
         <h5 className="text-[11px] font-black uppercase text-slate-400 tracking-widest mb-4 flex items-center gap-2">
            <Trophy className="w-3.5 h-3.5" />
-           Department Tier Progress
+           {t('dashboard.tier_progress')}
         </h5>
         {tierStats.map(stat => {
            const progressColor = stat.status === 'On Track' ? 'bg-emerald-500' : 'bg-amber-500';
