@@ -94,6 +94,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [isApplied, setIsApplied] = useState(false);
   const [activeModal, setActiveModal] = useState<'apply' | 'reset' | null>(null);
   const [showConstraints, setShowConstraints] = useState(false);
+  
+  // Filtering for Pairings List
+  const [auditorFilter, setAuditorFilter] = useState('');
+  const [targetFilter, setTargetFilter] = useState('');
 
   // 0. Compute Institutional Grand Total
   const overallTotalAssets = useMemo(() => {
@@ -564,6 +568,23 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const activePairingList = isSimulatorActive ? simulatedPairings : (permissions as any[]);
 
+  const filteredPairingList = useMemo(() => {
+    return activePairingList.filter(perm => {
+        const targetEntity = entities.find(e => e.id === perm.targetDeptId || (e.members && e.members.some(m => m.id === perm.targetDeptId)));
+        const auditorEntity = entities.find(e => e.id === perm.auditorDeptId || (e.members && e.members.some(m => m.id === perm.auditorDeptId)));
+        
+        const auditorMatch = !auditorFilter || 
+            auditorEntity?.name.toLowerCase().includes(auditorFilter.toLowerCase()) ||
+            auditorEntity?.members.some(m => m.abbr.toLowerCase().includes(auditorFilter.toLowerCase()));
+            
+        const targetMatch = !targetFilter ||
+            targetEntity?.name.toLowerCase().includes(targetFilter.toLowerCase()) ||
+            targetEntity?.members.some(m => m.abbr.toLowerCase().includes(targetFilter.toLowerCase()));
+            
+        return auditorMatch && targetMatch;
+    });
+  }, [activePairingList, auditorFilter, targetFilter, entities]);
+
   return (
     <div className="space-y-8">
 
@@ -593,37 +614,38 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
           {/* Left Column: Controls */}
           <div className="lg:w-1/3">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Cross-Audit Management</h2>
-          <p className="text-slate-500 font-medium">Configure institutional consolidation and generate anti-bias pairing strategies.</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowConstraints(!showConstraints)}
-            className={`flex items-center gap-3 px-6 py-3 rounded-2xl border text-sm font-bold transition-all ${
-              showConstraints 
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm' 
-                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <ShieldCheck className={`w-4 h-4 ${showConstraints ? 'animate-pulse' : ''}`} />
-            Institutional Limits
-            <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showConstraints ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
-      </div>
+              <div>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Cross-Audit Management</h2>
+                <p className="text-slate-500 font-medium">Configure institutional consolidation and generate anti-bias pairing strategies.</p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowConstraints(!showConstraints)}
+                  className={`flex items-center gap-3 px-6 py-3 rounded-2xl border text-sm font-bold transition-all ${
+                    showConstraints 
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm' 
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <ShieldCheck className={`w-4 h-4 ${showConstraints ? 'animate-pulse' : ''}`} />
+                  Institutional Limits
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showConstraints ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            </div>
 
-      {showConstraints && onUpdateMaxAssetsPerDay && onUpdateMaxLocationsPerDay && (
-        <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-300">
-          <AuditConstraints 
-            maxAssetsPerDay={maxAssetsPerDay}
-            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
-            maxLocationsPerDay={maxLocationsPerDay}
-            onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
-          />
-        </div>
-      )}
+            {showConstraints && onUpdateMaxAssetsPerDay && onUpdateMaxLocationsPerDay && (
+              <div className="mb-12 animate-in fade-in slide-in-from-top-4 duration-300">
+                <AuditConstraints 
+                  maxAssetsPerDay={maxAssetsPerDay}
+                  onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
+                  maxLocationsPerDay={maxLocationsPerDay}
+                  onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
+                />
+              </div>
+            )}
+            
             <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl mb-6 transition-colors ${isSimulatorActive ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
               <Zap className="w-8 h-8" />
             </div>
@@ -631,7 +653,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
             <p className="text-slate-500 text-sm leading-relaxed mb-6">
               Generate the most efficient audit assignments automatically. The engine matches auditing entities to high-asset targets until your Institutional KPI is mathematically secured.
             </p>
-                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-8">
+            
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-8">
               <label className="flex items-center justify-between cursor-pointer group">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -760,108 +783,145 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
           </div>
          </div>
          
-         {/* Live Generated List */}
          <div className="mt-12">
-            <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-6 px-4">{isSimulatorActive ? 'Simulated Assignments (Draft)' : 'Active Database Assignments'}</h4>
-            <div className="bg-slate-50 border border-slate-200 rounded-3xl overflow-hidden">
-                 <table className="w-full text-left">
-                    <thead className="bg-white border-b border-slate-100">
-                       <tr>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Auditing Entity</th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Direction</th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Entity (Assets)</th>
-                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Action</th>
-                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                       {activePairingList.length === 0 ? (
-                           <tr>
-                               <td colSpan={4} className="py-12 text-center text-slate-400 font-medium text-sm">
-                                   No pairings generated. Run Simulator or add manual overrides.
-                               </td>
-                           </tr>
-                       ) : (
-                            activePairingList.map((perm, idx) => {
-                                const targetEntity = entities.find(e => e.id === perm.targetDeptId || (e.members && e.members.some(m => m.id === perm.targetDeptId)));
-                                const auditorEntity = entities.find(e => e.id === perm.auditorDeptId || (e.members && e.members.some(m => m.id === perm.auditorDeptId)));
-                                const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === perm.targetDeptId) : null;
-                                const planAuditor = planPair?.auditors.find(a => a.id === perm.auditorDeptId);
-                                
-                                return (
-                                    <tr key={isSimulatorActive ? idx : (perm as any).id} className="hover:bg-white transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-                                                    <Users className="w-4 h-4" />
-                                                </div>
-                                                 <div>
-                                                    <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || perm.auditorDeptId}</p>
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {auditorEntity?.members?.map((m: any) => (
-                                                            <span key={m.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase tracking-wider">
-                                                                {m.abbr}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
-                                                        {isSimulatorActive && planAuditor ? planAuditor.auditors : (auditorEntity?.auditors || 0)} Total Auditors
-                                                        {planAuditor?.isVirtual && (
-                                                            <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[8px]">
-                                                                <Zap className="w-2 h-2" /> VIRTUAL STRATEGIC
-                                                            </span>
-                                                        )}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-400">
-                                                {perm.isMutual ? <ArrowRightLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 group w-fit mb-3">
-                                                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                                                <span className="text-[10px] font-black uppercase tracking-tight">
-                                                    Target Capacity: {(() => {
-                                                        const assets = targetEntity?.assets || 0;
-                                                        return Math.max(2, Math.ceil(assets / maxAssetsPerDay));
-                                                    })()} Auditors
-                                                </span>
-                                            </div>
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 px-4">
+                <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{isSimulatorActive ? 'Simulated Assignments (Draft)' : 'Active Database Assignments'}</h4>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative group min-w-[200px]">
+                        <input 
+                            type="text"
+                            placeholder="Filter Auditing Entity..."
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                            value={auditorFilter}
+                            onChange={(e) => setAuditorFilter(e.target.value)}
+                        />
+                        <Network className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                    <div className="relative group min-w-[200px]">
+                        <input 
+                            type="text"
+                            placeholder="Filter Target Entity..."
+                            className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                            value={targetFilter}
+                            onChange={(e) => setTargetFilter(e.target.value)}
+                        />
+                        <Layers className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    </div>
+                    {(auditorFilter || targetFilter) && (
+                        <button 
+                            onClick={() => { setAuditorFilter(''); setTargetFilter(''); }}
+                            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-colors"
+                        >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+            </div>
 
-                                           <div className="flex items-center gap-3">
-                                               <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-                                                   <Building2 className="w-4 h-4" />
+            <div className="bg-white border border-slate-200 rounded-[32px] overflow-hidden shadow-sm">
+                 <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                     <table className="w-full text-left border-collapse">
+                        <thead className="bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10 backdrop-blur-md">
+                           <tr>
+                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50/80">Auditing Entity</th>
+                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center bg-slate-50/80">Direction</th>
+                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest bg-slate-50/80">Target Entity (Assets)</th>
+                              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right bg-slate-50/80">Action</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                           {filteredPairingList.length === 0 ? (
+                               <tr>
+                                   <td colSpan={4} className="py-12 text-center text-slate-400 font-medium text-sm">
+                                       {activePairingList.length === 0 ? 'No pairings generated. Run Simulator or add manual overrides.' : 'No pairings match your search filters.'}
+                                   </td>
+                               </tr>
+                           ) : (
+                                filteredPairingList.map((perm, idx) => {
+                                    const targetEntity = entities.find(e => e.id === perm.targetDeptId || (e.members && e.members.some(m => m.id === perm.targetDeptId)));
+                                    const auditorEntity = entities.find(e => e.id === perm.auditorDeptId || (e.members && e.members.some(m => m.id === perm.auditorDeptId)));
+                                    const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === perm.targetDeptId) : null;
+                                    const planAuditor = planPair?.auditors.find(a => a.id === perm.auditorDeptId);
+                                    
+                                    return (
+                                        <tr key={isSimulatorActive ? idx : (perm as any).id} className="hover:bg-white transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+                                                        <Users className="w-4 h-4" />
+                                                    </div>
+                                                     <div>
+                                                        <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || perm.auditorDeptId}</p>
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {auditorEntity?.members?.map((m: any) => (
+                                                                <span key={m.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase tracking-wider">
+                                                                    {m.abbr}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
+                                                            {isSimulatorActive && planAuditor ? planAuditor.auditors : (auditorEntity?.auditors || 0)} Total Auditors
+                                                            {planAuditor?.isVirtual && (
+                                                                <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[8px]">
+                                                                    <Zap className="w-2 h-2" /> VIRTUAL STRATEGIC
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-400">
+                                                    {perm.isMutual ? <ArrowRightLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 group w-fit mb-3">
+                                                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                                                    <span className="text-[10px] font-black uppercase tracking-tight">
+                                                        Target Capacity: {(() => {
+                                                            const assets = targetEntity?.assets || 0;
+                                                            return Math.max(2, Math.ceil(assets / maxAssetsPerDay));
+                                                        })()} Auditors
+                                                    </span>
+                                                </div>
+
+                                               <div className="flex items-center gap-3">
+                                                   <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                                                       <Building2 className="w-4 h-4" />
+                                                   </div>
+                                                   <div>
+                                                       <p className="font-bold text-sm text-slate-900">{targetEntity?.name || perm.targetDeptId}</p>
+                                                       <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Assets</p>
+                                                   </div>
                                                </div>
-                                               <div>
-                                                   <p className="font-bold text-sm text-slate-900">{targetEntity?.name || perm.targetDeptId}</p>
-                                                   <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Assets</p>
-                                               </div>
-                                           </div>
-                                       </td>
-                                       <td className="px-6 py-4 text-right">
-                                           {isSimulatorActive ? (
-                                               <button onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                                                   <X className="w-5 h-5" />
-                                               </button>
-                                           ) : (
-                                               <button onClick={() => onRemovePermission && onRemovePermission((perm as any).id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                                                   <Trash2 className="w-5 h-5" />
-                                               </button>
-                                           )}
-                                       </td>
-                                   </tr>
-                               );
-                           })
-                       )}
-                    </tbody>
-                 </table>
+                                           </td>
+                                           <td className="px-6 py-4 text-right">
+                                               {isSimulatorActive ? (
+                                                   <button onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                                       <X className="w-5 h-5" />
+                                                   </button>
+                                               ) : (
+                                                   <button onClick={() => onRemovePermission && onRemovePermission((perm as any).id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                                       <Trash2 className="w-5 h-5" />
+                                                   </button>
+                                               )}
+                                           </td>
+                                       </tr>
+                                   );
+                                })
+                           )}
+                        </tbody>
+                     </table>
+                     <div className="h-4 bg-slate-50/50 border-t border-slate-100"></div>
+                 </div>
             </div>
          </div>
       </div>
-      {/* ENTITIES LIST */}
-      <ActiveEntitiesList 
+
+       {/* ENTITIES LIST */}
+       <ActiveEntitiesList 
         entities={entities}
         selectedEntity={selectedAuditor}
         onSelect={setSelectedAuditor}
