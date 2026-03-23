@@ -161,8 +161,16 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     let newRoles: UserRole[] = [];
     
     if (currentRoles.includes(role)) {
+      // Prevent removing 'edit:audit:assign' from Auditor
+      if (role === 'Auditor' && permId === 'edit:audit:assign') {
+        return;
+      }
       newRoles = currentRoles.filter(r => r !== role);
     } else {
+      // Prevent adding 'edit:audit:assign' to any role except Auditor
+      if (role !== 'Auditor' && permId === 'edit:audit:assign') {
+        return;
+      }
       newRoles = [...currentRoles, role];
     }
 
@@ -295,10 +303,13 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                                 <td className="py-6 px-8">
                                     <div className="flex flex-wrap items-center justify-center gap-4">
                                         {feature.actions.map(action => {
-                                          const isChecked = rbacMatrix[action.id]?.includes(activeRole);
-                                          const isSystemLocked = activeRole === 'Admin' && action.id === 'manage:system';
+                                          const isChecked = action.id === 'edit:audit:assign' && activeRole === 'Auditor' ? true : rbacMatrix[action.id]?.includes(activeRole);
+                                          const isSystemLocked = (activeRole === 'Admin' && action.id === 'manage:system') || (activeRole === 'Auditor' && action.id === 'edit:audit:assign');
+                                          const isPermissionDisabled = action.id === 'edit:audit:assign' && activeRole !== 'Auditor';
                                           const Icon = action.icon;
                                           
+                                          if (isPermissionDisabled) return null;
+
                                           return (
                                             <button
                                               key={action.id}
