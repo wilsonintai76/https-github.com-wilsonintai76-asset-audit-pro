@@ -739,45 +739,49 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
              {/* Manual Overrides */}
              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Manual Override / Refinement</h4>
-                 <div className="flex flex-col sm:flex-row gap-4">
-                     <select 
-                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                        value={manualAuditor}
-                        onChange={(e) => setManualAuditor(e.target.value)}
-                     >
-                        <option value="">Select Inspecting Entity</option>
-                        {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => <option key={e.id} value={e.id}>{e.name} ({e.auditors} Officers)</option>)}
-                     </select>
-                     
-                     <select 
-                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                        value={manualTarget}
-                        onChange={(e) => setManualTarget(e.target.value)}
-                     >
-                        <option value="">Select Target</option>
-                        {entities.filter(e => e.assets > 0).map(e => <option key={e.id} value={e.id}>{e.name} ({e.assets} Movable Assets)</option>)}
-                     </select>
-                     
-                     <label className="flex items-center gap-2 cursor-pointer group px-2">
-                        <div className="relative inline-flex items-center">
-                          <input 
-                            type="checkbox" 
-                            className="sr-only peer" 
-                            checked={overrideIsMutual}
-                            onChange={() => setOverrideIsMutual(!overrideIsMutual)}
-                          />
-                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual</span>
-                     </label>
+                 <div className="flex flex-col gap-3">
+                     <div className="flex flex-col sm:flex-row gap-3">
+                       <select 
+                          className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          value={manualAuditor}
+                          onChange={(e) => setManualAuditor(e.target.value)}
+                       >
+                          <option value="">Select Inspecting Entity</option>
+                          {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => <option key={e.id} value={e.id}>{e.name} ({e.auditors} Officers)</option>)}
+                       </select>
+                       
+                       <select 
+                          className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                          value={manualTarget}
+                          onChange={(e) => setManualTarget(e.target.value)}
+                       >
+                          <option value="">Select Target</option>
+                          {entities.filter(e => e.assets > 0).map(e => <option key={e.id} value={e.id}>{e.name} ({e.assets} Movable Assets)</option>)}
+                       </select>
+                     </div>
 
-                     <button 
-                         onClick={handleAddOverride}
-                         disabled={!manualAuditor || !manualTarget}
-                         className="px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors disabled:opacity-50 flex items-center gap-2"
-                     >
-                         <Plus className="w-4 h-4" /> Add
-                     </button>
+                     <div className="flex items-center gap-3">
+                       <label className="flex items-center gap-2 cursor-pointer group px-2 flex-1">
+                          <div className="relative inline-flex items-center">
+                            <input 
+                              type="checkbox" 
+                              className="sr-only peer" 
+                              checked={overrideIsMutual}
+                              onChange={() => setOverrideIsMutual(!overrideIsMutual)}
+                            />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual</span>
+                       </label>
+
+                       <button 
+                           onClick={handleAddOverride}
+                           disabled={!manualAuditor || !manualTarget}
+                           className="px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+                       >
+                           <Plus className="w-4 h-4" /> Add
+                       </button>
+                     </div>
                  </div>
              </div>
           </div>
