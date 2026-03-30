@@ -9,6 +9,7 @@ import { DataManagementWorkflow } from './DataManagementWorkflow';
 import { RBACMatrix } from './RBACMatrix';
 import { Zap, Sliders, AlertCircle, Eye, Calendar, UserCheck, Users, UserPlus, Edit, ShieldAlert, ShieldCheck, Network, Lock, Unlock } from 'lucide-react';
 import { PageHeader } from './PageHeader';
+import { GroupBuilderTab } from './GroupBuilderTab';
 
 interface SystemSettingsProps {
   departments: Department[];
@@ -111,6 +112,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   locations
 }) => {
   const isAdmin = (userRoles || []).includes('Admin');
+  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [strictAuditorRule, setStrictAuditorRule] = React.useState(true);
 
   const activePhase = React.useMemo(() => {
     const today = new Date();
@@ -166,6 +169,21 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onDeleteTier={onDeleteKPITier}
         onUpdateTarget={onUpdateKPITierTarget}
         onUpdateInstitutionKPI={onUpdateInstitutionKPI}
+      />
+
+      <GroupBuilderTab 
+        departments={departments}
+        auditGroups={auditGroups}
+        onAddAuditGroup={onAddAuditGroup}
+        onDeleteAuditGroup={onDeleteAuditGroup}
+        onBulkUpdateDepartments={onBulkUpdateDepartments}
+        onAutoConsolidate={onAutoConsolidate}
+        isProcessing={isProcessing}
+        setIsProcessing={setIsProcessing}
+        strictAuditorRule={strictAuditorRule}
+        setStrictAuditorRule={setStrictAuditorRule}
+        maxAssetsPerDay={maxAssetsPerDay}
+        maxLocationsPerDay={maxLocationsPerDay}
       />
 
       <CrossAuditManagement

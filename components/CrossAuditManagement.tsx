@@ -598,22 +598,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   }, [entityPermissions, auditorFilter, targetFilter, entities]);
 
   return (
-    <div className="space-y-8">
-      <GroupBuilderTab 
-        departments={departments}
-        auditGroups={auditGroups}
-        onAddAuditGroup={onAddAuditGroup}
-        onDeleteAuditGroup={onDeleteAuditGroup}
-        onBulkUpdateDepartments={onBulkUpdateDepartments}
-        onAutoConsolidate={onAutoConsolidate}
-        isProcessing={isProcessing}
-        setIsProcessing={setIsProcessing}
-        strictAuditorRule={strictAuditorRule}
-        setStrictAuditorRule={setStrictAuditorRule}
-        maxAssetsPerDay={maxAssetsPerDay}
-        maxLocationsPerDay={maxLocationsPerDay}
-      />
-          
+    <>
       <div className="bg-white rounded-[40px] border-2 border-slate-200 p-8 md:p-12 shadow-sm relative overflow-hidden">
          {isSimulatorActive && (
              <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400 animate-pulse"></div>
@@ -988,16 +973,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
          </div>
       </div>
 
-       <ActiveEntitiesList 
-        entities={entities}
-        selectedEntity={selectedAuditor}
-        onSelect={setSelectedAuditor}
-        megaTargetThreshold={megaTargetThreshold}
-        minAuditors={strictAuditorRule ? 2 : 1}
-        overallTotal={overallTotalAssets}
-        threshold={assetThreshold}
-        strictAuditorRule={strictAuditorRule}
-      />
 
       <ConfirmationModal
         isOpen={activeModal === 'apply'}
@@ -1020,6 +995,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         onCancel={() => setActiveModal(null)}
         variant="warning"
       />
-    </div>
+    </>
   );
 };
