@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Department, AuditGroup } from '../types';
-import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users } from 'lucide-react';
+import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users, RotateCcw } from 'lucide-react';
 
 const THRESHOLD_STORAGE_KEY = 'group_builder_threshold';
 const MEGA_THRESHOLD_STORAGE_KEY = 'group_builder_mega_threshold';
@@ -21,7 +21,7 @@ function saveMegaThreshold(t: number) {
 interface GroupBuilderTabProps {
   departments: Department[];
   auditGroups: AuditGroup[];
-  onAutoConsolidate?: (threshold: number, excludedIds: string[]) => Promise<void>;
+  onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors: number) => Promise<void>;
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<AuditGroup | null>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
   onBulkUpdateDepartments: (updates: { id: string, data: Partial<Department> }[]) => void;
@@ -93,7 +93,6 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
       }]);
     } catch (e) {
       console.error(e);
-      alert("Failed to update department grouping.");
     } finally {
       setIsProcessing(false);
     }
@@ -102,259 +101,265 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   const editingGroupObj = auditGroups.find(g => g.id === editingGroupId);
 
   return (
-    <div className="bg-white rounded-[40px] border-2 border-slate-200 p-8 md:p-12 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
+    <div className="bg-slate-50/50 rounded-[40px] border-2 border-slate-100 p-8 md:p-12 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col lg:flex-row gap-8 lg:gap-14">
         {/* Left Column: Context & Tabs */}
-        <div className="lg:w-1/3 space-y-8">
+        <div className="lg:w-1/3 xl:w-1/4 space-y-10">
           <div>
-            <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-2xl mb-6">
+            <div className="w-16 h-16 bg-white border border-slate-100 text-indigo-500 rounded-3xl flex items-center justify-center shadow-sm mb-8">
               <Boxes className="w-8 h-8" />
             </div>
-            <h3 className="text-2xl font-black text-slate-900 mb-4">Unit Consolidation</h3>
-            <p className="text-slate-500 text-sm leading-relaxed mb-6">
-              Automatically group smaller departments into mega-units based on accumulated assets before pairing them for cross-audits.
+            <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-4">Unit Consolidation</h3>
+            <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8">
+              Bundle departments together based on asset volume before pairing for audits.
             </p>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             <button 
               onClick={() => { setBuilderTab(1); setEditingGroupId(null); }}
-              className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${builderTab === 1 && !editingGroupId ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10 scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+              className={`flex items-center justify-between w-full px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${builderTab === 1 && !editingGroupId ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}
             >
-              <span className="flex items-center gap-3"><span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px]">1</span> Auto Generate</span>
+              <div className="flex items-center gap-4">
+                <span className={`w-6 h-6 rounded-lg ${builderTab === 1 ? 'bg-indigo-500 text-white' : 'bg-slate-100'} flex items-center justify-center text-[10px]`}>1</span>
+                <span>Auto Generate</span>
+              </div>
             </button>
             
             <button 
               onClick={() => { setBuilderTab(2); setEditingGroupId(null); }}
-              className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${builderTab === 2 && !editingGroupId ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10 scale-105' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+              className={`flex items-center justify-between w-full px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${builderTab === 2 && !editingGroupId ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}
             >
-              <span className="flex items-center gap-3"><span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px]">2</span> Review & Refine</span>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">{auditGroups.length}</span>
+              <div className="flex items-center gap-4">
+                <span className={`w-6 h-6 rounded-lg ${builderTab === 2 ? 'bg-indigo-500 text-white' : 'bg-slate-100'} flex items-center justify-center text-[10px]`}>2</span>
+                <span>Review & Refine</span>
+              </div>
+              <span className={`text-[10px] ${builderTab === 2 ? 'bg-white/20' : 'bg-slate-100'} px-2.5 py-1 rounded-lg font-black`}>{auditGroups.length}</span>
             </button>
 
             {editingGroupId && (
               <button 
-                className={`flex items-center justify-between w-full px-5 py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all bg-indigo-600 text-white shadow-xl shadow-indigo-600/20 scale-105`}
+                className={`flex items-center justify-between w-full px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all bg-indigo-600 text-white shadow-2xl shadow-indigo-600/20`}
               >
-                <span className="flex items-center gap-3"><span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px]"><Pencil className="w-3 h-3"/></span> Editing {editingGroupObj?.name}</span>
+                <div className="flex items-center gap-4">
+                  <span className={`w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px]`}>
+                    <Pencil className="w-3 h-3"/>
+                  </span>
+                  <span>Refining {editingGroupObj?.name}</span>
+                </div>
               </button>
             )}
           </div>
         </div>
 
         {/* Right Column: Active Tab Content */}
-        <div className="lg:w-2/3 bg-slate-50 rounded-[32px] p-8 md:p-10 border border-slate-100 relative overflow-hidden">
+        <div className="lg:w-2/3 xl:w-3/4 bg-white rounded-[44px] p-10 md:p-14 border border-slate-100 shadow-sm relative overflow-hidden flex flex-col min-h-[600px]">
            
            {builderTab === 1 && !editingGroupId && (
              <div className="animate-in slide-in-from-right-8 duration-300">
-               <h4 className="text-xl font-black text-slate-900 mb-6">Auto-Generate Groups</h4>
-               <p className="text-sm font-medium text-slate-500 mb-8 max-w-lg">
-                 Set an asset threshold. The system will bundle standalone departments together until they exceed this threshold, naming them Group A, Group B, etc.
+               <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-tight mb-4">Auto-Generate Groups</h4>
+               <p className="text-sm font-medium text-slate-500 mb-10 max-w-lg">
+                 Threshold-based department bundling. Automated naming and officer count optimization.
                </p>
 
-               <div className="space-y-4 mb-6">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-bold text-slate-400 block uppercase tracking-widest">Asset Threshold per Group</label>
-                    <label className="flex items-center gap-2 cursor-pointer group">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Min 2 Auditors Rule</span>
-                      <div className="relative inline-flex items-center">
-                        <input 
-                          type="checkbox" 
-                          className="sr-only peer" 
-                          checked={strictAuditorRule}
-                          onChange={() => setStrictAuditorRule(!strictAuditorRule)}
-                        />
-                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-indigo-500"></div>
-                      </div>
-                    </label>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                  <div className="space-y-4">
+                     <div className="flex items-center justify-between">
+                       <label className="text-[10px] font-black text-slate-400 block uppercase tracking-widest">Asset Threshold</label>
+                       <label className="flex items-center gap-2 cursor-pointer group">
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Strict Rule</span>
+                         <input 
+                           type="checkbox" 
+                           className="sr-only peer" 
+                           checked={strictAuditorRule}
+                           onChange={() => setStrictAuditorRule(!strictAuditorRule)}
+                         />
+                         <div className="w-8 h-4 bg-slate-100 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-full relative"></div>
+                       </label>
+                     </div>
+                     <div className="flex items-center gap-4 bg-slate-50 p-6 border border-slate-100 rounded-[28px] focus-within:border-indigo-300 transition-all">
+                       <Boxes className="w-7 h-7 text-indigo-400" />
+                       <input 
+                         type="number"
+                         min={100}
+                         step={100}
+                         className="w-full text-3xl font-black text-slate-800 outline-none bg-transparent tabular-nums"
+                         value={threshold}
+                         onChange={e => handleThresholdChange(parseInt(e.target.value) || 1000)}
+                       />
+                     </div>
                   </div>
-                  <div className="flex items-center gap-4 bg-white p-4 border border-slate-200 rounded-2xl shadow-sm">
-                    <Boxes className="w-6 h-6 text-indigo-400" />
-                    <input 
-                      type="number"
-                      min={100}
-                      step={100}
-                      className="w-full text-2xl font-black text-slate-700 outline-none"
-                      value={threshold}
-                      onChange={e => handleThresholdChange(parseInt(e.target.value) || 1000)}
-                    />
-                  </div>
-                  {!strictAuditorRule && (
-                    <p className="text-[10px] text-amber-600 font-bold bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100 italic">
-                      Notice: Strict auditor rule is disabled. Single-auditor units can be standalone.
-                    </p>
-                  )}
-               </div>
 
-               <div className="space-y-4 mb-10">
-                  <label className="text-[10px] font-bold text-amber-500 block uppercase tracking-widest">Mega-Department Cutoff (Bypass Grouping)</label>
-                  <div className="flex items-center gap-4 bg-white p-4 border border-amber-200 rounded-2xl shadow-sm">
-                    <Sparkles className="w-6 h-6 text-amber-500" />
-                    <input 
-                      type="number"
-                      min={authThreshold => Math.max(100, threshold + 100)}
-                      step={100}
-                      className="w-full text-2xl font-black text-slate-700 outline-none placeholder:text-slate-300"
-                      value={megaThreshold}
-                      onChange={e => handleMegaThresholdChange(parseInt(e.target.value) || 3000)}
-                    />
+                  <div className="space-y-4">
+                     <label className="text-[10px] font-black text-amber-500 block uppercase tracking-widest">Standalone Cutoff</label>
+                     <div className="flex items-center gap-4 bg-amber-50/30 p-6 border border-amber-100 rounded-[28px] focus-within:border-amber-300 transition-all">
+                       <Sparkles className="w-7 h-7 text-amber-500" />
+                       <input 
+                         type="number"
+                         min={100}
+                         step={100}
+                         className="w-full text-3xl font-black text-slate-800 outline-none bg-transparent tabular-nums"
+                         value={megaThreshold}
+                         onChange={e => handleMegaThresholdChange(parseInt(e.target.value) || 3000)}
+                       />
+                     </div>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-bold leading-relaxed px-2">Departments with assets above this limit will remain standalone and participate in cross-audits independently.</p>
                </div>
 
                <button 
                  onClick={handleRunAutoConsolidate}
                  disabled={isProcessing || !onAutoConsolidate}
-                 className="w-full py-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-[24px] text-sm font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-xl shadow-indigo-600/20 active:scale-95"
+                 className="w-full py-6 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-[28px] text-sm font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all shadow-2xl shadow-slate-900/10 active:scale-95 group"
                >
-                 {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                 {auditGroups.some(g => g.name.startsWith('Group ')) ? 'Reset & Re-Group' : 'Run Auto-Consolidate'}
+                 {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6 text-indigo-400 group-hover:scale-125 transition-transform" />}
+                 Initialize Consolidation
                </button>
-               
-               {auditGroups.some(g => g.name.startsWith('Group ')) && (
-                  <p className="text-center text-[11px] font-bold text-amber-600 mt-4 bg-amber-50 rounded-xl py-2 px-4 shadow-sm border border-amber-100">
-                    ⚠️ Running this again will safely reset your existing "Group X" combinations before recalculating.
-                  </p>
-               )}
              </div>
            )}
 
            {builderTab === 2 && !editingGroupId && (
-             <div className="animate-in slide-in-from-right-8 duration-300">
-               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 pb-6 border-b border-slate-100">
-                  <div>
-                    <h4 className="text-2xl font-black text-slate-900 leading-tight">Review & Refine Groups</h4>
-                    <p className="text-sm font-medium text-slate-500 mt-1">Institutional strategy for asset consolidation and auditor distribution.</p>
+             <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col flex-1 h-full">
+               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-12 pb-12 border-b border-slate-100">
+                  <div className="space-y-3">
+                    <h4 className="text-4xl font-black text-slate-900 tracking-tighter leading-[0.9]">
+                      Active Entities<br/>
+                      <span className="text-slate-400 font-medium text-2xl tracking-normal">(Ranked by Assets)</span>
+                    </h4>
+                    <div className="flex items-center gap-6">
+                       <p className="text-sm font-medium text-slate-400">Live visualization of audit entities and resource strength.</p>
+                       <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Updates</span>
+                       </div>
+                    </div>
                   </div>
                   
-                  {(() => {
-                     const consolidatedDepts = departments.filter(d => d.auditGroupId);
-                     const grandTotalAssets = consolidatedDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                     return (
-                       <div className="bg-slate-900 px-8 py-4 rounded-[28px] border border-slate-700 shadow-2xl flex flex-col items-center min-w-[200px]">
-                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 opacity-80">Institutional Grand Total</span>
-                          <span className="text-3xl font-mono font-black text-white leading-none tabular-nums tracking-tighter italic">{grandTotalAssets.toLocaleString()}</span>
-                       </div>
-                     );
-                  })()}
-
-                  <div className="hidden lg:flex items-center gap-3">
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Configuration Active</span>
+                  <div className="flex items-center gap-4">
+                    {(() => {
+                       const consolidatedDepts = departments.filter(d => d.auditGroupId);
+                       const grandTotalAssets = consolidatedDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                       return (
+                         <div className="bg-slate-900 px-10 py-6 rounded-[36px] shadow-2xl flex flex-col items-center min-w-[220px] relative overflow-hidden border border-slate-700">
+                            <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-2">Institutional Grand Total</span>
+                            <span className="text-4xl font-mono font-black text-white px-2 italic tracking-tighter">{grandTotalAssets.toLocaleString()}</span>
+                         </div>
+                       );
+                    })()}
+                    
+                    <button 
+                      onClick={() => window.location.reload()} 
+                      className="w-14 h-14 bg-white border-2 border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100 hover:bg-slate-50 rounded-2xl transition-all shadow-sm flex items-center justify-center active:scale-90"
+                    >
+                      <RotateCcw className="w-6 h-6" />
+                    </button>
                   </div>
                </div>
                
-               {auditGroups.length === 0 ? (
-                 <div className="text-center py-20 bg-white rounded-[40px] border-2 border-slate-100 border-dashed group hover:border-indigo-200 transition-all cursor-pointer" onClick={() => setBuilderTab(1)}>
-                    <div className="w-20 h-20 bg-indigo-50 text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
-                       <Boxes className="w-10 h-10" />
+               <div className="flex-1 min-h-0">
+                  {auditGroups.length === 0 ? (
+                    <div 
+                      className="h-full flex flex-col items-center justify-center text-center p-12 bg-slate-50/50 rounded-[40px] border-2 border-slate-100 border-dashed group cursor-pointer" 
+                      onClick={() => setBuilderTab(1)}
+                    >
+                      <div className="w-24 h-24 bg-white border border-slate-200 text-slate-300 rounded-[32px] flex items-center justify-center mb-8 shadow-sm group-hover:scale-110 transition-transform">
+                         <Boxes className="w-12 h-12" />
+                      </div>
+                      <h5 className="text-2xl font-black text-slate-900 mb-3">No Entities Configured</h5>
+                      <p className="text-sm font-medium text-slate-500 max-w-sm mb-10 leading-relaxed">Run the consolidation engine to bundle departments and optimize audit coverage.</p>
+                      <button className="px-10 py-4 bg-slate-900 text-white rounded-[20px] text-xs font-black uppercase tracking-widest">Go to Step 1</button>
                     </div>
-                    <h5 className="text-xl font-black text-slate-900 mb-2">No Groups Created Yet</h5>
-                    <p className="text-sm font-medium text-slate-500 mb-8 max-w-xs mx-auto leading-relaxed">
-                      Run the auto-consolidator to bundle departments and reach the audit threshold.
-                    </p>
-                    <button className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all">
-                      Go to Step 1
-                    </button>
-                 </div>
-               ) : (
-                 <div className="relative">
-                   <div className="flex gap-4 overflow-x-auto pb-8 pt-2 custom-scrollbar snap-x snap-mandatory">
-                     {[...auditGroups].sort((a,b) => {
-                        const deptsA = departments.filter(d => d.auditGroupId === a.id);
-                        const assetsA = deptsA.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                        const deptsB = departments.filter(d => d.auditGroupId === b.id);
-                        const assetsB = deptsB.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                        return assetsB - assetsA;
-                     }).map((g, idx) => {
-                        const groupDepts = departments.filter(d => d.auditGroupId === g.id);
-                        const groupTotalAssets = groupDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                        const groupTotalAuditors = groupDepts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
-                        const recAuditors = Math.max(2, Math.ceil(groupTotalAssets / maxAssetsPerDay), Math.ceil(groupDepts.length / maxLocationsPerDay));
+                  ) : (
+                    <div className="flex gap-6 overflow-x-auto pb-10 pt-4 px-2 custom-scrollbar snap-x snap-mandatory">
+                      {[...auditGroups].sort((a,b) => {
+                         const deptsA = departments.filter(d => d.auditGroupId === a.id);
+                         const assetsA = deptsA.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                         const deptsB = departments.filter(d => d.auditGroupId === b.id);
+                         const assetsB = deptsB.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                         return assetsB - assetsA;
+                      }).map((g, idx) => {
+                         const groupDepts = departments.filter(d => d.auditGroupId === g.id);
+                         const groupTotalAssets = groupDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                         const groupTotalAuditors = groupDepts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+                         
+                         // Fix NaN Bug: Use fallbacks for division denominators
+                         const effectiveMaxAssets = maxAssetsPerDay || 1000;
+                         const effectiveMaxLocations = maxLocationsPerDay || 5;
+                         
+                         const recAuditors = Math.max(2, 
+                           Math.ceil(groupTotalAssets / effectiveMaxAssets), 
+                           Math.ceil(groupDepts.length / effectiveMaxLocations)
+                         );
 
-                        return (
-                          <div 
-                            key={g.id} 
-                            className="bg-white p-6 rounded-[36px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[280px] w-[280px] transition-all hover:bg-slate-50 hover:border-indigo-300 hover:shadow-xl hover:-translate-y-1 snap-center group cursor-pointer relative"
-                            onClick={() => setEditingGroupId(g.id)}
-                          >
-                            <div className="flex justify-between items-start mb-6">
-                               <div className="flex flex-col">
-                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Rank #{idx + 1}</span>
-                                 <div className="px-2 py-0.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest w-fit">
-                                   Consolidated Unit
-                                 </div>
-                               </div>
-                               <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (confirm(`Dissolve group "${g.name}"?`) && onDeleteAuditGroup) {
-                                      onDeleteAuditGroup(g.id);
-                                    }
-                                  }}
-                                  className="w-10 h-10 rounded-2xl bg-slate-50 text-slate-300 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                                  title="Dissolve Group"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
+                         return (
+                           <div 
+                             key={g.id} 
+                             className="bg-white p-10 rounded-[44px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[340px] w-[340px] transition-all hover:border-indigo-200 hover:shadow-2xl hover:bg-slate-50/50 snap-center group cursor-pointer relative shrink-0"
+                             onClick={() => setEditingGroupId(g.id)}
+                           >
+                             <div className="flex justify-between items-start mb-10 shrink-0">
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Rank #{idx + 1}</span>
+                                <div className="px-3.5 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest italic">
+                                  Consolidated Unit
+                                </div>
+                                <button 
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     if (confirm(`Dissolve entity "${g.name}"?`) && onDeleteAuditGroup) {
+                                       onDeleteAuditGroup(g.id);
+                                     }
+                                   }}
+                                   className="absolute top-8 right-8 w-10 h-10 rounded-2xl bg-white text-slate-200 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm border border-slate-100"
+                                 >
+                                   <Trash2 className="w-4 h-4" />
+                                 </button>
+                             </div>
 
-                            <h5 className="font-black text-xl text-slate-900 mb-4 truncate pr-4">{g.name}</h5>
-                            
-                            <div className="flex flex-wrap gap-1.5 mb-8 h-12 overflow-hidden content-start">
-                               {groupDepts.map(d => (
-                                 <span key={d.id} className="px-2 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[9px] font-bold uppercase tracking-wider">
-                                   {d.abbr}
-                                 </span>
-                               ))}
-                            </div>
+                             <h5 className="font-black text-3xl text-slate-900 mb-8 tracking-tight shrink-0">{g.name}</h5>
+                             
+                             <div className="flex flex-wrap gap-2.5 mb-10 grow content-start min-h-[4.5rem]">
+                                {groupDepts.map(d => (
+                                  <span key={d.id} className="px-3.5 py-2 bg-slate-100/50 text-slate-600 border border-slate-100 rounded-2xl text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
+                                    {d.abbr}
+                                  </span>
+                                ))}
+                             </div>
 
-                            <div className="mt-auto pt-6 border-t border-slate-100 flex items-center justify-between">
-                               <div className="flex flex-col">
-                                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 opacity-70">Total Assets</span>
-                                  <div className="flex items-center gap-1.5 text-base font-black text-emerald-600 italic">
-                                     <Boxes className="w-4 h-4" />
-                                     {groupTotalAssets.toLocaleString()}
-                                  </div>
-                               </div>
-                               <div className="flex flex-col items-end">
-                                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 opacity-70 text-right">Officers</span>
-                                  <div className="flex items-center gap-1.5 text-base font-black text-slate-700">
-                                     <Users className={`w-4 h-4 ${groupTotalAuditors < recAuditors ? 'text-amber-500' : 'text-slate-400'}`} />
-                                     <span className={groupTotalAuditors < recAuditors ? 'text-amber-600 underline underline-offset-4 decoration-amber-300' : ''}>
-                                       {groupTotalAuditors}
-                                     </span>
-                                  </div>
-                                  {groupTotalAuditors < recAuditors && (
-                                    <span className="text-[8px] font-black text-amber-500 mt-1 uppercase tracking-tighter">Rec: {recAuditors}</span>
-                                  )}
-                               </div>
-                            </div>
-
-                            <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 rounded-[36px] transition-opacity pointer-events-none border-2 border-indigo-500/20"></div>
-                          </div>
-                        );
-                     })}
-                   </div>
-                   
-                   {/* Horizontal Gradient Indicators */}
-                   <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-slate-50 to-transparent pointer-events-none"></div>
-                   <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-50 to-transparent pointer-events-none"></div>
-                 </div>
-               )}
+                             <div className="mt-auto pt-10 border-t border-slate-100 flex items-center justify-between shrink-0">
+                                <div className="flex flex-col gap-1.5">
+                                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Assets</span>
+                                   <span className="text-2xl font-black text-slate-800 tabular-nums tracking-tighter italic">{groupTotalAssets.toLocaleString()}</span>
+                                </div>
+                                <div className="flex flex-col items-end gap-1.5">
+                                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Auditors</span>
+                                   <div className="flex flex-col items-end">
+                                      <div className={`text-2xl font-black tabular-nums transition-colors tracking-tighter ${groupTotalAuditors < recAuditors ? 'text-amber-500 underline underline-offset-8 decoration-amber-200' : 'text-slate-800'}`}>
+                                        {groupTotalAuditors}
+                                      </div>
+                                      {groupTotalAuditors < recAuditors && (
+                                        <span className="text-[9px] font-black text-amber-500 mt-2 bg-amber-50 px-2.5 py-1 rounded-lg uppercase tracking-widest border border-amber-100">Rec: {recAuditors}</span>
+                                      )}
+                                   </div>
+                                </div>
+                             </div>
+                           </div>
+                         );
+                      })}
+                    </div>
+                  )}
+               </div>
              </div>
            )}
 
            {editingGroupId && editingGroupObj && (
-              <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col h-[500px]">
-                <div className="flex items-center justify-between mb-6 shrink-0">
+              <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col h-full flex-1">
+                <div className="flex items-center justify-between mb-10 shrink-0">
                   <div>
-                    <h4 className="text-xl font-black text-slate-900">Refining {editingGroupObj.name}</h4>
-                    <p className="text-xs font-bold text-slate-500 mt-1">Check to include, uncheck to remove.</p>
+                    <h4 className="text-2xl font-black text-slate-900 tracking-tight">Refining {editingGroupObj.name}</h4>
+                    <p className="text-sm font-medium text-slate-400 mt-1">Include / exclude departments from this entity.</p>
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-2 pr-4 scrollbar-thin scrollbar-thumb-slate-200 mb-6">
+                <div className="flex-1 overflow-y-auto space-y-3 pr-6 pb-6 custom-scrollbar">
                   {departments.map(dept => {
                     const isChecked = editingGroupDepts.includes(dept.id);
                     const isAssignedElsewhere = dept.auditGroupId && dept.auditGroupId !== editingGroupId;
@@ -363,52 +368,53 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                     return (
                       <label 
                         key={dept.id} 
-                        className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                        className={`flex items-center justify-between p-6 rounded-[32px] border-2 transition-all cursor-pointer ${
                           isChecked 
-                            ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-sm' 
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-600/10 scale-[1.02]' 
                             : isAssignedElsewhere
-                              ? 'bg-slate-50 border-slate-100 text-slate-400 opacity-60'
-                              : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-200 hover:shadow-sm'
+                              ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 grayscale'
+                              : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-100 hover:bg-slate-50'
                         }`}
                       >
                         <div className="flex flex-col">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-4">
                             <input 
                               type="checkbox"
-                              className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-0 focus:ring-offset-0 transition-all"
+                              className="w-6 h-6 rounded-lg border-slate-200 text-emerald-500 focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
                               checked={isChecked}
                               onChange={() => handleToggleDeptInGroup(dept.id, isChecked)}
                               disabled={isProcessing}
                             />
-                            <span className="text-sm font-bold">{dept.name}</span>
+                            <div className="flex flex-col">
+                               <span className="text-base font-black tracking-tight">{dept.name}</span>
+                               <span className={`text-[10px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>{dept.abbr}</span>
+                            </div>
                           </div>
                           {isAssignedElsewhere && !isChecked && (
-                            <div className="ml-8 mt-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-tighter text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                                Currently in {otherGroupName}
+                            <div className="ml-10 mt-3">
+                              <span className="text-[10px] font-black uppercase tracking-tighter text-amber-500 bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/20">
+                                Assigned to {otherGroupName}
                               </span>
                             </div>
                           )}
                         </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-xs font-mono font-bold text-slate-400">{(dept.totalAssets || 0).toLocaleString()} <Boxes className="inline w-3 h-3"/></span>
-                          {!strictAuditorRule && (dept.auditorCount || 0) < Math.max(2, Math.ceil((dept.totalAssets || 0) / threshold) * 2) && (
-                            <span className="text-[10px] font-bold text-amber-500 italic">
-                              Rec: {Math.max(2, Math.ceil((dept.totalAssets || 0) / threshold) * 2)} Auditors
-                            </span>
-                          )}
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`text-lg font-mono font-black ${isChecked ? 'text-white' : 'text-slate-900'} italic`}>{(dept.totalAssets || 0).toLocaleString()}</span>
+                          <span className={`text-[9px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>Assets <Boxes className="inline w-2.5 h-2.5 ml-1"/></span>
                         </div>
                       </label>
                     );
                   })}
                 </div>
 
-                <button 
-                  onClick={() => setEditingGroupId(null)}
-                  className="w-full shrink-0 h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center transition-all active:scale-95 shadow-xl shadow-slate-900/10"
-                >
-                  Done Editing
-                </button>
+                <div className="pt-8 mt-auto shrink-0 border-t border-slate-100">
+                  <button 
+                    onClick={() => setEditingGroupId(null)}
+                    className="w-full h-16 bg-slate-900 hover:bg-slate-800 text-white rounded-[28px] text-xs font-black uppercase tracking-widest flex items-center justify-center transition-all animate-in fade-in"
+                  >
+                    Finish Revision
+                  </button>
+                </div>
               </div>
            )}
 

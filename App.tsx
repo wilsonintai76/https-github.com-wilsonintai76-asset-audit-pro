@@ -1928,9 +1928,11 @@ const App: React.FC = () => {
       // Step 5: Final refreshment from source of truth
       await loadAllData();
       
-      const finalGroups = await gateway.getAuditGroups();
-      if (finalGroups.length > 0) {
-        showToast(`Auto-consolidation complete! ${finalGroups.length} groups created.`);
+      const refreshedGroups = await gateway.getAuditGroups();
+      setAuditGroups(refreshedGroups); // Explicitly update again for UI reactivity
+      
+      if (refreshedGroups.length > 0) {
+        showToast(`Auto-consolidation complete! ${refreshedGroups.length} groups created.`);
       }
     } catch (e) {
       showError(e, 'Auto-Consolidation Failed');
