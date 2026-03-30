@@ -289,10 +289,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 </div>
             </div>
 
-            <div className="relative overflow-x-auto border border-slate-100 rounded-[32px] bg-slate-50/30">
+            <div className="relative overflow-auto border border-slate-100 rounded-[32px] bg-slate-50/30 max-h-[600px] scrollbar-thin scrollbar-thumb-slate-200">
                 <table className="w-full text-left border-collapse min-w-[800px]">
-                    <thead>
-                        <tr className="bg-slate-50 border-b border-slate-100">
+                    <thead className="sticky top-0 z-20 bg-white border-b border-slate-100 shadow-sm">
+                        <tr className="bg-slate-50">
                             <th className="py-6 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest w-1/3">Permissions & Actions</th>
                             {ROLES_MATRIX.map(role => (
                                 <th key={role.id} className="py-6 px-4 text-center">
