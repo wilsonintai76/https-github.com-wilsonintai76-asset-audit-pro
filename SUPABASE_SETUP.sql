@@ -39,6 +39,7 @@ DROP TABLE IF EXISTS department_mappings CASCADE;
 DROP TABLE IF EXISTS allowed_domains CASCADE; -- Added
 DROP TABLE IF EXISTS institution_kpi_targets CASCADE; -- Added
 DROP TABLE IF EXISTS buildings CASCADE; -- Added
+DROP TABLE IF EXISTS system_settings CASCADE;
 
 -- =============================================================
 -- 0. AUDIT GROUPS
@@ -278,6 +279,16 @@ CREATE TABLE system_activities (
 );
 
 -- =============================================================
+-- 10. SYSTEM SETTINGS
+--    Stores flexible JSON settings like rbac_matrix
+-- =============================================================
+CREATE TABLE system_settings (
+  id          TEXT PRIMARY KEY,
+  value       JSONB NOT NULL,
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================================
 -- ROW LEVEL SECURITY
 -- =============================================================
 ALTER TABLE audit_groups ENABLE ROW LEVEL SECURITY;
@@ -291,6 +302,7 @@ ALTER TABLE kpi_tiers    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE kpi_tier_targets    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE department_mappings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE system_activities   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings     ENABLE ROW LEVEL SECURITY;
 
 -- Public access policies (replace with role-based policies in production)
 CREATE POLICY "Public Access" ON audit_groups FOR ALL USING (true) WITH CHECK (true);
@@ -304,6 +316,7 @@ CREATE POLICY "Public Access" ON kpi_tiers    FOR ALL USING (true) WITH CHECK (t
 CREATE POLICY "Public Access" ON kpi_tier_targets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON department_mappings FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public Access" ON system_activities   FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON system_settings     FOR ALL USING (true) WITH CHECK (true);
 
 -- =============================================================
 -- RPC FUNCTIONS FOR COMPLEX OPERATIONS

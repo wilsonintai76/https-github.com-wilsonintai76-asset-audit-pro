@@ -41,7 +41,23 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const settings = await gateway.getSystemSettings();
       const rbacSetting = settings.find(s => s.id === 'rbac_matrix');
       if (rbacSetting?.value) {
-        setRbacMatrix(rbacSetting.value as RBACMatrix);
+        const dbMatrix = rbacSetting.value as RBACMatrix;
+        const mergedMatrix = { ...DEFAULT_RBAC_MATRIX, ...dbMatrix };
+
+        // Ensure Admin role is never locked out of critical system functions
+        if (!mergedMatrix['view:admin:dashboard']?.includes('Admin')) {
+            mergedMatrix['view:admin:dashboard'] = [...(mergedMatrix['view:admin:dashboard'] || []), 'Admin'];
+        }
+        if (!mergedMatrix['manage:system']?.includes('Admin')) {
+            mergedMatrix['manage:system'] = [...(mergedMatrix['manage:system'] || []), 'Admin'];
+        }
+        
+        // Ensure Auditor role retains its required self-assign capability
+        if (!mergedMatrix['edit:audit:assign']?.includes('Auditor')) {
+            mergedMatrix['edit:audit:assign'] = [...(mergedMatrix['edit:audit:assign'] || []), 'Auditor'];
+        }
+
+        setRbacMatrix(mergedMatrix);
       }
     } catch (error) {
       console.error('Failed to load RBAC matrix:', error);
