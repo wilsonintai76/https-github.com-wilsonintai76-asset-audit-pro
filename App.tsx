@@ -1498,6 +1498,12 @@ const App: React.FC = () => {
     try {
       await gateway.updateDepartment(id, updates);
       setDepartments(await gateway.getDepartments());
+      
+      // If exemption status changed, trigger a refresh to update totalAssets/exemption logic
+      if (updates.isExempted !== undefined) {
+        await refreshDepartmentTotals();
+      }
+      
       showToast('Department updated successfully');
       logActivity('UPDATE', `Updated department: ${id}`, undefined, { departmentId: id, updates });
     } catch (e) {
@@ -1956,7 +1962,7 @@ const App: React.FC = () => {
       // freshDepts from DB might have stale totalAssets if refreshDepartmentTotals hasn't run.
       // departmentsWithAssets is the ground truth for the current session.
       const eligible = departmentsWithAssets
-        .filter(d => !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0 && !d.isExempted)
+        .filter(d => !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0 && d.isExempted !== true)
         .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
 
       if (eligible.length === 0) {
@@ -2011,8 +2017,14 @@ const App: React.FC = () => {
         }
       }
 
-      setAuditGroups(await gateway.getAuditGroups());
-      setDepartments(await gateway.getDepartments());
+      // Step 4: Final refresh to ensure UI shows the new groups
+      const [finalGroups, finalDepts] = await Promise.all([
+        gateway.getAuditGroups(),
+        gateway.getDepartments()
+      ]);
+      setAuditGroups(finalGroups);
+      setDepartments(finalDepts);
+      
       showToast(`Auto-consolidation complete! ${groupIndex - 1} groups created.`);
     } catch (e) {
       showError(e, 'Auto-Consolidation Failed');

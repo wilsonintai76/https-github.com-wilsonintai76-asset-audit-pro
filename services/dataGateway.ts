@@ -44,6 +44,7 @@ class DataGateway {
     if (dept.description !== undefined) payload.description = dept.description;
     if (dept.auditGroupId !== undefined) payload.audit_group_id = dept.auditGroupId;
     if (dept.totalAssets !== undefined) payload.total_assets = dept.totalAssets;
+    if (dept.isExempted !== undefined) payload.is_exempted = dept.isExempted;
     if (dept.headOfDeptId !== undefined) {
       payload.head_of_dept_id = (dept.headOfDeptId && dept.headOfDeptId !== "") ? dept.headOfDeptId : null;
     }
@@ -173,7 +174,8 @@ class DataGateway {
         ...d,
         headOfDeptId: d.head_of_dept_id,
         auditGroupId: d.audit_group_id,
-        totalAssets: d.total_assets
+        totalAssets: d.total_assets,
+        isExempted: d.is_exempted
       })),
       locations: (locations || []).map((l: any) => ({
         ...l,
@@ -510,7 +512,8 @@ class DataGateway {
         ...d,
         headOfDeptId: d.head_of_dept_id,
         auditGroupId: d.audit_group_id,
-        totalAssets: d.total_assets
+        totalAssets: d.total_assets,
+        isExempted: d.is_exempted
       })) as Department[];
     }
     return [];
@@ -536,7 +539,8 @@ class DataGateway {
         ...result,
         headOfDeptId: result.head_of_dept_id,
         auditGroupId: result.audit_group_id,
-        totalAssets: result.total_assets
+        totalAssets: result.total_assets,
+        isExempted: result.is_exempted
       } as Department;
     }
     throw new Error("Supabase client not initialized");
