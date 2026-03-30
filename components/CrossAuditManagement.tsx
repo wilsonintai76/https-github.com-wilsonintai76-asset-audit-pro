@@ -804,9 +804,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                            onChange={(e) => setManualAuditor(e.target.value)}
                         >
                            <option value="">Select Inspecting Entity</option>
-                           {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => (
+                           {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
                              <option key={e.id} value={e.id}>
-                               {e.isJoint ? '📦 [GROUP] ' : '🏢 [UNIT] '} {e.name} ({e.auditors} Officers)
+                               {e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets
                              </option>
                            ))}
                         </select>
@@ -817,9 +817,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                            onChange={(e) => setManualTarget(e.target.value)}
                         >
                            <option value="">Select Target</option>
-                           {entities.filter(e => e.assets > 0).map(e => (
+                           {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
                              <option key={e.id} value={e.id}>
-                               {e.isJoint ? '📦 [GROUP] ' : '🏢 [UNIT] '} {e.name} ({e.assets} Movable Assets)
+                               {e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets
                              </option>
                            ))}
                         </select>
