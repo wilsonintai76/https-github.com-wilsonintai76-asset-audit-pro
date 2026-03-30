@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { User } from '../types';
-import { localDB } from './localDB';
 
 export const authService = {
   loginWithGoogle: async (): Promise<void> => {
@@ -30,9 +29,6 @@ export const authService = {
       // Clear all local and session storage to prevent data leakage
       localStorage.clear();
       sessionStorage.clear();
-      
-      // Clear the IndexedDB cache
-      try { await localDB.clearAll(); } catch (e) { console.warn("LocalDB clear failed", e); }
       
       if (supabase) {
         // We use a promise with a timeout for signOut to ensure it doesn't hang the app
