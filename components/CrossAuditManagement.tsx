@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useMemo } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
 import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown } from 'lucide-react';
@@ -87,6 +87,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('grouping');
   const [simulateIdealStaffing, setSimulateIdealStaffing] = useState(false);
   
+  // Pairing Strategy Mode
+  const [pairingMode, setPairingMode] = useState<'assets' | 'assets_auditors'>('assets_auditors');
+
   // State for Auditor Strictness (Min 2 Auditors rule)
   const [strictAuditorRule, setStrictAuditorRule] = useState<boolean>(true);
   
@@ -108,6 +111,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   // 1. Get Non-Exempted Departments
   const activeDepts = useMemo(() => {
     return departments.filter(d => !d.isExempted);
+  }, [departments]);
+
+  // Exempted departments (for informational banner)
+  const exemptedDepts = useMemo(() => {
+    return departments.filter(d => d.isExempted);
   }, [departments]);
 
   const entities = useMemo(() => {
@@ -377,110 +385,111 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const handleRunSimulator = () => {
     setIsProcessing(true);
     const minAuditorsRequired = strictAuditorRule ? 2 : 1;
-    
-    // 1. Get targets (Entities with assets)
+
+    // 1. Targets = entities with assets, sorted by assets descending
     const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
-    
-    // 2. Get available auditors
-    const auditors = entities.filter(e => {
-        if (simulateIdealStaffing) return true; // Everyone can audit in ideal mode
-        return e.auditors >= minAuditorsRequired;
-    });
-    
-    const capacityMap = new Map<string, number>();
-    auditors.forEach(a => {
-        if (simulateIdealStaffing) {
-            // In ideal mode, scale capacity by members (2 auditors per department)
-            capacityMap.set(a.id!, Math.max(2, a.members.length * 2));
-        } else {
-            const capacity = minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors;
-            capacityMap.set(a.id!, capacity);
-        }
-    });
 
     const newStrategicPlan: StrategicPair[] = [];
     const usedTargetIds = new Set<string>();
+    const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
 
-    for (const target of targets) {
-      if (usedTargetIds.has(target.id!)) continue;
+    if (pairingMode === 'assets') {
+      // ── MODE 1: ASSETS ONLY ─────────────────────────────────────────────
+      // Pair targets (high→low assets) with available auditor entities (any entity
+      // that isn't the target itself). No auditor-count gating.
+      // Each target gets exactly ONE auditing entity (the highest-asset entity
+      // that is not itself and hasn't already been fully used).
+      // Use round-robin assignment across all non-self entities.
+      const auditorPool = entities.filter(e => e.assets > 0 || simulateIdealStaffing);
+      let poolIdx = 0;
 
-      const assets = target.assets || 0;
-      const targetCapacity = Math.max(2, Math.ceil(assets / maxAssetsPerDay));
-      let assignedCount = 0;
-      const assignedAuditors: any[] = [];
-
-      // Loop to fill target capacity
-      while (assignedCount < targetCapacity) {
-        // Find best available auditor (that isn't this target AND hasn't been assigned to this target yet)
-        const availableAuditor = auditors
-          .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0 && !assignedAuditors.some(aa => aa.id === a.id))
-          .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
-
-        if (!availableAuditor) break;
-
-        // Calculate recommended individual auditors
-        let potentialMembers: any[] = [];
-        
-        if (simulateIdealStaffing && availableAuditor.auditors === 0) {
-            // Generate virtual placeholders if real staff are missing
-            potentialMembers = [
-                { id: `virtual-${availableAuditor.id}-1`, name: `Virtual Auditor A (${availableAuditor.name})` },
-                { id: `virtual-${availableAuditor.id}-2`, name: `Virtual Auditor B (${availableAuditor.name})` }
-            ];
-        } else {
-            const auditorDeptIds = availableAuditor.members.map(m => m.id);
-            potentialMembers = users.filter(u => 
-                auditorDeptIds.includes(u.activeDeptId || u.departmentId) && 
-                u.status === 'Active' &&
-                (u.roles.includes('Supervisor') || u.roles.includes('Staff'))
-            );
+      for (const target of targets) {
+        if (usedTargetIds.has(target.id!)) continue;
+        // Pick next non-self auditor
+        let attempts = 0;
+        let picked: typeof auditorPool[0] | null = null;
+        while (attempts < auditorPool.length) {
+          const candidate = auditorPool[poolIdx % auditorPool.length];
+          poolIdx++;
+          attempts++;
+          if (candidate.id !== target.id) { picked = candidate; break; }
         }
+        if (!picked) continue;
 
-        assignedAuditors.push({ 
-          name: availableAuditor.name,
-          assets: availableAuditor.assets,
-          auditors: simulateIdealStaffing ? Math.max(availableAuditor.auditors, availableAuditor.members.length * 2) : availableAuditor.auditors,
-          isJoint: availableAuditor.isJoint,
-          id: availableAuditor.id,
+        const potentialMembers: any[] = simulateIdealStaffing && picked.auditors === 0
+          ? [{ id: `virtual-${picked.id}-1`, name: `Virtual Auditor A (${picked.name})` }, { id: `virtual-${picked.id}-2`, name: `Virtual Auditor B (${picked.name})` }]
+          : users.filter(u => picked!.members.map((m: any) => m.id).includes(u.departmentId) && u.status === 'Active' && (u.roles.includes('Supervisor') || u.roles.includes('Staff')));
+
+        const auditorEntry = {
+          name: picked.name, assets: picked.assets,
+          auditors: simulateIdealStaffing ? Math.max(picked.auditors, picked.members.length * 2) : picked.auditors,
+          isJoint: picked.isJoint, id: picked.id,
           members: potentialMembers.slice(0, 2),
-          isVirtual: simulateIdealStaffing && availableAuditor.auditors === 0
-        });
+          isVirtual: simulateIdealStaffing && picked.auditors === 0,
+        };
 
-        // Update capacities
-        const currentCap = capacityMap.get(availableAuditor.id!) || 0;
-        capacityMap.set(availableAuditor.id!, currentCap - 1);
-        assignedCount += (simulateIdealStaffing ? Math.max(availableAuditor.auditors, 2) : availableAuditor.auditors);
-      }
-
-      if (assignedAuditors.length > 0) {
         newStrategicPlan.push({
-          target: { 
-            name: target.name,
-            assets: target.assets,
-            auditors: target.auditors,
-            members: target.members,
-            id: target.id
-          } as any,
-          auditors: assignedAuditors,
-          totalAuditorsInGroup: assignedAuditors.reduce((sum, a) => sum + a.auditors, 0),
-          auditorSideAssets: assignedAuditors.reduce((sum, a) => sum + a.assets, 0)
+          target: { name: target.name, assets: target.assets, auditors: target.auditors, members: target.members, id: target.id } as any,
+          auditors: [auditorEntry],
+          totalAuditorsInGroup: auditorEntry.auditors,
+          auditorSideAssets: auditorEntry.assets,
         });
         usedTargetIds.add(target.id!);
+        newPairings.push({ auditorDeptId: picked.id!, targetDeptId: target.id!, isActive: true, isMutual: false });
+      }
+
+    } else {
+      // ── MODE 2: ASSETS + AUDITORS ────────────────────────────────────────
+      // Original logic: auditor capacity gates assignment.
+      const auditors = entities.filter(e => simulateIdealStaffing || e.auditors >= minAuditorsRequired);
+      const capacityMap = new Map<string, number>();
+      auditors.forEach(a => {
+        capacityMap.set(a.id!, simulateIdealStaffing
+          ? Math.max(2, a.members.length * 2)
+          : (minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors));
+      });
+
+      for (const target of targets) {
+        if (usedTargetIds.has(target.id!)) continue;
+        const assets = target.assets || 0;
+        const targetCapacity = Math.max(2, Math.ceil(assets / maxAssetsPerDay));
+        let assignedCount = 0;
+        const assignedAuditors: any[] = [];
+
+        while (assignedCount < targetCapacity) {
+          const availableAuditor = auditors
+            .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0 && !assignedAuditors.some(aa => aa.id === a.id))
+            .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
+          if (!availableAuditor) break;
+
+          const potentialMembers: any[] = simulateIdealStaffing && availableAuditor.auditors === 0
+            ? [{ id: `virtual-${availableAuditor.id}-1`, name: `Virtual Auditor A (${availableAuditor.name})` }, { id: `virtual-${availableAuditor.id}-2`, name: `Virtual Auditor B (${availableAuditor.name})` }]
+            : users.filter(u => availableAuditor.members.map((m: any) => m.id).includes(u.departmentId) && u.status === 'Active' && (u.roles.includes('Supervisor') || u.roles.includes('Staff')));
+
+          assignedAuditors.push({
+            name: availableAuditor.name, assets: availableAuditor.assets,
+            auditors: simulateIdealStaffing ? Math.max(availableAuditor.auditors, availableAuditor.members.length * 2) : availableAuditor.auditors,
+            isJoint: availableAuditor.isJoint, id: availableAuditor.id,
+            members: potentialMembers.slice(0, 2),
+            isVirtual: simulateIdealStaffing && availableAuditor.auditors === 0,
+          });
+          const currentCap = capacityMap.get(availableAuditor.id!) || 0;
+          capacityMap.set(availableAuditor.id!, currentCap - 1);
+          assignedCount += (simulateIdealStaffing ? Math.max(availableAuditor.auditors, 2) : availableAuditor.auditors);
+        }
+
+        if (assignedAuditors.length > 0) {
+          newStrategicPlan.push({
+            target: { name: target.name, assets: target.assets, auditors: target.auditors, members: target.members, id: target.id } as any,
+            auditors: assignedAuditors,
+            totalAuditorsInGroup: assignedAuditors.reduce((sum, a) => sum + a.auditors, 0),
+            auditorSideAssets: assignedAuditors.reduce((sum, a) => sum + a.assets, 0),
+          });
+          usedTargetIds.add(target.id!);
+          assignedAuditors.forEach(auditor => newPairings.push({ auditorDeptId: auditor.id, targetDeptId: target.id!, isActive: true, isMutual: false }));
+        }
       }
     }
-
-    // Map ALL auditors from the plan to the flat pairings list
-    const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
-    newStrategicPlan.forEach(p => {
-        p.auditors.forEach(auditor => {
-            newPairings.push({
-                auditorDeptId: auditor.id,
-                targetDeptId: p.target.id,
-                isActive: true,
-                isMutual: false
-            });
-        });
-    });
 
     setStrategicPlan(newStrategicPlan);
     setSimulatedPairings(newPairings);
@@ -568,22 +577,53 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const activePairingList = isSimulatorActive ? simulatedPairings : (permissions as any[]);
 
-  const filteredPairingList = useMemo(() => {
-    return activePairingList.filter(perm => {
-        const targetEntity = entities.find(e => e.id === perm.targetDeptId || (e.members && e.members.some(m => m.id === perm.targetDeptId)));
-        const auditorEntity = entities.find(e => e.id === perm.auditorDeptId || (e.members && e.members.some(m => m.id === perm.auditorDeptId)));
-        
-        const auditorMatch = !auditorFilter || 
-            auditorEntity?.name.toLowerCase().includes(auditorFilter.toLowerCase()) ||
-            auditorEntity?.members.some(m => m.abbr.toLowerCase().includes(auditorFilter.toLowerCase()));
-            
-        const targetMatch = !targetFilter ||
-            targetEntity?.name.toLowerCase().includes(targetFilter.toLowerCase()) ||
-            targetEntity?.members.some(m => m.abbr.toLowerCase().includes(targetFilter.toLowerCase()));
-            
-        return auditorMatch && targetMatch;
+  // Collapse raw dept-level permissions into unique entity-level pairs
+  const entityPermissions = useMemo(() => {
+    if (isSimulatorActive) {
+      // Simulator already works at entity level — just return as-is with empty rawPermIds
+      return simulatedPairings.map((p, idx) => ({
+        auditorEntityId: p.auditorDeptId,
+        targetEntityId: p.targetDeptId,
+        isMutual: p.isMutual,
+        rawPermIds: [] as string[],
+        simIdx: idx,
+      }));
+    }
+    // For live DB permissions: map each raw dept permission → its parent entity,
+    // then deduplicate by auditorEntityId+targetEntityId
+    const map = new Map<string, { auditorEntityId: string; targetEntityId: string; isMutual: boolean; rawPermIds: string[] }>();
+    (permissions as any[]).forEach(p => {
+      const auditorEntity = entities.find(e => e.id === p.auditorDeptId || (e.members && e.members.some((m: any) => m.id === p.auditorDeptId)));
+      const targetEntity = entities.find(e => e.id === p.targetDeptId || (e.members && e.members.some((m: any) => m.id === p.targetDeptId)));
+      if (!auditorEntity || !targetEntity) return;
+      const key = `${auditorEntity.id}-${targetEntity.id}`;
+      if (map.has(key)) {
+        map.get(key)!.rawPermIds.push(p.id);
+      } else {
+        map.set(key, {
+          auditorEntityId: auditorEntity.id!,
+          targetEntityId: targetEntity.id!,
+          isMutual: p.isMutual,
+          rawPermIds: [p.id],
+        });
+      }
     });
-  }, [activePairingList, auditorFilter, targetFilter, entities]);
+    return Array.from(map.values());
+  }, [isSimulatorActive, simulatedPairings, permissions, entities]);
+
+  const filteredEntityPermissions = useMemo(() => {
+    return entityPermissions.filter(ep => {
+      const auditorEntity = entities.find(e => e.id === ep.auditorEntityId);
+      const targetEntity = entities.find(e => e.id === ep.targetEntityId);
+      const auditorMatch = !auditorFilter ||
+        auditorEntity?.name.toLowerCase().includes(auditorFilter.toLowerCase()) ||
+        auditorEntity?.members?.some((m: any) => m.abbr?.toLowerCase().includes(auditorFilter.toLowerCase()));
+      const targetMatch = !targetFilter ||
+        targetEntity?.name.toLowerCase().includes(targetFilter.toLowerCase()) ||
+        targetEntity?.members?.some((m: any) => m.abbr?.toLowerCase().includes(targetFilter.toLowerCase()));
+      return auditorMatch && targetMatch;
+    });
+  }, [entityPermissions, auditorFilter, targetFilter, entities]);
 
   return (
     <div className="space-y-8">
@@ -650,11 +690,43 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
               <Zap className="w-8 h-8" />
             </div>
             <h3 className="text-2xl font-black text-slate-900 mb-4">Pairing Simulator</h3>
-            <p className="text-slate-500 text-sm leading-relaxed mb-6">
-              Generate the most efficient audit assignments automatically. The engine matches auditing entities to high-asset targets until your Institutional KPI is mathematically secured.
+            <p className="text-slate-500 text-sm leading-relaxed mb-4">
+              Generate the most efficient audit assignments automatically based on your selected strategy.
             </p>
-            
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-8">
+
+            {/* Pairing Strategy Mode Toggle */}
+            <div className="mb-6">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pairing Strategy</p>
+              <div className="flex rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-1 gap-1">
+                <button
+                  onClick={() => setPairingMode('assets')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${
+                    pairingMode === 'assets'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  By Total Assets
+                </button>
+                <button
+                  onClick={() => setPairingMode('assets_auditors')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${
+                    pairingMode === 'assets_auditors'
+                      ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100'
+                      : 'text-slate-400 hover:text-slate-600'
+                  }`}
+                >
+                  Assets + Auditors
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                {pairingMode === 'assets'
+                  ? 'Pairs targets by asset volume only. Any entity (including consolidated groups) can audit any other target — no auditor-count gating.'
+                  : 'Requires auditor capacity to qualify. Entities are assigned based on both asset size and available inspecting officers.'}
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-5">
               <label className="flex items-center justify-between cursor-pointer group">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
@@ -674,6 +746,24 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 </div>
               </label>
             </div>
+
+            {/* Exempted Entities Banner */}
+            {exemptedDepts.length > 0 && (
+              <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 mb-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <Ban className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Excluded from Cross-Audit</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {exemptedDepts.map(d => (
+                    <span key={d.id} className="px-2 py-1 bg-white border border-rose-200 text-rose-500 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                      {d.name}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[9px] text-rose-400 mt-2 leading-relaxed">These departments are excluded as both auditors and targets. Manage exemptions in Department Settings.</p>
+              </div>
+            )}
 
             {isSimulatorActive ? (
                 <div className="space-y-3">
@@ -835,28 +925,28 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                           {filteredPairingList.length === 0 ? (
+                           {filteredEntityPermissions.length === 0 ? (
                                <tr>
                                    <td colSpan={4} className="py-12 text-center text-slate-400 font-medium text-sm">
                                        {activePairingList.length === 0 ? 'No pairings generated. Run Simulator or add manual overrides.' : 'No pairings match your search filters.'}
                                    </td>
                                </tr>
                            ) : (
-                                filteredPairingList.map((perm, idx) => {
-                                    const targetEntity = entities.find(e => e.id === perm.targetDeptId || (e.members && e.members.some(m => m.id === perm.targetDeptId)));
-                                    const auditorEntity = entities.find(e => e.id === perm.auditorDeptId || (e.members && e.members.some(m => m.id === perm.auditorDeptId)));
-                                    const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === perm.targetDeptId) : null;
-                                    const planAuditor = planPair?.auditors.find(a => a.id === perm.auditorDeptId);
+                                 filteredEntityPermissions.map((ep, idx) => {
+                                     const targetEntity = entities.find(e => e.id === ep.targetEntityId);
+                                     const auditorEntity = entities.find(e => e.id === ep.auditorEntityId);
+                                     const planPair = isSimulatorActive ? strategicPlan.find(p => p.target.id === ep.targetEntityId) : null;
+                                     const planAuditor = planPair?.auditors.find(a => a.id === ep.auditorEntityId);
                                     
                                     return (
-                                        <tr key={isSimulatorActive ? idx : (perm as any).id} className="hover:bg-white transition-colors">
+                                         <tr key={`${ep.auditorEntityId}-${ep.targetEntityId}`} className="hover:bg-slate-50/50 transition-colors">
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-                                                        <Users className="w-4 h-4" />
+                                                         {auditorEntity?.isConsolidated ? <Boxes className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                                                     </div>
                                                      <div>
-                                                        <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || perm.auditorDeptId}</p>
+                                                         <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || ep.auditorEntityId}</p>
                                                         <div className="flex flex-wrap gap-1 mt-1">
                                                             {auditorEntity?.members?.map((m: any) => (
                                                                 <span key={m.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase tracking-wider">
@@ -877,37 +967,34 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-center">
                                                 <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-400">
-                                                    {perm.isMutual ? <ArrowRightLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                                                     {ep.isMutual ? <ArrowRightLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 group w-fit mb-3">
-                                                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                                                    <span className="text-[10px] font-black uppercase tracking-tight">
-                                                        Target Capacity: {(() => {
-                                                            const assets = targetEntity?.assets || 0;
-                                                            return Math.max(2, Math.ceil(assets / maxAssetsPerDay));
-                                                        })()} Inspecting Officers
-                                                    </span>
-                                                </div>
+                                                 {pairingMode === "assets_auditors" && (<div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 w-fit mb-3">
+                                                     <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                                                     <span className="text-[10px] font-black uppercase tracking-tight">
+                                                         Target Capacity: {Math.max(2, Math.ceil((targetEntity?.assets || 0) / maxAssetsPerDay))} Inspecting Officers
+                                                     </span>
+                                                 </div>)}
 
                                                <div className="flex items-center gap-3">
                                                    <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-                                                       <Building2 className="w-4 h-4" />
+                                                       {targetEntity?.isConsolidated ? <Boxes className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
                                                    </div>
                                                    <div>
-                                                       <p className="font-bold text-sm text-slate-900">{targetEntity?.name || perm.targetDeptId}</p>
+                                                       <p className="font-bold text-sm text-slate-900">{targetEntity?.name || ep.targetEntityId}</p>
                                                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Movable Assets</p>
                                                    </div>
                                                </div>
                                            </td>
                                            <td className="px-6 py-4 text-right">
                                                {isSimulatorActive ? (
-                                                   <button onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                                    <button onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
                                                        <X className="w-5 h-5" />
                                                    </button>
                                                ) : (
-                                                   <button onClick={() => onRemovePermission && onRemovePermission((perm as any).id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                                    <button onClick={() => onBulkRemovePermissions && ep.rawPermIds && ep.rawPermIds.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors" title={`Remove ${ep.rawPermIds?.length || 1} permission link(s)`}>
                                                        <Trash2 className="w-5 h-5" />
                                                    </button>
                                                )}

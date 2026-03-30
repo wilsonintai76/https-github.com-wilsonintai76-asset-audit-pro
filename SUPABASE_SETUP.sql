@@ -76,7 +76,8 @@ CREATE TABLE departments (
   head_of_dept_id UUID,          -- FK to users(id) added via ALTER TABLE below
   description     TEXT,
   audit_group_id  UUID REFERENCES audit_groups(id) ON DELETE SET NULL ON UPDATE CASCADE,
-  total_assets    INTEGER DEFAULT 0
+  total_assets    INTEGER DEFAULT 0,
+  is_exempted     BOOLEAN NOT NULL DEFAULT false
 );
 
 -- =============================================================
