@@ -221,109 +221,125 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
            {builderTab === 2 && !editingGroupId && (
              <div className="animate-in slide-in-from-right-8 duration-300">
-               <div className="flex items-center justify-between mb-8">
-                  <h4 className="text-xl font-black text-slate-900">Review & Refine Groups</h4>
-                  <div className="flex items-center gap-4">
-                     <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
-                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Total Groups</span>
-                        <span className="text-lg font-black text-indigo-600 leading-none mt-1">{auditGroups.length}</span>
-                     </div>
-                     {(() => {
-                        const consolidatedDepts = departments.filter(d => d.auditGroupId);
-                        const grandTotalAssets = consolidatedDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                        return (
-                          <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center">
-                             <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest text-center">Grand Total Assets</span>
-                             <span className="text-lg font-black text-emerald-600 leading-none mt-1">{grandTotalAssets.toLocaleString()}</span>
-                          </div>
-                        );
-                     })()}
+               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10 pb-6 border-b border-slate-100">
+                  <div>
+                    <h4 className="text-2xl font-black text-slate-900 leading-tight">Review & Refine Groups</h4>
+                    <p className="text-sm font-medium text-slate-500 mt-1">Institutional strategy for asset consolidation and auditor distribution.</p>
+                  </div>
+                  
+                  {(() => {
+                     const consolidatedDepts = departments.filter(d => d.auditGroupId);
+                     const grandTotalAssets = consolidatedDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                     return (
+                       <div className="bg-slate-900 px-8 py-4 rounded-[28px] border border-slate-700 shadow-2xl flex flex-col items-center min-w-[200px]">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 opacity-80">Institutional Grand Total</span>
+                          <span className="text-3xl font-mono font-black text-white leading-none tabular-nums tracking-tighter italic">{grandTotalAssets.toLocaleString()}</span>
+                       </div>
+                     );
+                  })()}
+
+                  <div className="hidden lg:flex items-center gap-3">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Configuration Active</span>
                   </div>
                </div>
                
                {auditGroups.length === 0 ? (
-                 <div className="text-center py-12 bg-white rounded-3xl border border-slate-200 border-dashed">
-                    <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                       <Check className="w-5 h-5 text-slate-400" />
+                 <div className="text-center py-20 bg-white rounded-[40px] border-2 border-slate-100 border-dashed group hover:border-indigo-200 transition-all cursor-pointer" onClick={() => setBuilderTab(1)}>
+                    <div className="w-20 h-20 bg-indigo-50 text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                       <Boxes className="w-10 h-10" />
                     </div>
-                    <p className="text-sm font-bold text-slate-500 mb-2">No groups created yet.</p>
-                    <p className="text-xs text-slate-400">Run the auto-generator to populate this list.</p>
+                    <h5 className="text-xl font-black text-slate-900 mb-2">No Groups Created Yet</h5>
+                    <p className="text-sm font-medium text-slate-500 mb-8 max-w-xs mx-auto leading-relaxed">
+                      Run the auto-consolidator to bundle departments and reach the audit threshold.
+                    </p>
+                    <button className="px-8 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all">
+                      Go to Step 1
+                    </button>
                  </div>
                ) : (
-                 <div className="grid grid-cols-1 gap-4 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
-                   {[...auditGroups].sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map(g => {
-                      const groupDepts = departments.filter(d => d.auditGroupId === g.id);
-                      const groupTotalAssets = groupDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                      const groupTotalAuditors = groupDepts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
-                      const recAuditors = Math.max(2, Math.ceil(groupTotalAssets / maxAssetsPerDay), Math.ceil(groupDepts.length / maxLocationsPerDay));
+                 <div className="relative">
+                   <div className="flex gap-4 overflow-x-auto pb-8 pt-2 custom-scrollbar snap-x snap-mandatory">
+                     {[...auditGroups].sort((a,b) => {
+                        const deptsA = departments.filter(d => d.auditGroupId === a.id);
+                        const assetsA = deptsA.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                        const deptsB = departments.filter(d => d.auditGroupId === b.id);
+                        const assetsB = deptsB.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                        return assetsB - assetsA;
+                     }).map((g, idx) => {
+                        const groupDepts = departments.filter(d => d.auditGroupId === g.id);
+                        const groupTotalAssets = groupDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                        const groupTotalAuditors = groupDepts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+                        const recAuditors = Math.max(2, Math.ceil(groupTotalAssets / maxAssetsPerDay), Math.ceil(groupDepts.length / maxLocationsPerDay));
 
-                      return (
-                        <div 
-                          key={g.id} 
-                          className="bg-white p-6 rounded-[28px] border-2 border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between group transition-all hover:bg-slate-50 hover:border-indigo-200 hover:shadow-md cursor-pointer" 
-                          onClick={() => setEditingGroupId(g.id)}
-                        >
-                          <div className="flex items-center gap-5 flex-1">
-                             <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center font-black text-xl shadow-lg shadow-slate-900/10 shrink-0">
-                                {g.name.split(' ').pop()}
-                             </div>
-                             <div className="min-w-0 flex-1">
-                                <div className="flex items-baseline gap-3 mb-2">
-                                  <h5 className="font-black text-lg text-slate-900">{g.name}</h5>
-                                  <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 uppercase tracking-widest">
-                                    {groupDepts.length} Units
-                                  </span>
-                                </div>
-                                
-                                <div className="flex flex-wrap gap-1.5 mb-3">
-                                   {groupDepts.map(d => (
-                                     <span key={d.id} className="px-2 py-1 rounded bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold uppercase tracking-wide">
-                                       {d.abbr}
-                                     </span>
-                                   ))}
-                                </div>
-
-                                <div className="flex items-center gap-4 text-xs font-bold text-slate-400">
-                                   <div className="flex items-center gap-1.5">
-                                      <Users className="w-3.5 h-3.5" />
-                                      <span className={groupTotalAuditors < recAuditors ? 'text-amber-600' : 'text-slate-600'}>
-                                        {groupTotalAuditors} Officers
-                                        {groupTotalAuditors < recAuditors && (
-                                          <span className="text-[9px] ml-1 underline decoration-amber-200 underline-offset-2">(Target: {recAuditors})</span>
-                                        )}
-                                      </span>
-                                   </div>
-                                </div>
-                             </div>
-                          </div>
-
-                          <div className="flex flex-row md:flex-col items-center md:items-end gap-3 mt-4 md:mt-0 ml-0 md:ml-6 shrink-0">
-                             <div className="flex flex-col items-center md:items-end">
-                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">Group Assets</span>
-                                <div className="flex items-center gap-2 text-xl font-black text-emerald-600 bg-emerald-50 px-4 py-1.5 rounded-2xl border border-emerald-100 shadow-sm">
-                                   {groupTotalAssets.toLocaleString()}
-                                   <Boxes className="w-5 h-5" />
-                                </div>
-                             </div>
-                             <div className="flex items-center gap-2">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-indigo-600 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0 hidden md:inline">Manage Group</span>
-                                <button 
+                        return (
+                          <div 
+                            key={g.id} 
+                            className="bg-white p-6 rounded-[36px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[280px] w-[280px] transition-all hover:bg-slate-50 hover:border-indigo-300 hover:shadow-xl hover:-translate-y-1 snap-center group cursor-pointer relative"
+                            onClick={() => setEditingGroupId(g.id)}
+                          >
+                            <div className="flex justify-between items-start mb-6">
+                               <div className="flex flex-col">
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Rank #{idx + 1}</span>
+                                 <div className="px-2 py-0.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest w-fit">
+                                   Consolidated Unit
+                                 </div>
+                               </div>
+                               <button 
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (confirm(`Delete group "${g.name}" and dissolve its units?`) && onDeleteAuditGroup) {
+                                    if (confirm(`Dissolve group "${g.name}"?`) && onDeleteAuditGroup) {
                                       onDeleteAuditGroup(g.id);
                                     }
                                   }}
-                                  className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all shadow-sm border border-rose-100"
-                                  title="Delete Group"
+                                  className="w-10 h-10 rounded-2xl bg-slate-50 text-slate-300 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                                  title="Dissolve Group"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                             </div>
+                            </div>
+
+                            <h5 className="font-black text-xl text-slate-900 mb-4 truncate pr-4">{g.name}</h5>
+                            
+                            <div className="flex flex-wrap gap-1.5 mb-8 h-12 overflow-hidden content-start">
+                               {groupDepts.map(d => (
+                                 <span key={d.id} className="px-2 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-lg text-[9px] font-bold uppercase tracking-wider">
+                                   {d.abbr}
+                                 </span>
+                               ))}
+                            </div>
+
+                            <div className="mt-auto pt-6 border-t border-slate-100 flex items-center justify-between">
+                               <div className="flex flex-col">
+                                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 opacity-70">Total Assets</span>
+                                  <div className="flex items-center gap-1.5 text-base font-black text-emerald-600 italic">
+                                     <Boxes className="w-4 h-4" />
+                                     {groupTotalAssets.toLocaleString()}
+                                  </div>
+                               </div>
+                               <div className="flex flex-col items-end">
+                                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 opacity-70 text-right">Officers</span>
+                                  <div className="flex items-center gap-1.5 text-base font-black text-slate-700">
+                                     <Users className={`w-4 h-4 ${groupTotalAuditors < recAuditors ? 'text-amber-500' : 'text-slate-400'}`} />
+                                     <span className={groupTotalAuditors < recAuditors ? 'text-amber-600 underline underline-offset-4 decoration-amber-300' : ''}>
+                                       {groupTotalAuditors}
+                                     </span>
+                                  </div>
+                                  {groupTotalAuditors < recAuditors && (
+                                    <span className="text-[8px] font-black text-amber-500 mt-1 uppercase tracking-tighter">Rec: {recAuditors}</span>
+                                  )}
+                               </div>
+                            </div>
+
+                            <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 rounded-[36px] transition-opacity pointer-events-none border-2 border-indigo-500/20"></div>
                           </div>
-                        </div>
-                      );
-                   })}
+                        );
+                     })}
+                   </div>
+                   
+                   {/* Horizontal Gradient Indicators */}
+                   <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-slate-50 to-transparent pointer-events-none"></div>
+                   <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-50 to-transparent pointer-events-none"></div>
                  </div>
                )}
              </div>

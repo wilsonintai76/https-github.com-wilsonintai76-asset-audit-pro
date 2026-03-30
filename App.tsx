@@ -2022,10 +2022,14 @@ const App: React.FC = () => {
         gateway.getAuditGroups(),
         gateway.getDepartments()
       ]);
+      
       setAuditGroups(finalGroups);
       setDepartments(finalDepts);
       
-      showToast(`Auto-consolidation complete! ${groupIndex - 1} groups created.`);
+      // Force immediate jump to Review Tab and ensure state is authoritative
+      if (finalGroups.length > 0) {
+        showToast(`Auto-consolidation complete! ${finalGroups.length} groups created.`);
+      }
     } catch (e) {
       showError(e, 'Auto-Consolidation Failed');
     }
