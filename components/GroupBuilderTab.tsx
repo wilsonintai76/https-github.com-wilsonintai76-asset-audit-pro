@@ -100,10 +100,70 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
   const editingGroupObj = auditGroups.find(g => g.id === editingGroupId);
 
+  // --- UNIFIED ENTITIES LOGIC (Synced with Overview Hub) ---
+  const entities = useMemo(() => {
+    const map = new Map<string, { 
+      name: string, 
+      assets: number, 
+      auditors: number, 
+      memberCount: number, 
+      members: Department[], 
+      id?: string,
+      isConsolidated: boolean 
+    }>(); 
+
+    // Only process non-exempted departments
+    const activeDepts = departments.filter(d => !d.isExempted);
+
+    activeDepts.forEach(d => {
+      const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
+      
+      // Determine the canonical ID and name for this entity
+      const entityId = group ? group.id : d.id;
+      
+      // Group Naming Priority:
+      // 1. If part of a multi-department group, use Group Name.
+      // 2. If it's a standalone group or no group, use Department Full Name.
+      const current = map.get(entityId) || { name: '', assets: 0, auditors: 0, memberCount: 0, members: [], id: entityId, isConsolidated: false };
+      
+      const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
+
+      map.set(entityId, { 
+        name: '', // Will finalize after members are gathered
+        assets: current.assets + safeAssets,
+        auditors: current.auditors + (d.auditorCount || 0),
+        memberCount: current.memberCount + 1,
+        members: [...current.members, d],
+        id: entityId,
+        isConsolidated: !!group
+      });
+    });
+
+    return Array.from(map.values()).map(stats => {
+      const group = auditGroups.find(g => g.id === stats.id);
+      
+      // Naming Logic: Priority to Department Full Name for single-member entities
+      const finalName = (stats.memberCount === 1) 
+        ? stats.members[0].name 
+        : (group ? group.name : stats.members[0].name);
+
+      return { 
+        ...stats, 
+        name: finalName,
+        isGroup: stats.memberCount > 1,
+        isConsolidated: stats.memberCount > 1 || !!group
+      };
+    }).sort((a, b) => b.assets - a.assets);
+  }, [departments, auditGroups]);
+
+  const grandTotalAssets = useMemo(() => {
+    return entities.reduce((sum, e) => sum + e.assets, 0);
+  }, [entities]);
+
   return (
     <div className="bg-slate-50/50 rounded-[40px] border-2 border-slate-100 p-8 md:p-12 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-14">
-        {/* Left Column: Context & Tabs */}
+        {/* Left Column */}
         <div className="lg:w-1/3 xl:w-1/4 space-y-10">
           <div>
             <div className="w-16 h-16 bg-white border border-slate-100 text-indigo-500 rounded-3xl flex items-center justify-center shadow-sm mb-8">
@@ -111,7 +171,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
             </div>
             <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-4">Unit Consolidation</h3>
             <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8">
-              Bundle departments together based on asset volume before pairing for audits.
+              Manage the institutional audit landscape by grouping departments or reviewing standalone entities.
             </p>
           </div>
 
@@ -134,7 +194,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                 <span className={`w-6 h-6 rounded-lg ${builderTab === 2 ? 'bg-indigo-500 text-white' : 'bg-slate-100'} flex items-center justify-center text-[10px]`}>2</span>
                 <span>Review & Refine</span>
               </div>
-              <span className={`text-[10px] ${builderTab === 2 ? 'bg-white/20' : 'bg-slate-100'} px-2.5 py-1 rounded-lg font-black`}>{auditGroups.length}</span>
+              <span className={`text-[10px] ${builderTab === 2 ? 'bg-white/20' : 'bg-slate-100'} px-2.5 py-1 rounded-lg font-black`}>{entities.length}</span>
             </button>
 
             {editingGroupId && (
@@ -145,21 +205,21 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                   <span className={`w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center text-[10px]`}>
                     <Pencil className="w-3 h-3"/>
                   </span>
-                  <span>Refining {editingGroupObj?.name}</span>
+                  <span>Refining {editingGroupObj?.name || entities.find(e => e.id === editingGroupId)?.name}</span>
                 </div>
               </button>
             )}
           </div>
         </div>
 
-        {/* Right Column: Active Tab Content */}
+        {/* Right Column */}
         <div className="lg:w-2/3 xl:w-3/4 bg-white rounded-[44px] p-10 md:p-14 border border-slate-100 shadow-sm relative overflow-hidden flex flex-col min-h-[600px]">
            
            {builderTab === 1 && !editingGroupId && (
              <div className="animate-in slide-in-from-right-8 duration-300">
                <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-tight mb-4">Auto-Generate Groups</h4>
                <p className="text-sm font-medium text-slate-500 mb-10 max-w-lg">
-                 Threshold-based department bundling. Automated naming and officer count optimization.
+                 Set an asset threshold. The system will bundle standalone departments together until they exceed this threshold.
                </p>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
@@ -235,16 +295,10 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    {(() => {
-                       const consolidatedDepts = departments.filter(d => d.auditGroupId);
-                       const grandTotalAssets = consolidatedDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                       return (
-                         <div className="bg-slate-900 px-10 py-6 rounded-[36px] shadow-2xl flex flex-col items-center min-w-[220px] relative overflow-hidden border border-slate-700">
-                            <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-2">Institutional Grand Total</span>
-                            <span className="text-4xl font-mono font-black text-white px-2 italic tracking-tighter">{grandTotalAssets.toLocaleString()}</span>
-                         </div>
-                       );
-                    })()}
+                    <div className="bg-slate-900 px-10 py-6 rounded-[36px] shadow-2xl flex flex-col items-center min-w-[220px] relative overflow-hidden border border-slate-700">
+                       <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-2">Institutional Grand Total</span>
+                       <span className="text-4xl font-mono font-black text-white px-2 italic tracking-tighter">{grandTotalAssets.toLocaleString()}</span>
+                    </div>
                     
                     <button 
                       onClick={() => window.location.reload()} 
@@ -256,70 +310,55 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                </div>
                
                <div className="flex-1 min-h-0">
-                  {auditGroups.length === 0 ? (
-                    <div 
-                      className="h-full flex flex-col items-center justify-center text-center p-12 bg-slate-50/50 rounded-[40px] border-2 border-slate-100 border-dashed group cursor-pointer" 
-                      onClick={() => setBuilderTab(1)}
-                    >
-                      <div className="w-24 h-24 bg-white border border-slate-200 text-slate-300 rounded-[32px] flex items-center justify-center mb-8 shadow-sm group-hover:scale-110 transition-transform">
-                         <Boxes className="w-12 h-12" />
-                      </div>
-                      <h5 className="text-2xl font-black text-slate-900 mb-3">No Entities Configured</h5>
-                      <p className="text-sm font-medium text-slate-500 max-w-sm mb-10 leading-relaxed">Run the consolidation engine to bundle departments and optimize audit coverage.</p>
-                      <button className="px-10 py-4 bg-slate-900 text-white rounded-[20px] text-xs font-black uppercase tracking-widest">Go to Step 1</button>
+                  {entities.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-slate-50/50 rounded-[40px] border-2 border-slate-100 border-dashed group cursor-pointer">
+                      <Boxes className="w-12 h-12 text-slate-200 mb-6" />
+                      <h5 className="text-xl font-bold text-slate-400">No active entities available.</h5>
                     </div>
                   ) : (
                     <div className="flex gap-6 overflow-x-auto pb-10 pt-4 px-2 custom-scrollbar snap-x snap-mandatory">
-                      {[...auditGroups].sort((a,b) => {
-                         const deptsA = departments.filter(d => d.auditGroupId === a.id);
-                         const assetsA = deptsA.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                         const deptsB = departments.filter(d => d.auditGroupId === b.id);
-                         const assetsB = deptsB.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                         return assetsB - assetsA;
-                      }).map((g, idx) => {
-                         const groupDepts = departments.filter(d => d.auditGroupId === g.id);
-                         const groupTotalAssets = groupDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                         const groupTotalAuditors = groupDepts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
-                         
-                         // Fix NaN Bug: Use fallbacks for division denominators
+                      {entities.map((e, idx) => {
                          const effectiveMaxAssets = maxAssetsPerDay || 1000;
                          const effectiveMaxLocations = maxLocationsPerDay || 5;
-                         
                          const recAuditors = Math.max(2, 
-                           Math.ceil(groupTotalAssets / effectiveMaxAssets), 
-                           Math.ceil(groupDepts.length / effectiveMaxLocations)
+                           Math.ceil(e.assets / effectiveMaxAssets), 
+                           Math.ceil(e.memberCount / effectiveMaxLocations)
                          );
 
                          return (
-                           <div 
-                             key={g.id} 
-                             className="bg-white p-10 rounded-[44px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[340px] w-[340px] transition-all hover:border-indigo-200 hover:shadow-2xl hover:bg-slate-50/50 snap-center group cursor-pointer relative shrink-0"
-                             onClick={() => setEditingGroupId(g.id)}
+                           <button 
+                             key={e.id} 
+                             className="bg-white p-10 rounded-[44px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[340px] w-[340px] transition-all hover:border-indigo-200 hover:shadow-2xl hover:bg-slate-50/50 snap-center group relative shrink-0 text-left"
+                             onClick={() => setEditingGroupId(e.id || null)}
                            >
                              <div className="flex justify-between items-start mb-10 shrink-0">
                                 <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Rank #{idx + 1}</span>
-                                <div className="px-3.5 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest italic">
-                                  Consolidated Unit
-                                </div>
-                                <button 
-                                   onClick={(e) => {
-                                     e.stopPropagation();
-                                     if (confirm(`Dissolve entity "${g.name}"?`) && onDeleteAuditGroup) {
-                                       onDeleteAuditGroup(g.id);
-                                     }
-                                   }}
-                                   className="absolute top-8 right-8 w-10 h-10 rounded-2xl bg-white text-slate-200 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm border border-slate-100"
-                                 >
-                                   <Trash2 className="w-4 h-4" />
-                                 </button>
+                                {e.isConsolidated && (
+                                  <div className="px-3.5 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest italic">
+                                    Consolidated Unit
+                                  </div>
+                                )}
+                                {e.isGroup && onDeleteAuditGroup && (
+                                  <button 
+                                     onClick={(e_stop) => {
+                                       e_stop.stopPropagation();
+                                       if (confirm(`Dissolve entity "${e.name}"?`) && onDeleteAuditGroup && e.id) {
+                                         onDeleteAuditGroup(e.id);
+                                       }
+                                     }}
+                                     className="absolute top-8 right-8 w-10 h-10 rounded-2xl bg-white text-slate-200 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm border border-slate-100"
+                                   >
+                                     <Trash2 className="w-4 h-4" />
+                                   </button>
+                                )}
                              </div>
 
-                             <h5 className="font-black text-3xl text-slate-900 mb-8 tracking-tight shrink-0">{g.name}</h5>
+                             <h5 className="font-black text-xl text-slate-900 mb-8 tracking-tight shrink-0 h-14 line-clamp-2">{e.name}</h5>
                              
                              <div className="flex flex-wrap gap-2.5 mb-10 grow content-start min-h-[4.5rem]">
-                                {groupDepts.map(d => (
-                                  <span key={d.id} className="px-3.5 py-2 bg-slate-100/50 text-slate-600 border border-slate-100 rounded-2xl text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
-                                    {d.abbr}
+                                {e.members.map(m => (
+                                  <span key={m.id} className="px-3.5 py-2 bg-slate-100/50 text-slate-600 border border-slate-100 rounded-2xl text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
+                                    {m.abbr}
                                   </span>
                                 ))}
                              </div>
@@ -327,21 +366,21 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                              <div className="mt-auto pt-10 border-t border-slate-100 flex items-center justify-between shrink-0">
                                 <div className="flex flex-col gap-1.5">
                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Assets</span>
-                                   <span className="text-2xl font-black text-slate-800 tabular-nums tracking-tighter italic">{groupTotalAssets.toLocaleString()}</span>
+                                   <span className="text-2xl font-black text-slate-800 tabular-nums tracking-tighter italic">{e.assets.toLocaleString()}</span>
                                 </div>
                                 <div className="flex flex-col items-end gap-1.5">
                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Auditors</span>
                                    <div className="flex flex-col items-end">
-                                      <div className={`text-2xl font-black tabular-nums transition-colors tracking-tighter ${groupTotalAuditors < recAuditors ? 'text-amber-500 underline underline-offset-8 decoration-amber-200' : 'text-slate-800'}`}>
-                                        {groupTotalAuditors}
+                                      <div className={`text-2xl font-black tabular-nums transition-colors tracking-tighter ${e.auditors < recAuditors ? 'text-amber-500 underline underline-offset-8 decoration-amber-200' : 'text-slate-800'}`}>
+                                        {e.auditors}
                                       </div>
-                                      {groupTotalAuditors < recAuditors && (
+                                      {e.auditors < recAuditors && (
                                         <span className="text-[9px] font-black text-amber-500 mt-2 bg-amber-50 px-2.5 py-1 rounded-lg uppercase tracking-widest border border-amber-100">Rec: {recAuditors}</span>
                                       )}
                                    </div>
                                 </div>
                              </div>
-                           </div>
+                           </button>
                          );
                       })}
                     </div>
@@ -350,71 +389,80 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
              </div>
            )}
 
-           {editingGroupId && editingGroupObj && (
+           {editingGroupId && (
               <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col h-full flex-1">
-                <div className="flex items-center justify-between mb-10 shrink-0">
-                  <div>
-                    <h4 className="text-2xl font-black text-slate-900 tracking-tight">Refining {editingGroupObj.name}</h4>
-                    <p className="text-sm font-medium text-slate-400 mt-1">Include / exclude departments from this entity.</p>
-                  </div>
-                </div>
+                {(() => {
+                  const currentEntity = entities.find(e => e.id === editingGroupId);
+                  if (!currentEntity) return null;
 
-                <div className="flex-1 overflow-y-auto space-y-3 pr-6 pb-6 custom-scrollbar">
-                  {departments.map(dept => {
-                    const isChecked = editingGroupDepts.includes(dept.id);
-                    const isAssignedElsewhere = dept.auditGroupId && dept.auditGroupId !== editingGroupId;
-                    const otherGroupName = isAssignedElsewhere ? auditGroups.find(g => g.id === dept.auditGroupId)?.name : null;
-
-                    return (
-                      <label 
-                        key={dept.id} 
-                        className={`flex items-center justify-between p-6 rounded-[32px] border-2 transition-all cursor-pointer ${
-                          isChecked 
-                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-600/10 scale-[1.02]' 
-                            : isAssignedElsewhere
-                              ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 grayscale'
-                              : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-100 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-4">
-                            <input 
-                              type="checkbox"
-                              className="w-6 h-6 rounded-lg border-slate-200 text-emerald-500 focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
-                              checked={isChecked}
-                              onChange={() => handleToggleDeptInGroup(dept.id, isChecked)}
-                              disabled={isProcessing}
-                            />
-                            <div className="flex flex-col">
-                               <span className="text-base font-black tracking-tight">{dept.name}</span>
-                               <span className={`text-[10px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>{dept.abbr}</span>
-                            </div>
-                          </div>
-                          {isAssignedElsewhere && !isChecked && (
-                            <div className="ml-10 mt-3">
-                              <span className="text-[10px] font-black uppercase tracking-tighter text-amber-500 bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/20">
-                                Assigned to {otherGroupName}
-                              </span>
-                            </div>
-                          )}
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-10 shrink-0">
+                        <div>
+                          <h4 className="text-2xl font-black text-slate-900 tracking-tight">Refining {currentEntity.name}</h4>
+                          <p className="text-sm font-medium text-slate-400 mt-1">Include / exclude departments from this entity.</p>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`text-lg font-mono font-black ${isChecked ? 'text-white' : 'text-slate-900'} italic`}>{(dept.totalAssets || 0).toLocaleString()}</span>
-                          <span className={`text-[9px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>Assets <Boxes className="inline w-2.5 h-2.5 ml-1"/></span>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
+                      </div>
 
-                <div className="pt-8 mt-auto shrink-0 border-t border-slate-100">
-                  <button 
-                    onClick={() => setEditingGroupId(null)}
-                    className="w-full h-16 bg-slate-900 hover:bg-slate-800 text-white rounded-[28px] text-xs font-black uppercase tracking-widest flex items-center justify-center transition-all animate-in fade-in"
-                  >
-                    Finish Revision
-                  </button>
-                </div>
+                      <div className="flex-1 overflow-y-auto space-y-3 pr-6 pb-6 custom-scrollbar">
+                        {departments.map(dept => {
+                          const isChecked = currentEntity.members.some(m => m.id === dept.id);
+                          const isAssignedElsewhere = dept.auditGroupId && dept.auditGroupId !== editingGroupId;
+                          const otherGroupName = isAssignedElsewhere ? auditGroups.find(g => g.id === dept.auditGroupId)?.name : null;
+
+                          return (
+                            <label 
+                              key={dept.id} 
+                              className={`flex items-center justify-between p-6 rounded-[32px] border-2 transition-all cursor-pointer ${
+                                isChecked 
+                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-600/10 scale-[1.02]' 
+                                  : isAssignedElsewhere
+                                    ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 grayscale'
+                                    : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-100 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-4">
+                                  <input 
+                                    type="checkbox"
+                                    className="w-6 h-6 rounded-lg border-slate-200 text-emerald-500 focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
+                                    checked={isChecked}
+                                    onChange={() => handleToggleDeptInGroup(dept.id, isChecked)}
+                                    disabled={isProcessing}
+                                  />
+                                  <div className="flex flex-col">
+                                     <span className="text-base font-black tracking-tight">{dept.name}</span>
+                                     <span className={`text-[10px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>{dept.abbr}</span>
+                                  </div>
+                                </div>
+                                {isAssignedElsewhere && !isChecked && (
+                                  <div className="ml-10 mt-3">
+                                    <span className="text-[10px] font-black uppercase tracking-tighter text-amber-500 bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/20">
+                                      Assigned elsewhere
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <span className={`text-lg font-mono font-black ${isChecked ? 'text-white' : 'text-slate-900'} italic`}>{(dept.totalAssets || 0).toLocaleString()}</span>
+                                <span className={`text-[9px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>Assets <Boxes className="inline w-2.5 h-2.5 ml-1"/></span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      <div className="pt-8 mt-auto shrink-0 border-t border-slate-100">
+                        <button 
+                          onClick={() => setEditingGroupId(null)}
+                          className="w-full h-16 bg-slate-900 hover:bg-slate-800 text-white rounded-[28px] text-xs font-black uppercase tracking-widest flex items-center justify-center transition-all animate-in fade-in"
+                        >
+                          Finish Revision
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
            )}
 

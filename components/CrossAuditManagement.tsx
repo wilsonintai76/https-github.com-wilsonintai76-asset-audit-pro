@@ -127,14 +127,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       // Use the normalized auditGroupId to identify the group.
       const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
       
-      const entityName = group ? group.name : d.name;
       const entityId = group ? group.id : d.id;
       
-      const current = map.get(entityId) || { name: entityName, assets: 0, auditors: 0, memberCount: 0, members: [], id: entityId };
+      const current = map.get(entityId) || { name: '', assets: 0, auditors: 0, memberCount: 0, members: [], id: entityId };
       const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
 
       map.set(entityId, { 
-        name: entityName,
+        name: '', 
         assets: current.assets + safeAssets,
         auditors: current.auditors + (d.auditorCount || 0),
         memberCount: current.memberCount + 1,
@@ -144,9 +143,17 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     });
 
     return Array.from(map.values()).map(stats => {
-      const constitutesGroup = stats.memberCount > 1 || auditGroups.some(g => g.id === stats.id);
+      const group = auditGroups.find(g => g.id === stats.id);
+      
+      // Sync Naming Logic: Priority to Dept Name for single-member entities
+      const finalName = (stats.memberCount === 1) 
+        ? stats.members[0].name 
+        : (group ? group.name : stats.members[0].name);
+
+      const constitutesGroup = stats.memberCount > 1 || !!group;
       return { 
         ...stats, 
+        name: finalName,
         isJoint: constitutesGroup,
         isGroup: constitutesGroup,
         isConsolidated: constitutesGroup
