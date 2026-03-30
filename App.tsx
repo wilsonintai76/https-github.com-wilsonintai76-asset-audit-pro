@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRBAC } from './contexts/RBACContext';
 import { gateway } from './services/dataGateway';
@@ -21,6 +21,7 @@ import { KnowledgeBase } from './components/KnowledgeBase';
 import { AutoUpdater } from './components/AutoUpdater';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
+import { bulkManagement } from './services/bulkManagement';
 import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X } from 'lucide-react';
 
 const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
@@ -704,143 +705,33 @@ const App: React.FC = () => {
 
   const handleBulkAddAudits = async (newAudits: Omit<AuditSchedule, 'id'>[]) => {
     try {
-      // 1. Extract unique departments and locations from the new audits
-      const uniqueDepts = Array.from(new Set(newAudits.map(a => a.departmentId)));
-      const uniqueLocs = newAudits.map(a => ({ locationId: a.locationId, departmentId: a.departmentId }));
-
-      // Calculate asset counts per location
-      const locationAssetCounts: Record<string, number> = {};
-      newAudits.forEach(a => {
-        const key = `${a.locationId}|${a.departmentId}`;
-        locationAssetCounts[key] = (locationAssetCounts[key] || 0) + 1;
-      });
-
-      // Remove duplicates from uniqueLocs
-      const uniqueLocsFiltered = uniqueLocs.filter((loc, index, self) =>
-        index === self.findIndex((t) => t.locationId === loc.locationId && t.departmentId === loc.departmentId)
+      const result = await bulkManagement.addAudits(
+        newAudits,
+        users,
+        departments,
+        locations,
+        departmentsWithAssets
       );
 
-      // 2. Identify which ones are new
-      const existingDeptIds = new Set(departments.map(d => d.id));
-      const newDeptIds = uniqueDepts.filter(id => !existingDeptIds.has(id));
-
-      const existingLocKeys = new Set(locations.map(l => `${l.id}|${l.departmentId}`));
-      const newLocs = uniqueLocsFiltered.filter(loc => !existingLocKeys.has(`${loc.locationId}|${loc.departmentId}`));
-
-      // 2.5 Process Supervisors (Create temporary users if they don't exist)
-      const uniqueSupervisors = Array.from(new Set(newAudits.map(a => a.supervisorId).filter(id => id && id !== 'To be filled')));
-      const newUsersCreated: User[] = [];
-
-      for (const supName of uniqueSupervisors) {
-        // Check if user already exists by name
-        const existingUser = users.find(u => u.name.toLowerCase() === supName.toLowerCase());
-
-        if (!existingUser) {
-          // Generate a temporary ID (T-xxxx)
-          const tempId = `T-${Math.floor(1000 + Math.random() * 9000)}`;
-
-          const newUser: User = {
-            id: tempId,
-            name: supName,
-            email: `temp_${tempId}@example.com`, // Placeholder email
-            roles: ['Supervisor'],
-            status: 'Inactive', // Mark as inactive so they need to be verified/updated
-            isVerified: false
-          };
-
-          const addedUser = await gateway.addUser(newUser);
-          newUsersCreated.push(addedUser);
-        }
-      }
-
-      if (newUsersCreated.length > 0) {
-        setUsers(prev => [...prev, ...newUsersCreated]);
-      }
-
-      // Map supervisor names to their IDs for the audits and locations
-      const getSupervisorId = (name: string) => {
-        if (!name || name === 'To be filled') return '';
-        const user = [...users, ...newUsersCreated].find(u => u.name.toLowerCase() === name.toLowerCase());
-        return user ? user.id : ''; 
-      };
-
-      // Update audits with actual user IDs
-      const processedAudits = newAudits.map(a => ({
-        ...a,
-        supervisorId: getSupervisorId(a.supervisorId)
-      }));
-
-      // 3. Add new departments
-      if (newDeptIds.length > 0) {
-        for (const id of newDeptIds) {
-          const newDept: Omit<Department, 'id'> = {
-            name: `Imported Dept ${id}`,
-            abbr: `IMP-${id.substring(0, 3)}`,
-            headOfDeptId: 'dummy-user-id',
-            description: `Imported department: ${id}`,
-            auditGroupId: null
-          };
-          await gateway.addDepartment(newDept);
-        }
-      }
-      if (newDeptIds.length > 0) {
-        // Refresh departments state
-        const updatedDepts = await gateway.getDepartments();
-        setDepartments(updatedDepts);
-      }
-
-      // 4. Add new locations
-      if (newLocs?.length > 0) {
-        const locsToAdd: Omit<Location, 'id'>[] = newLocs.map(loc => {
-          // Find a supervisor for this location from the audits
-          const auditForLoc = processedAudits.find(a => a.locationId === loc.locationId && a.departmentId === loc.departmentId);
-          const supId = auditForLoc ? auditForLoc.supervisorId : 'dummy-user-id';
-
-          return {
-            name: loc.locationId, // Using ID as name for imported ones if not provided
-            abbr: loc.locationId.substring(0, 3).toUpperCase(),
-            departmentId: loc.departmentId,
-            building: 'Main',
-            description: `Imported location: ${loc.locationId}`,
-            supervisorId: supId,
-            contact: '-',
-            totalAssets: locationAssetCounts[`${loc.locationId}|${loc.departmentId}`] || 0
-          };
-        });
-        await gateway.bulkAddLocations(locsToAdd);
-      }
-
-      // Update existing locations with new asset counts
-      const existingLocsToUpdate = locations.filter(l => locationAssetCounts[`${l.id}|${l.departmentId}`] !== undefined);
-      for (const loc of existingLocsToUpdate) {
-        const newCount = locationAssetCounts[`${loc.id}|${loc.departmentId}`];
-        if (loc.totalAssets !== newCount) {
-          await gateway.updateLocation(loc.id, { totalAssets: newCount });
-        }
-      }
-
-      // Refresh locations state
-      const updatedLocs = await gateway.getLocations();
-      setLocations(updatedLocs);
-
-      // 5. Finally add the audits (filtered by assets)
-      const assetFilteredAudits = processedAudits.filter(a => {
-        const dept = departmentsWithAssets.find(d => d.id === a.departmentId);
-        return dept && (dept.totalAssets || 0) > 0;
-      });
-
-      if (assetFilteredAudits.length === 0) {
-        showToast('No audits imported. All provided departments have zero assets.');
+      if (!result.success) {
+        showToast(result.message || 'Bulk Import Failed', 'error');
         return;
       }
 
-      const added = await gateway.bulkAddAudits(assetFilteredAudits);
+      // Refresh data
+      if (result.newUsersCreated?.length) setUsers(prev => [...prev, ...result.newUsersCreated!]);
+      if (result.newDeptIds?.length) setDepartments(await gateway.getDepartments());
+      
+      const updatedLocs = await gateway.getLocations();
+      setLocations(updatedLocs);
+
+      const added = result.added || [];
       setSchedules(prev => [...prev, ...added]);
 
       setNotifications(prev => [{
         id: `bulk-${Date.now()}`,
         title: 'Batch Schedule Created',
-        message: `Successfully imported ${added?.length || 0} audit entries. ${newDeptIds?.length || 0} new departments, ${newLocs?.length || 0} new locations, and ${newUsersCreated.length} temporary users were added to the database.`,
+        message: `Successfully imported ${added.length} audit entries. ${result.newDeptIds?.length || 0} new departments, ${result.newLocs?.length || 0} new locations, and ${result.newUsersCreated?.length || 0} temporary users were added.`,
         timestamp: new Date().toISOString(),
         type: 'success',
         read: false
@@ -971,28 +862,18 @@ const App: React.FC = () => {
 
   const handleBulkAddLocs = async (newLocs: Omit<Location, 'id'>[]) => {
     try {
-      // --- STEP 1: Resolve department NAMES to UUIDs ---
-      // The CSV may provide raw dept names OR UUIDs already resolved by mapping rules.
-      let deptNameToId = new Map<string, string>(
-        departments.map(d => [d.name.toUpperCase().trim(), d.id])
-      );
-      // Also build a set of valid dept UUIDs so already-mapped IDs pass through
-      const validDeptIds = new Set(departments.map(d => d.id.toLowerCase().trim()));
-
-      const uniqueDeptNamesInImport = Array.from(new Set(newLocs.map(l => l.departmentId.toUpperCase().trim())));
-      // Unresolvable = not a known dept name AND not already a valid dept UUID
-      const missingDeptNames = uniqueDeptNamesInImport.filter(
-        name => !deptNameToId.has(name) && !validDeptIds.has(name.toLowerCase())
+      const result = await bulkManagement.addLocations(
+        newLocs,
+        departments,
+        users,
+        locations
       );
 
-      if (missingDeptNames.length > 0) {
-        const originalNames = missingDeptNames.map(n =>
-          newLocs.find(l => l.departmentId.toUpperCase().trim() === n)?.departmentId || n
-        );
+      if (!result.success) {
         setNotifications(prev => [{
           id: `bulk-loc-err-${Date.now()}`,
-          title: 'Import Stopped â€” Unrecognised Departments',
-          message: `The following department names in the CSV do not match any existing department: ${originalNames.join(', ')}. Please create mapping rules in System Settings â†’ Department Mapping Rules to map these names to official departments, then re-import.`,
+          title: 'Import Stopped — Unrecognised Departments',
+          message: `The following department names in the CSV do not match any existing department: ${result.missingDepts?.join(', ')}. Please create mapping rules in System Settings → Department Mapping Rules to map these names to official departments, then re-import.`,
           timestamp: new Date().toISOString(),
           type: 'error',
           read: false
@@ -1000,115 +881,11 @@ const App: React.FC = () => {
         return;
       }
 
-      // Remap locations: replace dept name with its actual UUID,
-      // and resolve supervisor NAME â†’ user ID.
-      // If a supervisor doesn't exist yet, create a temporary user record for them.
-      let userNameToId = new Map<string, string>(
-        users.map(u => [u.name.toUpperCase().trim(), u.id])
-      );
-
-      // Find all unique supervisor names from the import that aren't already users
-      const uniqueSupervisorNames = Array.from(
-        new Set(newLocs.map(l => (l.supervisorId || '').trim()).filter(n => n && n !== 'To be filled'))
-      );
-      const missingSupervisors = uniqueSupervisorNames.filter(
-        name => !userNameToId.has(name.toUpperCase().trim())
-      );
-
-      // Create temporary user records for missing supervisors
-      const newUsersCreated: User[] = [];
-      for (const name of missingSupervisors) {
-        const tempId = `T-${Math.floor(1000 + Math.random() * 9000)}`;
-        const deptName = newLocs.find(l => (l.supervisorId || '').trim() === name)?.departmentId || '';
-        const deptId = deptNameToId.get(deptName.toUpperCase().trim());
-        const newUser: User = {
-          id: tempId,
-          name: name,
-          email: `temp_${tempId}@pending.local`,
-          roles: ['Supervisor'],
-          status: 'Inactive',
-          isVerified: false,
-          departmentId: deptId,
-        };
-        try {
-          const addedUser = await gateway.addUser(newUser);
-          newUsersCreated.push(addedUser);
-          userNameToId.set(name.toUpperCase().trim(), addedUser.id);
-        } catch (e) {
-          console.warn(`Could not create temp user for supervisor: ${name}`, e);
-        }
-      }
-      if (newUsersCreated.length > 0) {
-        setUsers(prev => [...prev, ...newUsersCreated]);
+      if (result.newUsersCreated?.length) {
+        setUsers(prev => [...prev, ...result.newUsersCreated!]);
       }
 
-      const resolvedLocs: Omit<Location, 'id'>[] = newLocs.map(loc => {
-        const supervisorName = (loc.supervisorId || '').toUpperCase().trim();
-        const resolvedSupervisorId = userNameToId.get(supervisorName) || null;
-        return {
-          ...loc,
-          departmentId: deptNameToId.get(loc.departmentId.toUpperCase().trim()) || loc.departmentId,
-          supervisorId: resolvedSupervisorId as any,
-        };
-      });
-
-      // --- STEP 2: Separate new locations from existing ones ---
-      const existingLocsMap = new Map<string, Location>(locations.map(l => [`${l.name.toUpperCase()}|${l.departmentId}`, l]));
-
-      const locsToAdd: Omit<Location, 'id'>[] = [];
-      const locsToUpdate: { id: string, updates: Partial<Location> }[] = [];
-
-      // Keep track of the latest totalAssets for each location from the import
-      const latestLocsFromImport = new Map<string, Omit<Location, 'id'>>();
-      resolvedLocs.forEach(loc => {
-        latestLocsFromImport.set(`${loc.name.toUpperCase()}|${loc.departmentId}`, loc);
-      });
-
-      latestLocsFromImport.forEach((loc, key) => {
-        const existingLoc = existingLocsMap.get(key);
-        if (existingLoc) {
-          // Build an updates object for any fields that differ from what's in the DB
-          const updates: Partial<Location> = {};
-          if (loc.totalAssets !== undefined && loc.totalAssets !== existingLoc.totalAssets) {
-            updates.totalAssets = loc.totalAssets;
-          }
-          if (loc.supervisorId && loc.supervisorId !== existingLoc.supervisorId) {
-            updates.supervisorId = loc.supervisorId;
-          }
-          if (loc.abbr && loc.abbr !== existingLoc.abbr) {
-            updates.abbr = loc.abbr;
-          }
-          if (loc.building !== undefined && loc.building !== existingLoc.building) {
-            updates.building = loc.building;
-          }
-          if (loc.level !== undefined && loc.level !== existingLoc.level) {
-            updates.level = loc.level;
-          }
-          if (loc.contact !== undefined && loc.contact !== existingLoc.contact) {
-            updates.contact = loc.contact;
-          }
-          if (loc.description !== undefined && loc.description !== existingLoc.description) {
-            updates.description = loc.description;
-          }
-          if (Object.keys(updates).length > 0) {
-            locsToUpdate.push({ id: existingLoc.id, updates });
-          }
-        } else {
-          locsToAdd.push(loc);
-        }
-      });
-
-      // --- STEP 3: Add new locations ---
-      if (locsToAdd?.length > 0) {
-        await gateway.bulkAddLocations(locsToAdd);
-      }
-
-      // 5. Update existing locations
-      for (const update of locsToUpdate) {
-        await gateway.updateLocation(update.id, update.updates);
-      }
-
-      // 6. Refresh states
+      // Refresh states
       const allUpdatedLocs = await gateway.getLocations();
       setLocations(allUpdatedLocs);
 
@@ -1119,7 +896,7 @@ const App: React.FC = () => {
       setNotifications(prev => [{
         id: `bulk-loc-${Date.now()}`,
         title: 'Locations Imported',
-        message: `Imported ${locsToAdd?.length || 0} new locations and updated ${locsToUpdate?.length || 0} existing locations.`,
+        message: `Imported ${result.addedCount} new locations and updated ${result.updatedCount} existing locations.`,
         timestamp: new Date().toISOString(),
         type: 'success',
         read: false
@@ -1131,35 +908,12 @@ const App: React.FC = () => {
 
   const handleBulkActivateStaff = async (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => {
     try {
-      const userEmailToObj = new Map<string, typeof users[0]>(users.map(u => [u.email.toLowerCase().trim(), u]));
-      const deptNameToId = new Map<string, string>(departments.map(d => [d.name.toUpperCase().trim(), d.id]));
-      let createdCount = 0;
-      let skippedCount = 0;
-      for (const entry of entries) {
-        const deptId = entry.department ? (deptNameToId.get(entry.department.toUpperCase().trim()) ?? undefined) : undefined;
-        const resolvedDesignation = (entry.designation as User['designation']) || undefined;
-        const resolvedRoles: User['roles'] = entry.role ? [entry.role as any] : ['Staff'];
-        // Match by email strictly for duplicate prevention
-        const existing = entry.email ? userEmailToObj.get(entry.email.toLowerCase().trim()) : undefined;
-        if (existing) {
-          skippedCount++;
-        } else {
-          // Create new user
-          const newUser: User = {
-            id: crypto.randomUUID(),
-            name: entry.name,
-            email: entry.email || `${entry.name.replace(/\s+/g, '').toLowerCase()}@poliku.edu.my`,
-            roles: resolvedRoles,
-            designation: resolvedDesignation || 'Supervisor',
-            status: 'Active',
-            isVerified: true,
-            departmentId: deptId,
-          };
-          await gateway.addUser(newUser);
-          userEmailToObj.set(newUser.email.toLowerCase().trim(), newUser); // Prevent duplicates within same batch
-          createdCount++;
-        }
-      }
+      const { createdCount, skippedCount } = await bulkManagement.activateStaff(
+        entries,
+        users,
+        departments
+      );
+      
       const updatedUsers = await gateway.getUsers();
       setUsers(updatedUsers);
       showToast(`Staff import complete: ${createdCount} created, ${skippedCount} duplicates skipped.`);
@@ -1332,67 +1086,12 @@ const App: React.FC = () => {
 
   const handleBulkAddDepts = async (newDepts: Omit<Department, 'id'>[]) => {
     try {
-      let usersChanged = false;
-      let currentUsers = [...users];
-      const existingDeptsMap = new Map<string, Department>(
-        departments.map(d => [d.name.toUpperCase().trim(), d])
+      const result = await bulkManagement.addDepartments(
+        newDepts,
+        departments,
+        users
       );
-
-      for (const d of newDepts) {
-        let finalHeadId = d.headOfDeptId;
-        let newTempUserId: string | null = null;
-        if (finalHeadId && finalHeadId.trim() !== '') {
-          const existingUser = currentUsers.find(u => u.id === finalHeadId || u.name.toLowerCase() === finalHeadId!.toLowerCase());
-          if (existingUser) {
-            finalHeadId = existingUser.id;
-            // Auto-activate if still pending
-            if (existingUser.status === 'Pending' || !existingUser.isVerified) {
-              await gateway.updateUser(existingUser.id, { status: 'Active', isVerified: true });
-              usersChanged = true;
-            }
-          } else {
-            const tempId = Math.floor(1000 + Math.random() * 9000).toString();
-            const tempStaffId = `T-${tempId}`;
-            newTempUserId = tempStaffId;
-            const tempUser: User = {
-              id: tempStaffId,
-              name: finalHeadId,
-              email: `temp${tempId}@asset-audit.pro`,
-              roles: ['Staff'],
-              designation: 'Head Of Department',
-              status: 'Active',
-              isVerified: true,
-            };
-            await gateway.addUser(tempUser);
-            currentUsers.push(tempUser);
-            finalHeadId = tempStaffId;
-            usersChanged = true;
-          }
-        } else {
-          finalHeadId = null;
-        }
-
-        const existingDept = existingDeptsMap.get(d.name.toUpperCase().trim());
-        if (existingDept) {
-          // Update existing department
-          const updates: Partial<Department> = {};
-          if (d.abbr && d.abbr !== existingDept.abbr) updates.abbr = d.abbr;
-          if (finalHeadId !== existingDept.headOfDeptId) updates.headOfDeptId = finalHeadId;
-          if (Object.keys(updates).length > 0) {
-            await gateway.updateDepartment(existingDept.id, updates);
-          }
-          // Link temp user to existing dept
-          if (newTempUserId) {
-            await gateway.updateUser(newTempUserId, { departmentId: existingDept.id });
-          }
-        } else {
-          const createdDept = await gateway.addDepartment({ ...d, headOfDeptId: finalHeadId, auditGroupId: null });
-          // Link temp user to the newly created department
-          if (newTempUserId && createdDept?.id) {
-            await gateway.updateUser(newTempUserId, { departmentId: createdDept.id });
-          }
-        }
-      }
+      
       setDepartments(await gateway.getDepartments());
       setUsers(await gateway.getUsers());
       showToast(`Imported ${newDepts.length} departments successfully`);
