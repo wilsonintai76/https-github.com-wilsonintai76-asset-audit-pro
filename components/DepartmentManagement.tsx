@@ -127,18 +127,18 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                 const headUser = users.find(u => u.id === dept.headOfDeptId);
 
                 return (
-                  <tr key={dept.id} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <tr key={dept.id} className="hover:bg-slate-50/50 transition-colors align-top">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black shadow-sm border ${colorClass} shrink-0`}>
                           {dept.abbr}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
+                          <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
                             {dept.name}
                             {dept.isExempted && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-black border border-rose-100 uppercase tracking-widest" title="Exempted from institutional cross-audits">Exempted</span>}
                           </div>
-                          <div className="text-[11px] text-slate-500 font-medium truncate max-w-[250px]">{dept.description || 'No description provided'}</div>
+                          <div className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-[280px] break-words mt-0.5">{dept.description || 'No description provided'}</div>
                         </div>
                       </div>
                     </td>
