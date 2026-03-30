@@ -58,16 +58,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
     }
   };
 
-  const handleRenew = () => {
-    const today = new Date().toISOString().split('T')[0];
-    const nextYear = new Date();
-    nextYear.setFullYear(nextYear.getFullYear() + 1);
-    onUpdate(user.id, { 
-      certificationIssued: today,
-      certificationExpiry: nextYear.toISOString().split('T')[0] 
-    });
-    alert("Certification successfully self-renewed for 1 year.");
-  };
 
   const certStatus = useMemo(() => {
     if (!user.certificationExpiry) return 'Uncertified';
@@ -287,21 +277,12 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                       </div>
                     </div>
 
-                    {user.roles.includes('Admin') && (
-                      <>
-                        <button 
-                          onClick={handleRenew}
-                          className="w-full py-4 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:bg-blue-700 active:scale-95 transition-all"
-                        >
-                          <RotateCw className="w-4 h-4 mr-2 inline-block" />
-                          Self-Renew Cert
-                        </button>
-
-                        <p className="text-[9px] text-slate-400 font-medium leading-relaxed italic text-center">
-                          Manual renewal adds 1 year of validity from today.
+                     <div className="mt-2 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-start gap-3">
+                        <Shield className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-blue-700 font-medium leading-relaxed">
+                          Certification renewal and issuance is managed exclusively by the <strong>System Administrator</strong>.
                         </p>
-                      </>
-                    )}
+                     </div>
                   </div>
                </div>
             </div>
