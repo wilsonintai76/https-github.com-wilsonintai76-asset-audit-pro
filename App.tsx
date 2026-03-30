@@ -1,4 +1,4 @@
-
+﻿
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useRBAC } from './contexts/RBACContext';
 import { gateway } from './services/dataGateway';
@@ -991,8 +991,8 @@ const App: React.FC = () => {
         );
         setNotifications(prev => [{
           id: `bulk-loc-err-${Date.now()}`,
-          title: 'Import Stopped — Unrecognised Departments',
-          message: `The following department names in the CSV do not match any existing department: ${originalNames.join(', ')}. Please create mapping rules in System Settings → Department Mapping Rules to map these names to official departments, then re-import.`,
+          title: 'Import Stopped â€” Unrecognised Departments',
+          message: `The following department names in the CSV do not match any existing department: ${originalNames.join(', ')}. Please create mapping rules in System Settings â†’ Department Mapping Rules to map these names to official departments, then re-import.`,
           timestamp: new Date().toISOString(),
           type: 'error',
           read: false
@@ -1001,7 +1001,7 @@ const App: React.FC = () => {
       }
 
       // Remap locations: replace dept name with its actual UUID,
-      // and resolve supervisor NAME → user ID.
+      // and resolve supervisor NAME â†’ user ID.
       // If a supervisor doesn't exist yet, create a temporary user record for them.
       let userNameToId = new Map<string, string>(
         users.map(u => [u.name.toUpperCase().trim(), u.id])
@@ -1956,7 +1956,7 @@ const App: React.FC = () => {
         }
       }
       if (toAdd.length > 0) {
-        // Supabase insert limit — batch at 200 rows
+        // Supabase insert limit â€” batch at 200 rows
         for (let i = 0; i < toAdd.length; i += 200) {
           await gateway.bulkAddLocations(toAdd.slice(i, i + 200));
         }
@@ -1992,9 +1992,9 @@ const App: React.FC = () => {
       }
       if (updatedCount > 0) {
         setLocations(await gateway.getLocations());
-        showToast(`Sync complete — ${updatedCount} location${updatedCount !== 1 ? 's' : ''} reassigned.`);
+        showToast(`Sync complete â€” ${updatedCount} location${updatedCount !== 1 ? 's' : ''} reassigned.`);
       } else {
-        showToast('Sync complete — no locations needed updating.');
+        showToast('Sync complete â€” no locations needed updating.');
       }
     } catch (e) {
       showError(e, 'Failed to sync location mappings');
@@ -2511,6 +2511,7 @@ const App: React.FC = () => {
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}
               onAutoConsolidate={handleAutoConsolidate}
+               auditGroups={auditGroups}
             />
           )}
           {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
@@ -2522,11 +2523,11 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
             <span className="font-semibold text-slate-500">Inspect-<span className="text-blue-500">able</span></span>
-            <span className="hidden sm:inline">— Institutional Asset Audit Platform</span>
+            <span className="hidden sm:inline">â€” Institutional Asset Audit Platform</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="font-mono">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</span>
-            <span>© {new Date().getFullYear()} Politeknik Kuching Sarawak. All rights reserved.</span>
+            <span>Â© {new Date().getFullYear()} Politeknik Kuching Sarawak. All rights reserved.</span>
           </div>
         </footer>
       </div>

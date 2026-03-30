@@ -138,16 +138,16 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   }, [entities]);
 
   return (
-    <div className="bg-slate-50/50 rounded-[40px] border-2 border-slate-100 p-8 md:p-12 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="bg-slate-50/50 rounded-[40px] border-2 border-slate-100 p-8 md:p-12 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden">
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-14">
-        {/* Left Column */}
-        <div className="lg:w-1/3 xl:w-1/4 space-y-10">
+        {/* Left Column - Slimmer Sidebar */}
+        <div className="lg:w-1/4 xl:w-1/5 space-y-8">
           <div>
             <div className="w-16 h-16 bg-white border border-slate-100 text-indigo-500 rounded-3xl flex items-center justify-center shadow-sm mb-8">
               <Boxes className="w-8 h-8" />
             </div>
             <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-4">Unit Consolidation</h3>
-            <p className="text-slate-500 text-sm font-medium leading-relaxed mb-8">
+            <p className="text-slate-500 text-xs font-medium leading-relaxed mb-8">
               Manage the institutional audit landscape by grouping departments or reviewing standalone entities.
             </p>
           </div>
@@ -155,36 +155,36 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
           <div className="flex flex-col gap-3">
             <button 
               onClick={() => { setBuilderTab(1); setEditingGroupId(null); }}
-              className={`group flex items-center justify-between w-full px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${builderTab === 1 && !editingGroupId ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white text-slate-500 border border-slate-100 hover:border-indigo-100'}`}
+              className={`group flex items-center justify-between w-full px-5 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${builderTab === 1 && !editingGroupId ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white text-slate-500 border border-slate-100 hover:border-indigo-100'}`}
             >
               <div className="flex items-center gap-4">
-                <span className={`w-8 h-8 rounded-xl ${builderTab === 1 ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'} flex items-center justify-center text-xs transition-colors`}>1</span>
+                <span className={`w-7 h-7 rounded-lg ${builderTab === 1 ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'} flex items-center justify-center text-[10px] transition-colors`}>1</span>
                 <span>Strategy Design</span>
               </div>
-              <Sparkles className={`w-4 h-4 transition-all ${builderTab === 1 ? 'text-indigo-400 scale-110' : 'text-slate-200 group-hover:text-indigo-300'}`} />
+              <Sparkles className={`w-3.5 h-3.5 transition-all ${builderTab === 1 ? 'text-indigo-400 scale-110' : 'text-slate-200 group-hover:text-indigo-300'}`} />
             </button>
             
             <button 
               onClick={() => { setBuilderTab(2); setEditingGroupId(null); }}
-              className={`group flex items-center justify-between w-full px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${builderTab === 2 && !editingGroupId ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white text-slate-500 border border-slate-100 hover:border-indigo-100'}`}
+              className={`group flex items-center justify-between w-full px-5 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${builderTab === 2 && !editingGroupId ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white text-slate-500 border border-slate-100 hover:border-indigo-100'}`}
             >
               <div className="flex items-center gap-4">
-                <span className={`w-8 h-8 rounded-xl ${builderTab === 2 ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'} flex items-center justify-center text-xs transition-colors`}>2</span>
+                <span className={`w-7 h-7 rounded-lg ${builderTab === 2 ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'} flex items-center justify-center text-[10px] transition-colors`}>2</span>
                 <span>Unit Inventory</span>
               </div>
-              <div className={`px-2.5 py-1 rounded-lg font-black text-[10px] transition-colors ${builderTab === 2 ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500'}`}>
+              <div className={`px-2 py-0.5 rounded-lg font-black text-[9px] transition-colors ${builderTab === 2 ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500'}`}>
                 {entities.length}
               </div>
             </button>
 
             {editingGroupId && (
               <div className="mt-4 animate-in fade-in slide-in-from-top-2">
-                <div className="bg-indigo-600 text-white rounded-2xl p-6 shadow-2xl shadow-indigo-600/20 relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-125 transition-transform">
-                    <Pencil className="w-12 h-12" />
+                <div className="bg-indigo-600 text-white rounded-2xl p-5 shadow-2xl shadow-indigo-600/20 relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:scale-125 transition-transform">
+                    <Pencil className="w-10 h-10" />
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 mb-2">Currently Refining</p>
-                  <h4 className="text-sm font-black tracking-tight line-clamp-2">
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-200 mb-2">Refining</p>
+                  <h4 className="text-xs font-black tracking-tight line-clamp-2">
                     {editingGroupObj?.name || entities.find(e => e.id === editingGroupId)?.name}
                   </h4>
                   <button 
@@ -199,17 +199,17 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
           </div>
         </div>
 
-        {/* Right Column */}
-        <div className="lg:w-2/3 xl:w-3/4 bg-white rounded-[44px] p-10 md:p-14 border border-slate-100 shadow-sm relative overflow-hidden flex flex-col min-h-[600px]">
+        {/* Right Column - Containerized with scrolling */}
+        <div className="lg:w-3/4 xl:w-4/5 bg-white rounded-[44px] p-8 md:p-10 border border-slate-100 shadow-sm relative overflow-hidden flex flex-col h-[700px] max-h-[85vh]">
            
            {builderTab === 1 && !editingGroupId && (
              <div className="animate-in slide-in-from-right-8 duration-300">
-               <h4 className="text-2xl font-black text-slate-900 tracking-tight leading-tight mb-4">Auto-Generate Groups</h4>
-               <p className="text-sm font-medium text-slate-500 mb-10 max-w-lg">
+               <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight mb-2 px-2">Auto-Generate Groups</h4>
+               <p className="text-xs font-medium text-slate-500 mb-8 max-w-lg px-2">
                  Set an asset threshold. The system will bundle standalone departments together until they exceed this threshold.
                </p>
 
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 px-2">
                   <div className="space-y-4">
                      <div className="flex items-center justify-between">
                        <label className="text-[10px] font-black text-slate-400 block uppercase tracking-widest">Asset Threshold</label>
@@ -256,54 +256,54 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                <button 
                  onClick={handleRunAutoConsolidate}
                  disabled={isProcessing || !onAutoConsolidate}
-                 className="w-full py-6 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-[28px] text-sm font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all shadow-2xl shadow-slate-900/10 active:scale-95 group"
+                 className="mx-2 w-[calc(100%-1rem)] py-5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-[24px] text-xs font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all shadow-2xl shadow-slate-900/10 active:scale-95 group"
                >
-                 {isProcessing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6 text-indigo-400 group-hover:scale-125 transition-transform" />}
+                 {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 text-indigo-400 group-hover:scale-125 transition-transform" />}
                  Initialize Consolidation
                </button>
              </div>
            )}
 
            {builderTab === 2 && !editingGroupId && (
-             <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col flex-1 h-full">
-               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-12 pb-12 border-b border-slate-100">
-                  <div className="space-y-3">
-                    <h4 className="text-4xl font-black text-slate-900 tracking-tighter leading-[0.9]">
+             <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col flex-1 h-full min-h-0">
+               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 pb-8 border-b border-slate-100 flex-shrink-0">
+                  <div className="space-y-2">
+                    <h4 className="text-3xl font-black text-slate-900 tracking-tighter leading-[0.9]">
                       Active Entities<br/>
-                      <span className="text-slate-400 font-medium text-2xl tracking-normal">(Ranked by Assets)</span>
+                      <span className="text-slate-400 font-medium text-xl tracking-normal">(Ranked by Assets)</span>
                     </h4>
-                    <div className="flex items-center gap-6">
-                       <p className="text-sm font-medium text-slate-400">Live visualization of audit entities and resource strength.</p>
+                    <div className="flex items-center gap-4">
+                       <p className="text-xs font-medium text-slate-400">Live visualization of audit strength.</p>
                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Updates</span>
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Live Updates</span>
                        </div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-4">
-                    <div className="bg-slate-900 px-10 py-6 rounded-[36px] shadow-2xl flex flex-col items-center min-w-[220px] relative overflow-hidden border border-slate-700">
-                       <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-2">Institutional Grand Total</span>
-                       <span className="text-4xl font-mono font-black text-white px-2 italic tracking-tighter">{grandTotalAssets.toLocaleString()}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="bg-slate-900 px-8 py-5 rounded-[28px] shadow-2xl flex flex-col items-center min-w-[180px] relative overflow-hidden border border-slate-700">
+                       <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-1">Institutional Total</span>
+                       <span className="text-3xl font-mono font-black text-white px-2 italic tracking-tighter">{grandTotalAssets.toLocaleString()}</span>
                     </div>
                     
                     <button 
                       onClick={() => window.location.reload()} 
-                      className="w-14 h-14 bg-white border-2 border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100 hover:bg-slate-50 rounded-2xl transition-all shadow-sm flex items-center justify-center active:scale-90"
+                      className="w-12 h-12 bg-white border-2 border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100 hover:bg-slate-50 rounded-xl transition-all shadow-sm flex items-center justify-center active:scale-90"
                     >
-                      <RotateCcw className="w-6 h-6" />
+                      <RotateCcw className="w-5 h-5" />
                     </button>
                   </div>
                </div>
                
-               <div className="flex-1 min-h-0">
+               <div className="flex-1 min-h-0 overflow-hidden">
                   {entities.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-slate-50/50 rounded-[40px] border-2 border-slate-100 border-dashed group cursor-pointer">
-                      <Boxes className="w-12 h-12 text-slate-200 mb-6" />
-                      <h5 className="text-xl font-bold text-slate-400">No active entities available.</h5>
+                      <Boxes className="w-10 h-10 text-slate-200 mb-4" />
+                      <h5 className="text-lg font-bold text-slate-400">No active entities available.</h5>
                     </div>
                   ) : (
-                    <div className="flex gap-6 overflow-x-auto pb-10 pt-4 px-2 custom-scrollbar snap-x snap-mandatory">
+                    <div className="flex gap-6 overflow-x-auto pb-10 pt-4 px-2 custom-scrollbar snap-x snap-mandatory h-full">
                       {entities.map((e, idx) => {
                          const effectiveMaxAssets = maxAssetsPerDay || 1000;
                          const effectiveMaxLocations = maxLocationsPerDay || 5;
@@ -315,7 +315,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                          return (
                            <button 
                              key={e.id} 
-                             className="bg-white p-10 rounded-[44px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[360px] w-[360px] transition-all hover:border-indigo-200 hover:shadow-2xl hover:bg-slate-50/50 snap-center group relative shrink-0 text-left overflow-hidden"
+                             className="bg-white p-8 rounded-[36px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[300px] w-[300px] transition-all hover:border-indigo-200 hover:shadow-2xl hover:bg-slate-50/50 snap-center group relative shrink-0 text-left overflow-hidden h-fit mb-4"
                              onClick={() => setEditingGroupId(e.id || null)}
                            >
                              {/* Asset Power Meter (Vertical) */}
@@ -326,18 +326,18 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                                 ></div>
                              </div>
 
-                             <div className="flex justify-between items-start mb-10 shrink-0">
+                             <div className="flex justify-between items-start mb-8 shrink-0">
                                 <div className="flex flex-col gap-1">
-                                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Rank #{idx + 1}</span>
+                                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-400">Rank #{idx + 1}</span>
                                   <div className="flex gap-2">
                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Active System ID</span>
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Active System ID</span>
                                   </div>
                                 </div>
                                 {e.isConsolidated && (
-                                  <div className="px-3.5 py-1.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-xl text-[9px] font-black uppercase tracking-widest italic flex items-center gap-2">
-                                    <Boxes className="w-3 h-3" />
-                                    Consolidated
+                                  <div className="px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest italic flex items-center gap-1.5 translate-x-1">
+                                    <Boxes className="w-2.5 h-2.5" />
+                                    Unit
                                   </div>
                                 )}
                                 {e.isGroup && onDeleteAuditGroup && (
@@ -348,40 +348,37 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                                          onDeleteAuditGroup(e.id);
                                        }
                                      }}
-                                     className="absolute top-8 right-8 w-11 h-11 rounded-2xl bg-white text-slate-200 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm border border-slate-100 scale-90"
+                                     className="absolute top-8 right-8 w-9 h-9 rounded-xl bg-white text-slate-200 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm border border-slate-100 scale-90"
                                    >
-                                     <Trash2 className="w-5 h-5" />
+                                     <Trash2 className="w-4 h-4" />
                                    </button>
                                 )}
                              </div>
 
-                             <h5 className="font-black text-xl text-slate-900 mb-8 tracking-tight shrink-0 h-14 line-clamp-2 pr-4">{e.name}</h5>
+                             <h5 className="font-black text-lg text-slate-900 mb-6 tracking-tight shrink-0 h-11 line-clamp-2 pr-4">{e.name}</h5>
                              
-                             <div className="flex flex-wrap gap-2 mb-10 grow content-start min-h-[5rem]">
+                             <div className="flex flex-wrap gap-2 mb-8 grow content-start min-h-[4rem]">
                                 {e.members.map(m => (
-                                  <span key={m.id} className="px-3 py-1.5 bg-slate-50 text-slate-500 border border-slate-200/50 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all group-hover:bg-white group-hover:border-indigo-100">
+                                  <span key={m.id} className="px-3 py-1 bg-slate-50 text-slate-500 border border-slate-200/50 rounded-xl text-[8px] font-bold uppercase tracking-wider transition-all group-hover:bg-white group-hover:border-indigo-100">
                                     {m.abbr}
                                   </span>
                                 ))}
                              </div>
 
-                             <div className="mt-auto pt-10 border-t border-slate-100 grid grid-cols-2 gap-4 shrink-0">
-                                <div className="flex flex-col gap-1.5">
-                                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Movable Assets</span>
-                                   <span className="text-2xl font-black text-slate-800 tabular-nums tracking-tighter italic">
+                             <div className="mt-auto pt-6 border-t border-slate-100 grid grid-cols-2 gap-4 shrink-0">
+                                <div className="flex flex-col gap-1">
+                                   <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Assets</span>
+                                   <span className="text-xl font-black text-slate-800 tabular-nums tracking-tighter italic">
                                      {e.assets.toLocaleString()}
                                    </span>
                                 </div>
-                                <div className="flex flex-col items-end gap-1.5">
-                                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Team Size</span>
+                                <div className="flex flex-col items-end gap-1">
+                                   <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Officers</span>
                                    <div className="flex flex-col items-end">
-                                      <div className={`text-2xl font-black tabular-nums transition-colors tracking-tighter flex items-center gap-2 ${e.auditors < recAuditors ? 'text-amber-500' : 'text-slate-800'}`}>
+                                      <div className={`text-xl font-black tabular-nums transition-colors tracking-tighter flex items-center gap-1.5 ${e.auditors < recAuditors ? 'text-amber-500' : 'text-slate-800'}`}>
                                         {e.auditors}
-                                        <Users className="w-4 h-4 opacity-20" />
+                                        <Users className="w-3.5 h-3.5 opacity-20" />
                                       </div>
-                                      {e.auditors < recAuditors && (
-                                        <span className="text-[8px] font-black text-amber-600 mt-2 bg-amber-50 px-2.5 py-1 rounded-lg uppercase tracking-widest border border-amber-100">Need: {recAuditors}</span>
-                                      )}
                                    </div>
                                 </div>
                              </div>
@@ -395,21 +392,21 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
            )}
 
            {editingGroupId && (
-              <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col h-full flex-1">
+              <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col h-full flex-1 min-h-0">
                 {(() => {
                   const currentEntity = entities.find(e => e.id === editingGroupId);
                   if (!currentEntity) return null;
 
                   return (
                     <>
-                      <div className="flex items-center justify-between mb-10 shrink-0">
+                      <div className="flex items-center justify-between mb-8 shrink-0">
                         <div>
                           <h4 className="text-2xl font-black text-slate-900 tracking-tight">Refining {currentEntity.name}</h4>
-                          <p className="text-sm font-medium text-slate-400 mt-1">Include / exclude departments from this entity.</p>
+                          <p className="text-xs font-medium text-slate-400 mt-1">Include / exclude departments from this entity.</p>
                         </div>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto space-y-3 pr-6 pb-6 custom-scrollbar">
+                      <div className="flex-1 overflow-y-auto space-y-2.5 pr-4 pb-6 custom-scrollbar min-h-0">
                         {departments.map(dept => {
                           const isChecked = currentEntity.members.some(m => m.id === dept.id);
                           const isAssignedElsewhere = dept.auditGroupId && dept.auditGroupId !== editingGroupId;
@@ -418,9 +415,9 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                           return (
                             <label 
                               key={dept.id} 
-                              className={`flex items-center justify-between p-6 rounded-[32px] border-2 transition-all cursor-pointer ${
+                              className={`flex items-center justify-between p-5 rounded-[28px] border-2 transition-all cursor-pointer ${
                                 isChecked 
-                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-600/10 scale-[1.02]' 
+                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl shadow-indigo-600/10 scale-[1.01]' 
                                   : isAssignedElsewhere
                                     ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-50 grayscale'
                                     : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-100 hover:bg-slate-50'
@@ -430,37 +427,37 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                                 <div className="flex items-center gap-4">
                                   <input 
                                     type="checkbox"
-                                    className="w-6 h-6 rounded-lg border-slate-200 text-emerald-500 focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
+                                    className="w-5 h-5 rounded-lg border-slate-200 text-emerald-500 focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
                                     checked={isChecked}
                                     onChange={() => handleToggleDeptInGroup(dept.id, isChecked)}
                                     disabled={isProcessing}
                                   />
                                   <div className="flex flex-col">
-                                     <span className="text-base font-black tracking-tight">{dept.name}</span>
-                                     <span className={`text-[10px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>{dept.abbr}</span>
+                                     <span className="text-sm font-black tracking-tight">{dept.name}</span>
+                                     <span className={`text-[9px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>{dept.abbr}</span>
                                   </div>
                                 </div>
                                 {isAssignedElsewhere && !isChecked && (
-                                  <div className="ml-10 mt-3">
-                                    <span className="text-[10px] font-black uppercase tracking-tighter text-amber-500 bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/20">
+                                  <div className="ml-9 mt-2">
+                                    <span className="text-[8px] font-black uppercase tracking-tighter text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
                                       Assigned elsewhere
                                     </span>
                                   </div>
                                 )}
                               </div>
                               <div className="flex flex-col items-end gap-1">
-                                <span className={`text-lg font-mono font-black ${isChecked ? 'text-white' : 'text-slate-900'} italic`}>{(dept.totalAssets || 0).toLocaleString()}</span>
-                                <span className={`text-[9px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>Assets <Boxes className="inline w-2.5 h-2.5 ml-1"/></span>
+                                <span className={`text-base font-mono font-black ${isChecked ? 'text-white' : 'text-slate-900'} italic`}>{(dept.totalAssets || 0).toLocaleString()}</span>
+                                <span className={`text-[8px] font-black uppercase tracking-widest ${isChecked ? 'text-indigo-200' : 'text-slate-400'}`}>Assets <Boxes className="inline w-2 h-2 ml-1"/></span>
                               </div>
                             </label>
                           );
                         })}
                       </div>
 
-                      <div className="pt-8 mt-auto shrink-0 border-t border-slate-100">
+                      <div className="pt-6 mt-auto shrink-0 border-t border-slate-100">
                         <button 
                           onClick={() => setEditingGroupId(null)}
-                          className="w-full h-16 bg-slate-900 hover:bg-slate-800 text-white rounded-[28px] text-xs font-black uppercase tracking-widest flex items-center justify-center transition-all animate-in fade-in"
+                          className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white rounded-[24px] text-xs font-black uppercase tracking-widest flex items-center justify-center transition-all animate-in fade-in"
                         >
                           Finish Revision
                         </button>
