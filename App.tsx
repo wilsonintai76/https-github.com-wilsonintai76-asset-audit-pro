@@ -4,11 +4,9 @@ import { useRBAC } from './contexts/RBACContext';
 import { gateway } from './services/dataGateway';
 import { supabase } from './services/supabase';
 import { authService } from './services/auth';
-import { ItemNotFoundError } from './services/localDB';
 import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, RBACMatrix } from './types';
 import { AuditTable } from './components/AuditTable';
 import { Sidebar } from './components/Sidebar';
-import { DemoBanner } from './components/DemoBanner';
 import { NotificationCenter } from './components/NotificationCenter';
 import { UserManagement } from './components/UserManagement';
 import { OverviewDashboard } from './components/OverviewDashboard';
@@ -436,75 +434,10 @@ const App: React.FC = () => {
     localStorage.setItem('audit_pro_session', JSON.stringify(finalUser));
   }, []);
 
-  const determineMockRoles = (role: UserRole): UserRole[] => {
-    switch (role) {
-      case 'Admin': return ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'];
-      case 'Coordinator': return ['Coordinator', 'Supervisor', 'Auditor', 'Staff'];
-      case 'Supervisor': return ['Supervisor', 'Auditor', 'Staff'];
-      case 'Auditor': return ['Auditor', 'Staff'];
-      case 'Staff': return ['Staff'];
-      default: return ['Staff'];
-    }
-  };
 
-  const handleMockLogin = async (role: UserRole, targetView?: AppView) => {
-    setIsLoggingIn(true);
-    setConnectionErrorMessage(null);
-    await gateway.enableDemoMode();
-
-    const inheritedRoles = determineMockRoles(role);
-    const fortyFiveDaysLater = new Date();
-    fortyFiveDaysLater.setDate(fortyFiveDaysLater.getDate() + 45);
-
-    // Mock ID generation for demo
-    let mockId = `9${Math.floor(Math.random() * 900) + 100}`; // Random 9xxx 4 digit ID
-
-    let user: User = {
-      id: mockId,
-      name: role === 'Admin' ? 'Wilson Intai' : `Demo ${role}`,
-      email: role === 'Admin' ? 'wilson@poliku.edu.my' : `${role.toLowerCase()}@demo.com`,
-      roles: inheritedRoles,
-      status: 'Active',
-      lastActive: new Date().toISOString(),
-      certificationExpiry: fortyFiveDaysLater.toISOString().split('T')[0],
-      departmentId: role === 'Admin' ? 'dummy-dept-id' : 'dummy-dept-id',
-      isVerified: true
-    };
-
-
-    try {
-      const existingUsers = await gateway.getUsers();
-      const foundUser = existingUsers.find(u => {
-        const isHighest = u.roles.includes(role) &&
-          (role === 'Admin' || !u.roles.includes('Admin')) &&
-          (role === 'Coordinator' || !u.roles.includes('Coordinator')) &&
-          (role === 'Supervisor' || !u.roles.includes('Supervisor'));
-        return isHighest;
-      });
-      if (foundUser) {
-        user = foundUser;
-      } else {
-        // Ensure new mock user is persisted so updates work
-        await gateway.addUser(user);
-      }
-    } catch (e) {
-      console.warn("Login data fetch failed, proceeding with fresh local session", e);
-      // Even if fetch failed, we should try to add the user to localDB to avoid "not found" errors on update
-      try { await gateway.addUser(user); } catch (err) { }
-    }
-
-    await handleLoginSuccess(user);
-    if (targetView) setActiveView(targetView);
-    setIsLoggingIn(false);
-  };
 
   const handleLogout = async () => {
     try {
-      if (localStorage.getItem('inspectable_is_demo') === 'true') {
-        localStorage.removeItem('inspectable_is_demo');
-        localStorage.removeItem('inspectable_demo_user');
-        localStorage.removeItem('inspectable_demo_db');
-      }
       await authService.logout();
     } catch (e) {
       console.error("[App] Logout error:", e);
@@ -618,32 +551,6 @@ const App: React.FC = () => {
 
     initialize();
 
-    // DEMO MODE CHECK
-    const isDemo = localStorage.getItem('inspectable_is_demo') === 'true';
-    const savedDemoUser = localStorage.getItem('inspectable_demo_user');
-    
-    if (isDemo && savedDemoUser) {
-      try {
-        const user = JSON.parse(savedDemoUser);
-        setCurrentUser(user);
-        setViewState('app');
-        gateway.setDemoMode(true);
-        
-        // Match specialized routing logic for Auditor
-        const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
-        const isAdmin = user.roles.includes('Admin');
-        if (!isAdmin && isCertified) {
-            setActiveView('auditor-dashboard');
-        } else {
-            setActiveView('overview');
-        }
-
-        console.log("Demo Mode Active: Authenticated as", user.name);
-        return; // Skip supabase auth
-      } catch (e) {
-        console.error("Failed to parse demo user", e);
-      }
-    }
 
     // Listen for auth changes
     const { data: { subscription } } = supabase?.auth.onAuthStateChange(async (event, session) => {
@@ -715,7 +622,7 @@ const App: React.FC = () => {
     console.error(error);
     let message = error?.message || 'An unexpected error occurred. Please try again.';
 
-    if (error instanceof ItemNotFoundError || message.includes('not found')) {
+    if (message.includes('not found')) {
       message = `The requested item could not be found. It may have been deleted or not synchronized correctly. Please refresh the page.`;
     }
 
@@ -1945,12 +1852,19 @@ const App: React.FC = () => {
 
   const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number = 2) => {
     try {
-      // Step 1: Clear all previously auto-generated groups
-      const prevAutoGroups = auditGroups.filter(g => g.name?.startsWith('Group '));
+      // Step 1: Immediate UI Purge to prevent stale renders
+      setAuditGroups([]);
+      
+      // Step 2: Absolute Server-Side Purge
+      // First, get all existing auto-generated groups
+      const currentGroups = await gateway.getAuditGroups();
+      const prevAutoGroups = currentGroups.filter(g => g.name?.startsWith('Group '));
+      
       if (prevAutoGroups.length > 0) {
+        // Unassign ALL departments from these groups first to avoid foreign key issues
+        const allDepts = await gateway.getDepartments();
         for (const group of prevAutoGroups) {
-          // Unassign all departments from this group before deleting it
-          const groupDepts = departmentsWithAssets.filter(d => d.auditGroupId === group.id);
+          const groupDepts = allDepts.filter(d => d.auditGroupId === group.id);
           for (const dept of groupDepts) {
             await gateway.updateDepartment(dept.id, { auditGroupId: null });
           }
@@ -1958,10 +1872,9 @@ const App: React.FC = () => {
         }
       }
 
-      // Step 2: Use enriched departmentsWithAssets for filtering.
-      // Step 1: Filter eligible departments.
-      // Rule: Not manually excluded, and NOT exempted (meaning they have assets OR auditors).
-      const eligible = departmentsWithAssets
+      // Step 3: Use fresh, authoritative data for calculation
+      const freshDepts = await gateway.getDepartments();
+      const eligible = freshDepts
         .filter(d => !excludedIds.includes(d.id) && d.isExempted !== true)
         .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
 
@@ -1979,9 +1892,6 @@ const App: React.FC = () => {
         runningAssets += dept.totalAssets || 0;
         currentBundle.push(dept);
         
-        // Flush condition: simply flush when the asset threshold is met.
-        // Auditor count is NOT a gate - groups can be created regardless of
-        // how many auditors they have (the strict rule is advisory/display only).
         if (runningAssets >= threshold) {
             bundles.push([...currentBundle]);
             currentBundle = [];
@@ -1989,11 +1899,9 @@ const App: React.FC = () => {
         }
       }
       
-      // Handle leftovers: merge small remainders into last group, keep larger ones separate
       if (currentBundle.length > 0) {
         if (bundles.length > 0) {
             const leftoverAssets = currentBundle.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-            // Merge leftovers that are less than 70% of threshold into the last group
             if (leftoverAssets < threshold * 0.7) {
               bundles[bundles.length - 1].push(...currentBundle);
             } else {
@@ -2004,7 +1912,7 @@ const App: React.FC = () => {
         }
       }
 
-      // Create groups in database
+      // Step 4: Create groups and re-assign
       let groupIndex = 1;
       for (const b of bundles) {
         if (b.length === 0) continue;
@@ -2017,16 +1925,10 @@ const App: React.FC = () => {
         }
       }
 
-      // Step 4: Final refresh to ensure UI shows the new groups
-      const [finalGroups, finalDepts] = await Promise.all([
-        gateway.getAuditGroups(),
-        gateway.getDepartments()
-      ]);
+      // Step 5: Final refreshment from source of truth
+      await loadAllData();
       
-      setAuditGroups(finalGroups);
-      setDepartments(finalDepts);
-      
-      // Force immediate jump to Review Tab and ensure state is authoritative
+      const finalGroups = await gateway.getAuditGroups();
       if (finalGroups.length > 0) {
         showToast(`Auto-consolidation complete! ${finalGroups.length} groups created.`);
       }
@@ -2354,7 +2256,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden select-none">
-      <DemoBanner />
       <div className="flex flex-1 overflow-hidden">
       <AutoUpdater />
       <Sidebar

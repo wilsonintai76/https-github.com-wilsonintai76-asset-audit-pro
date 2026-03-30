@@ -29,7 +29,6 @@ interface LandingPageProps {
   phases?: AuditPhase[];
   activities?: SystemActivity[];
   topDepartments?: { name: string, compliance: number }[];
-  onDemoLogin?: (role: UserRole) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ 
@@ -40,8 +39,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   complianceProgress,
   phases = [],
   activities = [],
-  topDepartments = [],
-  onDemoLogin
+  topDepartments = []
 }) => {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
@@ -202,29 +200,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                 </button>
 
-                <button
-                  onClick={() => {
-                    const adminUser = {
-                        id: 'u-admin',
-                        name: 'Institutional Admin (Demo)',
-                        email: 'admin@demo.local',
-                        roles: ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
-                        designation: 'Admin',
-                        departmentId: 'd1',
-                        status: 'Active',
-                        isVerified: true,
-                        certificationIssued: '2026-01-01',
-                        certificationExpiry: '2027-01-01'
-                    };
-                    localStorage.setItem('inspectable_is_demo', 'true');
-                    localStorage.setItem('inspectable_demo_user', JSON.stringify(adminUser));
-                    window.location.reload();
-                  }}
-                  className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-white border-2 border-indigo-100 text-indigo-600 rounded-2xl text-lg font-bold hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-lg shadow-indigo-100/30"
-                >
-                  <Zap className="w-5 h-5 text-indigo-500 fill-indigo-500" />
-                  Try Demo Mode
-                </button>
               </div>
               <button
                 onClick={() => setIsTourOpen(true)}
