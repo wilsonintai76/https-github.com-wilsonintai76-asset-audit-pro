@@ -300,17 +300,15 @@ const App: React.FC = () => {
         u.status === 'Active'
       ).length;
 
-      // Auto-exempt ONLY if 0 assets and 0 active auditors.
-      // If it has either, we respect the current isExempted status (manual or otherwise).
-      const hasContent = finalAssets > 0 || auditors > 0;
-      const isAutoExempted = !hasContent && !dept.auditGroupId;
-      const finalIsExempted = hasContent ? dept.isExempted : (dept.isExempted || isAutoExempted);
+      // Manual setting takes precedence. 
+      // We only auto-exempt in the specific sync function, not in the live UI memo.
+      const finalIsExempted = !!dept.isExempted;
 
       return {
         ...dept,
         totalAssets: finalAssets,
         auditorCount: auditors,
-        isExempted: !!finalIsExempted
+        isExempted: finalIsExempted
       };
     });
   }, [departments, locations, users]);
@@ -338,15 +336,14 @@ const App: React.FC = () => {
           u.status === 'Active'
         ).length;
         
-        // If it has assets or auditors, we respect the current manual setting.
-        // We only auto-exempt if it's completely empty.
-        const hasContent = totalAssets > 0 || auditors > 0;
-        const shouldBeExempted = hasContent ? d.isExempted : true;
+        // Only automatically EXEMPT if it's completely empty AND not part of a consolidation unit.
+        // We never automatically UN-EXEMPT (to respect manual choices).
+        const shouldBeExempted = d.isExempted === true || (totalAssets === 0 && auditors === 0 && !d.auditGroupId);
 
         return {
           id: d.id,
           data: { 
-            totalAssets: totalAssets, // Use the calculated MAX, not just calculatedAssets
+            totalAssets: totalAssets, 
             isExempted: !!shouldBeExempted
           }
         };

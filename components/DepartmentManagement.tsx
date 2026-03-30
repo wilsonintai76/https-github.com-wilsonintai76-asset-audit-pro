@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Department, Location, User, AuditGroup, UserRole } from '../types';
-import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, UserPlus } from 'lucide-react';
+import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, ShieldCheck, UserPlus } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
 import { useRBAC } from '../contexts/RBACContext';
@@ -136,7 +136,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                         <div className="min-w-0">
                           <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
                             {dept.name}
-                            {dept.isExempted && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[9px] font-black border border-amber-100 uppercase tracking-widest" title="Exempted from institutional cross-audits">Exempted</span>}
+                            {dept.isExempted && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-black border border-rose-100 uppercase tracking-widest" title="Exempted from institutional cross-audits">Exempted</span>}
                           </div>
                           <div className="text-[11px] text-slate-500 font-medium truncate max-w-[250px]">{dept.description || 'No description provided'}</div>
                         </div>
@@ -197,13 +197,13 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                         <div className="flex gap-1 justify-start">
                           <button
                             onClick={() => onUpdate(dept.id, { isExempted: !dept.isExempted })}
-                            title={dept.isExempted ? 'Click to un-exempt from cross-audits' : 'Click to manually exempt from cross-audits'}
-                            className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-colors ${dept.isExempted
-                                ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100'
-                                : 'bg-white border-slate-200 text-slate-400 hover:text-amber-500 hover:border-amber-200'
+                            title={dept.isExempted ? 'Click to un-exempt (Include in Cross-Audits)' : 'Click to manually exempt (Exclude from Cross-Audits)'}
+                            className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-all active:scale-90 ${dept.isExempted
+                                ? 'bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100 shadow-sm'
+                                : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 shadow-sm'
                               }`}
                           >
-                            <ShieldOff className="w-4 h-4" />
+                            {dept.isExempted ? <ShieldOff className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                           </button>
                           <button onClick={() => startEdit(dept)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 rounded-xl transition-colors"><Pencil className="w-4 h-4" /></button>
                           <button onClick={() => onDelete(dept.id)} className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>

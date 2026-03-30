@@ -1,13 +1,14 @@
-﻿
+
 import React, { useState, useMemo } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown } from 'lucide-react';
+import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown, ShieldOff } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
 import { InstitutionalConsolidationView } from './InstitutionalConsolidationView';
 import { GroupBuilderTab } from './GroupBuilderTab';
 import { AuditConstraints } from './AuditConstraints';
+
 interface StrategicPair {
   target: { id: string; name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
   auditors: { id: string; name: string; assets: number; auditors: number; isJoint: boolean; members?: any[] }[];
@@ -76,6 +77,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedAuditor, setSelectedAuditor] = useState<string>('');
+  const [respectManualPairings, setRespectManualPairings] = useState<boolean>(true);
   
   // Manual Mode State
   const [manualAuditor, setManualAuditor] = useState('');
@@ -123,7 +125,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
     activeDepts.forEach(d => {
       // Use the normalized auditGroupId to identify the group.
-      // If none, it is a standalone department.
       const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
       
       const entityName = group ? group.name : d.name;
@@ -143,7 +144,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     });
 
     return Array.from(map.values()).map(stats => {
-      // It is a group if it contains multiple departments OR it explicitly maps to an audit group ID
       const constitutesGroup = stats.memberCount > 1 || auditGroups.some(g => g.id === stats.id);
       return { 
         ...stats, 
@@ -180,14 +180,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     setIsProcessing(true);
 
     try {
-      // 1. Clear local calculation state
       setStrategicPlan([]);
       setWorkflowStep('grouping');
       setIsApplied(false);
       setIsSimulatorActive(false);
       setSimulatedPairings([]);
 
-      // 2. Clear Department Groups (Database)
       const updates = departments
         .filter(d => d.auditGroupId)
         .map(d => ({ id: d.id, data: { auditGroupId: null } }));
@@ -196,14 +194,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         await onBulkUpdateDepartments(updates);
       }
 
-      // 3. Clear ALL Existing Permissions (Database - Manual & Auto)
       if (onBulkRemovePermissions && permissions.length > 0) {
         await onBulkRemovePermissions(permissions.map(p => p.id));
       }
 
     } catch (error) {
       console.error("Reset failed:", error);
-      alert("Failed to fully reset system configuration. Please check your connection.");
+      alert("Failed to fully reset system configuration.");
     } finally {
       setIsProcessing(false);
     }
@@ -220,11 +217,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
     try {
       if (onRemovePermission && permissions.length > 0) {
-        // Use Promise.all to ensure all deletions finish before proceeding
         await Promise.all(permissions.map(p => onRemovePermission(p.id)));
       }
 
-      // Brief delay to ensure database consistency
       await new Promise(r => setTimeout(r, 1000));
 
       const newPerms: Omit<CrossAuditPermission, 'id'>[] = [];
@@ -247,7 +242,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       setIsApplied(true);
     } catch (e) {
       console.error(e);
-      alert("Permission sync failed. Check connection.");
+      alert("Permission sync failed.");
     } finally {
       setIsProcessing(false);
     }
@@ -256,7 +251,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const handleAddManualPair = async () => {
     if (!manualAuditor || !manualTarget) return;
     if (manualAuditor === manualTarget) {
-      alert("Conflict Detected: A unit cannot audit its own assets. Please select a different pairing.");
+      alert("Conflict Detected: A unit cannot audit its own assets.");
       return;
     }
     
@@ -264,7 +259,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     try {
       await onAddPermission(manualAuditor, manualTarget, isMutual);
       if (isMutual) {
-        // Also check if reverse already exists
         const reverseExists = permissions.some(p => p.auditorDeptId === manualTarget && p.targetDeptId === manualAuditor);
         if (!reverseExists) {
             await onAddPermission(manualTarget, manualAuditor, isMutual);
@@ -280,20 +274,14 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   };
 
   const handleGridToggle = async (auditorId: string, targetId: string) => {
-    if (auditorId === targetId) return; // Prevent self-audit
-    
+    if (auditorId === targetId) return;
     const perm = permissions.find(p => p.auditorDeptId === auditorId && p.targetDeptId === targetId);
-    
     if (perm) {
-      // Toggle off (remove)
       if (onRemovePermission) await onRemovePermission(perm.id);
     } else {
-      // Toggle on (add)
       await onAddPermission(auditorId, targetId, false);
     }
   };
-
-  // --- LOGIC ---
 
   const handleAnalyzeAndGroup = async () => {
     setIsProcessing(true);
@@ -348,13 +336,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     }
 
     await onBulkUpdateDepartments(updates);
-    
-    // Also, if we auto-created "Group A", "Group B", etc. and they don't exist in audit_groups table,
-    // we should probably add them. But since this is "Optimization Engine" (old logic), 
-    // it uses strings. The user specifically asked for MANUAL groups too.
-    // I'll leave the string-based auto-grouping as a fallback "Optimized Group" display,
-    // while encouraging the Registry for permanent manual groups.
-    
     setIsProcessing(false);
     setWorkflowStep('pairing');
   };
@@ -367,8 +348,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     if (!institutionKPIs || institutionKPIs.length === 0) return 30;
     return Math.max(...institutionKPIs.map(k => k.targetPercentage || 0));
   }, [institutionKPIs]);
-
-  const targetKPIAssets = overallTotalAssets * (targetKPIPercentage / 100);
 
   const projectedAssetsMet = useMemo(() => {
     const activeList = isSimulatorActive ? simulatedPairings : permissions;
@@ -394,18 +373,16 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
 
     if (pairingMode === 'assets') {
-      // ── MODE 1: ASSETS ONLY ─────────────────────────────────────────────
-      // Pair targets (high→low assets) with available auditor entities (any entity
-      // that isn't the target itself). No auditor-count gating.
-      // Each target gets exactly ONE auditing entity (the highest-asset entity
-      // that is not itself and hasn't already been fully used).
-      // Use round-robin assignment across all non-self entities.
       const auditorPool = entities.filter(e => e.assets > 0 || simulateIdealStaffing);
       let poolIdx = 0;
 
-      for (const target of targets) {
+      // Filter targets if respecting manual pairings
+      const finalTargets = respectManualPairings 
+        ? targets.filter(t => !permissions.some(p => p.isActive && p.targetDeptId === t.id))
+        : targets;
+
+      for (const target of finalTargets) {
         if (usedTargetIds.has(target.id!)) continue;
-        // Pick next non-self auditor
         let attempts = 0;
         let picked: typeof auditorPool[0] | null = null;
         while (attempts < auditorPool.length) {
@@ -439,8 +416,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       }
 
     } else {
-      // ── MODE 2: ASSETS + AUDITORS ────────────────────────────────────────
-      // Original logic: auditor capacity gates assignment.
       const auditors = entities.filter(e => simulateIdealStaffing || e.auditors >= minAuditorsRequired);
       const capacityMap = new Map<string, number>();
       auditors.forEach(a => {
@@ -449,7 +424,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
           : (minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors));
       });
 
-      for (const target of targets) {
+      // Filter targets if respecting manual pairings
+      const finalTargets = respectManualPairings 
+        ? targets.filter(t => !permissions.some(p => p.isActive && p.targetDeptId === t.id))
+        : targets;
+
+      for (const target of finalTargets) {
         if (usedTargetIds.has(target.id!)) continue;
         const assets = target.assets || 0;
         const targetCapacity = Math.max(2, Math.ceil(assets / maxAssetsPerDay));
@@ -530,18 +510,14 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     if (!onBulkAddPermissions || simulatedPairings.length === 0) return;
     setIsProcessing(true);
     try {
-      // EXPANSION LOGIC: Map Entity-to-Entity pairings into Department-to-Department permissions
       const expandedPairings: Omit<CrossAuditPermission, 'id'>[] = [];
       
       for (const pair of simulatedPairings) {
-        // Find the entities for these IDs
         const auditorEntity = entities.find(e => e.id === pair.auditorDeptId);
         const targetEntity = entities.find(e => e.id === pair.targetDeptId);
         
         if (!auditorEntity || !targetEntity) continue;
         
-        // Expand: Each department in the auditing entity audits each department in the target entity.
-        // This ensures the database's FK constraints (References departments.id) are met.
         for (const auditorDept of auditorEntity.members) {
           for (const targetDept of targetEntity.members) {
              expandedPairings.push({
@@ -559,7 +535,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         return;
       }
 
-      // If we are committing the simulation, we clear old permissions first
       if (onBulkRemovePermissions && permissions.length > 0) {
           await onBulkRemovePermissions(permissions.map(p => p.id));
       }
@@ -577,10 +552,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const activePairingList = isSimulatorActive ? simulatedPairings : (permissions as any[]);
 
-  // Collapse raw dept-level permissions into unique entity-level pairs
   const entityPermissions = useMemo(() => {
     if (isSimulatorActive) {
-      // Simulator already works at entity level — just return as-is with empty rawPermIds
       return simulatedPairings.map((p, idx) => ({
         auditorEntityId: p.auditorDeptId,
         targetEntityId: p.targetDeptId,
@@ -589,8 +562,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         simIdx: idx,
       }));
     }
-    // For live DB permissions: map each raw dept permission → its parent entity,
-    // then deduplicate by auditorEntityId+targetEntityId
     const map = new Map<string, { auditorEntityId: string; targetEntityId: string; isMutual: boolean; rawPermIds: string[] }>();
     (permissions as any[]).forEach(p => {
       const auditorEntity = entities.find(e => e.id === p.auditorDeptId || (e.members && e.members.some((m: any) => m.id === p.auditorDeptId)));
@@ -601,10 +572,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         map.get(key)!.rawPermIds.push(p.id);
       } else {
         map.set(key, {
-          auditorEntityId: auditorEntity.id!,
-          targetEntityId: targetEntity.id!,
-          isMutual: p.isMutual,
-          rawPermIds: [p.id],
+            auditorEntityId: auditorEntity.id!,
+            targetEntityId: targetEntity.id!,
+            isMutual: p.isMutual,
+            rawPermIds: [p.id],
         });
       }
     });
@@ -627,8 +598,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   return (
     <div className="space-y-8">
-
-      {/* 3-TAB GROUP BUILDER COMPONENT */}
       <GroupBuilderTab 
         departments={departments}
         auditGroups={auditGroups}
@@ -644,14 +613,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         maxLocationsPerDay={maxLocationsPerDay}
       />
           
-      {/* Simulator Mode Header */}
       <div className="bg-white rounded-[40px] border-2 border-slate-200 p-8 md:p-12 shadow-sm relative overflow-hidden">
          {isSimulatorActive && (
              <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400 animate-pulse"></div>
          )}
          
          <div className="flex flex-col lg:flex-row gap-12">
-          {/* Left Column: Controls */}
           <div className="lg:w-1/3">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
               <div>
@@ -694,7 +661,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
               Generate the most efficient audit assignments automatically based on your selected strategy.
             </p>
 
-            {/* Pairing Strategy Mode Toggle */}
             <div className="mb-6">
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pairing Strategy</p>
               <div className="flex rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-1 gap-1">
@@ -721,9 +687,30 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
               </div>
               <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
                 {pairingMode === 'assets'
-                  ? 'Pairs targets by asset volume only. Any entity (including consolidated groups) can audit any other target — no auditor-count gating.'
+                  ? 'Pairs targets by asset volume only. Any entity can audit any other target — no auditor-count gating.'
                   : 'Requires auditor capacity to qualify. Entities are assigned based on both asset size and available inspecting officers.'}
               </p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-3">
+              <label className="flex items-center justify-between cursor-pointer group">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                    <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Respect Manual Pairings</span>
+                  </div>
+                  <p className="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-tighter">Do not suggest new pairings for units already manually assigned</p>
+                </div>
+                <div className="relative inline-flex items-center ml-4">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={respectManualPairings}
+                    onChange={() => setRespectManualPairings(!respectManualPairings)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </div>
+              </label>
             </div>
 
             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-5">
@@ -747,7 +734,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
               </label>
             </div>
 
-            {/* Exempted Entities Banner */}
             {exemptedDepts.length > 0 && (
               <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 mb-5">
                 <div className="flex items-center gap-2 mb-2">
@@ -761,7 +747,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                     </span>
                   ))}
                 </div>
-                <p className="text-[9px] text-rose-400 mt-2 leading-relaxed">These departments are excluded as both auditors and targets. Manage exemptions in Department Settings.</p>
+                <p className="text-[9px] text-rose-400 mt-2 leading-relaxed">These departments are excluded. Manage in Department Settings.</p>
               </div>
             )}
 
@@ -795,84 +781,87 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
             )}
           </div>
 
-          {/* Right Column: Projection Dashboard & Refinements */}
           <div className="lg:w-2/3 w-full bg-slate-50 rounded-[32px] p-8 border border-slate-100 relative">
              <div className="mb-8">
-                 <div className="flex items-end justify-between mb-4">
-                     <div>
-                         <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Projected KPI Achievement (Asset Inspection)</h4>
-                         <div className="text-3xl font-black text-slate-800 tracking-tighter mt-1">
-                             {projectedKPIPercentage.toFixed(1)}% <span className="text-lg text-slate-400 font-bold">/ {targetKPIPercentage}%</span>
-                         </div>
-                     </div>
-                     <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border ${isKPIMet ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
-                         {isKPIMet ? 'KPI Secured' : 'KPI Missed'}
-                     </div>
-                 </div>
-                 
-                 {/* Progress Bar */}
-                 <div className="h-4 w-full bg-slate-200 rounded-full overflow-hidden flex relative">
-                     <div 
-                         className={`h-full transition-all duration-1000 ${isKPIMet ? 'bg-emerald-500' : 'bg-amber-500'}`} 
-                         style={{ width: `${Math.min(100, projectedKPIPercentage)}%` }}
-                     ></div>
-                     
-                     {/* Target Marker */}
-                     <div 
-                         className="absolute top-0 bottom-0 w-1 bg-slate-900 z-10"
-                         style={{ left: `${targetKPIPercentage}%` }}
-                     ></div>
-                 </div>
-                 <p className="text-[10px] font-bold text-slate-400 mt-2 text-right">{projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Total Movable Assets Inspected</p>
+                  <div className="flex items-end justify-between mb-4">
+                      <div>
+                          <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Projected KPI Achievement (Asset Inspection)</h4>
+                          <div className="text-3xl font-black text-slate-800 tracking-tighter mt-1">
+                              {projectedKPIPercentage.toFixed(1)}% <span className="text-lg text-slate-400 font-bold">/ {targetKPIPercentage}%</span>
+                          </div>
+                      </div>
+                      <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border ${isKPIMet ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
+                          {isKPIMet ? 'KPI Secured' : 'KPI Missed'}
+                      </div>
+                  </div>
+                  
+                  <div className="h-4 w-full bg-slate-200 rounded-full overflow-hidden flex relative">
+                      <div 
+                          className={`h-full transition-all duration-1000 ${isKPIMet ? 'bg-emerald-500' : 'bg-amber-500'}`} 
+                          style={{ width: `${Math.min(100, projectedKPIPercentage)}%` }}
+                      ></div>
+                      <div 
+                          className="absolute top-0 bottom-0 w-1 bg-slate-900 z-10"
+                          style={{ left: `${targetKPIPercentage}%` }}
+                      ></div>
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 mt-2 text-right">{projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Total Movable Assets Inspected</p>
              </div>
 
-             {/* Manual Overrides */}
              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                 <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Manual Override / Refinement</h4>
-                 <div className="flex flex-col gap-3">
-                     <div className="flex flex-col sm:flex-row gap-3">
-                       <select 
-                          className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                          value={manualAuditor}
-                          onChange={(e) => setManualAuditor(e.target.value)}
-                       >
-                          <option value="">Select Inspecting Entity</option>
-                          {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => <option key={e.id} value={e.id}>{e.name} ({e.auditors} Officers)</option>)}
-                       </select>
-                       
-                       <select 
-                          className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                          value={manualTarget}
-                          onChange={(e) => setManualTarget(e.target.value)}
-                       >
-                          <option value="">Select Target</option>
-                          {entities.filter(e => e.assets > 0).map(e => <option key={e.id} value={e.id}>{e.name} ({e.assets} Movable Assets)</option>)}
-                       </select>
-                     </div>
+                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-4">Manual Override / Refinement</h4>
+                  <div className="flex flex-col gap-3">
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <select 
+                           className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                           value={manualAuditor}
+                           onChange={(e) => setManualAuditor(e.target.value)}
+                        >
+                           <option value="">Select Inspecting Entity</option>
+                           {entities.filter(e => simulateIdealStaffing || e.auditors >= 1).map(e => (
+                             <option key={e.id} value={e.id}>
+                               {e.isJoint ? '📦 [GROUP] ' : '🏢 [UNIT] '} {e.name} ({e.auditors} Officers)
+                             </option>
+                           ))}
+                        </select>
+                        
+                        <select 
+                           className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold shadow-sm focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                           value={manualTarget}
+                           onChange={(e) => setManualTarget(e.target.value)}
+                        >
+                           <option value="">Select Target</option>
+                           {entities.filter(e => e.assets > 0).map(e => (
+                             <option key={e.id} value={e.id}>
+                               {e.isJoint ? '📦 [GROUP] ' : '🏢 [UNIT] '} {e.name} ({e.assets} Movable Assets)
+                             </option>
+                           ))}
+                        </select>
+                      </div>
 
-                     <div className="flex items-center gap-3">
-                       <label className="flex items-center gap-2 cursor-pointer group px-2 flex-1">
-                          <div className="relative inline-flex items-center">
-                            <input 
-                              type="checkbox" 
-                              className="sr-only peer" 
-                              checked={overrideIsMutual}
-                              onChange={() => setOverrideIsMutual(!overrideIsMutual)}
-                            />
-                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
-                          </div>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual</span>
-                       </label>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 cursor-pointer group px-2 flex-1">
+                           <div className="relative inline-flex items-center">
+                             <input 
+                               type="checkbox" 
+                               className="sr-only peer" 
+                               checked={overrideIsMutual}
+                               onChange={() => setOverrideIsMutual(!overrideIsMutual)}
+                             />
+                             <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                           </div>
+                           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual</span>
+                        </label>
 
-                       <button 
-                           onClick={handleAddOverride}
-                           disabled={!manualAuditor || !manualTarget}
-                           className="px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
-                       >
-                           <Plus className="w-4 h-4" /> Add
-                       </button>
-                     </div>
-                 </div>
+                        <button 
+                            onClick={handleAddOverride}
+                            disabled={!manualAuditor || !manualTarget}
+                            className="px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-100 transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+                        >
+                            <Plus className="w-4 h-4" /> Add
+                        </button>
+                      </div>
+                  </div>
              </div>
           </div>
          </div>
@@ -928,7 +917,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                            {filteredEntityPermissions.length === 0 ? (
                                <tr>
                                    <td colSpan={4} className="py-12 text-center text-slate-400 font-medium text-sm">
-                                       {activePairingList.length === 0 ? 'No pairings generated. Run Simulator or add manual overrides.' : 'No pairings match your search filters.'}
+                                       No pairings found.
                                    </td>
                                </tr>
                            ) : (
@@ -955,14 +944,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                             ))}
                                                         </div>
                                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">
-                                                            {isSimulatorActive && planAuditor ? planAuditor.auditors : (auditorEntity?.auditors || 0)} Total Inspecting Officers
-                                                            {planAuditor?.isVirtual && (
-                                                                <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-600 border border-amber-100 rounded text-[8px]">
-                                                                    <Zap className="w-2 h-2" /> VIRTUAL STRATEGIC
-                                                                </span>
-                                                            )}
+                                                            {isSimulatorActive && planAuditor ? planAuditor.auditors : (auditorEntity?.auditors || 0)} Officers
                                                         </p>
-                                                    </div>
+                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-center">
@@ -971,47 +955,38 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                 {pairingMode === "assets_auditors" && (<div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg border border-amber-100 w-fit mb-3">
-                                                     <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                                                     <span className="text-[10px] font-black uppercase tracking-tight">
-                                                         Target Capacity: {Math.max(2, Math.ceil((targetEntity?.assets || 0) / maxAssetsPerDay))} Inspecting Officers
-                                                     </span>
-                                                 </div>)}
-
-                                               <div className="flex items-center gap-3">
-                                                   <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-                                                       {targetEntity?.isConsolidated ? <Boxes className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
-                                                   </div>
-                                                   <div>
-                                                       <p className="font-bold text-sm text-slate-900">{targetEntity?.name || ep.targetEntityId}</p>
-                                                       <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Movable Assets</p>
-                                                   </div>
-                                               </div>
-                                           </td>
-                                           <td className="px-6 py-4 text-right">
-                                               {isSimulatorActive ? (
-                                                    <button onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                                                        {targetEntity?.isConsolidated ? <Boxes className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-sm text-slate-900">{targetEntity?.name || ep.targetEntityId}</p>
+                                                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Assets</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                {isSimulatorActive ? (
+                                                     <button onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors">
                                                        <X className="w-5 h-5" />
-                                                   </button>
-                                               ) : (
-                                                    <button onClick={() => onBulkRemovePermissions && ep.rawPermIds && ep.rawPermIds.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors" title={`Remove ${ep.rawPermIds?.length || 1} permission link(s)`}>
+                                                    </button>
+                                                ) : (
+                                                     <button onClick={() => onBulkRemovePermissions && ep.rawPermIds && ep.rawPermIds.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors" title={`Remove link`}>
                                                        <Trash2 className="w-5 h-5" />
-                                                   </button>
-                                               )}
-                                           </td>
-                                       </tr>
-                                   );
-                                })
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                 })
                            )}
                         </tbody>
                      </table>
-                     <div className="h-4 bg-slate-50/50 border-t border-slate-100"></div>
                  </div>
             </div>
          </div>
       </div>
 
-       {/* ENTITIES LIST */}
        <ActiveEntitiesList 
         entities={entities}
         selectedEntity={selectedAuditor}
@@ -1026,7 +1001,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       <ConfirmationModal
         isOpen={activeModal === 'apply'}
         title="Apply Strategic Matrix?"
-        message="This will overwrite existing cross-departmental permissions to enforce anti-self-audit rules. JKE will audit other departments, but never JKE itself."
+        message="This will overwrite existing permissions."
         confirmLabel="Apply Now"
         cancelLabel="Cancel"
         onConfirm={executeApply}
@@ -1037,7 +1012,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       <ConfirmationModal
         isOpen={activeModal === 'reset'}
         title="Clear Configurations?"
-        message="This will dissolve all consolidated groups, clear the current matrix results, AND remove all active manual/auto permissions. This action cannot be undone."
+        message="This will dissolve all groups and clear permissions."
         confirmLabel="Reset Everything"
         cancelLabel="Cancel"
         onConfirm={executeReset}
