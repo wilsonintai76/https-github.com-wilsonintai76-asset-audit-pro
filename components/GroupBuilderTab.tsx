@@ -240,20 +240,40 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                              {g.name.split(' ').pop()?.charAt(0) || 'G'}
                           </div>
                           <div>
-                             <h5 className="font-black text-slate-900">{g.name}</h5>
-                             <p className="text-xs font-bold text-slate-500 mt-1 flex items-center gap-1">
+                             <div className="flex items-center gap-3 mb-1">
+                               <h5 className="font-black text-slate-900">{g.name}</h5>
+                               {(() => {
+                                  const depts = departments.filter(d => d.auditGroup === g.name || d.auditGroupId === g.id);
+                                  const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+                                  return (
+                                    <span className="px-2 py-0.5 rounded-lg bg-indigo-600 text-white text-[10px] font-black shadow-sm flex items-center gap-1">
+                                      {(totalAssets || 0).toLocaleString()} <Boxes className="w-3 h-3"/>
+                                    </span>
+                                  );
+                               })()}
+                             </div>
+                             <div className="flex flex-wrap gap-1 mb-2">
+                                {departments
+                                  .filter(d => d.auditGroup === g.name || d.auditGroupId === g.id)
+                                  .map(d => (
+                                    <span key={d.id} className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-500 text-[9px] font-black uppercase tracking-wider">
+                                      {d.abbr}
+                                    </span>
+                                  ))
+                                }
+                             </div>
+                             <p className="text-xs font-bold text-slate-400 flex items-center gap-1">
                                 <Users className="w-3 h-3" />
                                 {(() => {
                                   const depts = departments.filter(d => d.auditGroup === g.name || d.auditGroupId === g.id);
                                   const actualAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
                                   const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-                                  const locCount = depts.length; // Actually we should sum location count if available
-                                  const rec = Math.max(2, Math.ceil(totalAssets / maxAssetsPerDay), Math.ceil(locCount / maxLocationsPerDay));
+                                  const rec = Math.max(2, Math.ceil(totalAssets / maxAssetsPerDay), Math.ceil(depts.length / maxLocationsPerDay));
                                   return (
                                     <span>
                                       {depts.length} Units • {actualAuditors} Auditors 
                                       {actualAuditors < rec && (
-                                        <span className="text-amber-500 ml-1 text-[8px] font-black underline decoration-amber-200 underline-offset-2">(Rec: {rec})</span>
+                                        <span className="text-amber-500 ml-1 text-[9px] font-black underline decoration-amber-200 underline-offset-2">(Required: {rec})</span>
                                       )}
                                     </span>
                                   );
