@@ -479,23 +479,61 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     setIsProcessing(false);
   };
 
-  const handleAddOverride = () => {
+  const handleAddOverride = async () => {
     if (!manualAuditor || !manualTarget) return;
     if (manualAuditor === manualTarget) {
       alert("Conflict Detected: A unit cannot audit its own assets.");
       return;
     }
-    
-    const newPair = { auditorDeptId: manualAuditor, targetDeptId: manualTarget, isActive: true, isMutual: overrideIsMutual };
-    
+
+    // Resolve entity IDs to department IDs (groups must be expanded)
+    const auditorEntity = entities.find(e => e.id === manualAuditor);
+    const targetEntity = entities.find(e => e.id === manualTarget);
+
+    if (!auditorEntity || !targetEntity) return;
+
+    const auditorDeptIds: string[] = auditorEntity.isConsolidated
+      ? auditorEntity.members.map((m: any) => m.id)
+      : [auditorEntity.id!];
+
+    const targetDeptIds: string[] = targetEntity.isConsolidated
+      ? targetEntity.members.map((m: any) => m.id)
+      : [targetEntity.id!];
+
     if (isSimulatorActive) {
-      const updated = [...simulatedPairings, newPair];
-      if (overrideIsMutual) updated.push({ auditorDeptId: manualTarget, targetDeptId: manualAuditor, isActive: true, isMutual: true });
+      const newPairs = auditorDeptIds.flatMap(audId =>
+        targetDeptIds.map(tgtId => ({ auditorDeptId: audId, targetDeptId: tgtId, isActive: true, isMutual: overrideIsMutual }))
+      );
+      const updated = [...simulatedPairings, ...newPairs];
+      if (overrideIsMutual) {
+        const reverse = targetDeptIds.flatMap(tgtId =>
+          auditorDeptIds.map(audId => ({ auditorDeptId: tgtId, targetDeptId: audId, isActive: true, isMutual: true }))
+        );
+        updated.push(...reverse);
+      }
       setSimulatedPairings(updated);
     } else {
-      if (onAddPermission) onAddPermission(manualAuditor, manualTarget, overrideIsMutual);
+      if (onAddPermission) {
+        setIsProcessing(true);
+        try {
+          const pairs = auditorDeptIds.flatMap(audId =>
+            targetDeptIds.map(tgtId => ({ auditorDeptId: audId, targetDeptId: tgtId }))
+          );
+          for (const p of pairs) {
+            await onAddPermission(p.auditorDeptId, p.targetDeptId, overrideIsMutual);
+            if (overrideIsMutual) {
+              await onAddPermission(p.targetDeptId, p.auditorDeptId, true);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to add permission:", e);
+          alert("Failed to save pairing. Please try again.");
+        } finally {
+          setIsProcessing(false);
+        }
+      }
     }
-    
+
     setManualAuditor('');
     setManualTarget('');
     setOverrideIsMutual(false);
