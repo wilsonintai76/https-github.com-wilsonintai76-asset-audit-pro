@@ -1959,10 +1959,10 @@ const App: React.FC = () => {
       }
 
       // Step 2: Use enriched departmentsWithAssets for filtering.
-      // freshDepts from DB might have stale totalAssets if refreshDepartmentTotals hasn't run.
-      // departmentsWithAssets is the ground truth for the current session.
+      // Step 1: Filter eligible departments.
+      // Rule: Not manually excluded, and NOT exempted (meaning they have assets OR auditors).
       const eligible = departmentsWithAssets
-        .filter(d => !excludedIds.includes(d.id) && (d.totalAssets || 0) > 0 && d.isExempted !== true)
+        .filter(d => !excludedIds.includes(d.id) && d.isExempted !== true)
         .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
 
       if (eligible.length === 0) {
