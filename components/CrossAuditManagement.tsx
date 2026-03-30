@@ -121,42 +121,36 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   }, [departments]);
 
   const entities = useMemo(() => {
-    const map = new Map<string, { name: string, assets: number, auditors: number, memberCount: number, members: any[], id?: string }>(); 
-
-    activeDepts.forEach(d => {
-      // Use the normalized auditGroupId to identify the group.
-      const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
-      
-      const entityId = group ? group.id : d.id;
-      
-      const current = map.get(entityId) || { name: '', assets: 0, auditors: 0, memberCount: 0, members: [], id: entityId };
-      const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
-
-      map.set(entityId, { 
-        name: '', 
-        assets: current.assets + safeAssets,
-        auditors: current.auditors + (d.auditorCount || 0),
-        memberCount: current.memberCount + 1,
-        members: [...current.members, d],
-        id: entityId
-      });
+    const groupedDepts: Record<string, Department[]> = {};
+    
+    activeDepts.forEach(dept => {
+      const key = dept.auditGroupId || 'unassigned_' + dept.id;
+      if (!groupedDepts[key]) groupedDepts[key] = [];
+      groupedDepts[key].push(dept);
     });
 
-    return Array.from(map.values()).map(stats => {
-      const group = auditGroups.find(g => g.id === stats.id);
+    return Object.entries(groupedDepts).map(([groupId, depts]) => {
+      const isUnassigned = groupId.startsWith('unassigned_');
       
-      // Sync Naming Logic: Priority to Dept Name for single-member entities
-      const finalName = (stats.memberCount === 1) 
-        ? stats.members[0].name 
-        : (group ? group.name : stats.members[0].name);
-
-      const constitutesGroup = stats.memberCount > 1 || !!group;
-      return { 
-        ...stats, 
-        name: finalName,
+      const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+      const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+      
+      const name = isUnassigned 
+        ? depts[0].name 
+        : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
+      
+      const constitutesGroup = !isUnassigned;
+      
+      return {
+        name,
+        assets: totalAssets,
+        auditors: totalAuditors,
+        memberCount: depts.length,
         isJoint: constitutesGroup,
         isGroup: constitutesGroup,
-        isConsolidated: constitutesGroup
+        isConsolidated: constitutesGroup,
+        id: groupId,
+        members: depts
       };
     }).sort((a, b) => b.assets - a.assets);
   }, [activeDepts, auditGroups]);

@@ -100,58 +100,35 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
   const editingGroupObj = auditGroups.find(g => g.id === editingGroupId);
 
-  // --- UNIFIED ENTITIES LOGIC (Synced with Overview Hub) ---
   const entities = useMemo(() => {
-    const map = new Map<string, { 
-      name: string, 
-      assets: number, 
-      auditors: number, 
-      memberCount: number, 
-      members: Department[], 
-      id?: string,
-      isConsolidated: boolean 
-    }>(); 
-
-    // Only process non-exempted departments
-    const activeDepts = departments.filter(d => !d.isExempted);
-
-    activeDepts.forEach(d => {
-      const group = d.auditGroupId ? auditGroups.find(g => g.id === d.auditGroupId) : null;
-      
-      // Determine the canonical ID and name for this entity
-      const entityId = group ? group.id : d.id;
-      
-      // Group Naming Priority:
-      // 1. If part of a multi-department group, use Group Name.
-      // 2. If it's a standalone group or no group, use Department Full Name.
-      const current = map.get(entityId) || { name: '', assets: 0, auditors: 0, memberCount: 0, members: [], id: entityId, isConsolidated: false };
-      
-      const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
-
-      map.set(entityId, { 
-        name: '', // Will finalize after members are gathered
-        assets: current.assets + safeAssets,
-        auditors: current.auditors + (d.auditorCount || 0),
-        memberCount: current.memberCount + 1,
-        members: [...current.members, d],
-        id: entityId,
-        isConsolidated: !!group
-      });
+    const groupedDepts: Record<string, Department[]> = {};
+    
+    departments.filter(d => !d.isExempted).forEach(dept => {
+      const key = dept.auditGroupId || 'unassigned_' + dept.id;
+      if (!groupedDepts[key]) groupedDepts[key] = [];
+      groupedDepts[key].push(dept);
     });
 
-    return Array.from(map.values()).map(stats => {
-      const group = auditGroups.find(g => g.id === stats.id);
+    return Object.entries(groupedDepts).map(([groupId, depts]) => {
+      const isUnassigned = groupId.startsWith('unassigned_');
       
-      // Naming Logic: Priority to Department Full Name for single-member entities
-      const finalName = (stats.memberCount === 1) 
-        ? stats.members[0].name 
-        : (group ? group.name : stats.members[0].name);
-
-      return { 
-        ...stats, 
-        name: finalName,
-        isGroup: stats.memberCount > 1,
-        isConsolidated: stats.memberCount > 1 || !!group
+      const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+      const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+      
+      const name = isUnassigned 
+        ? depts[0].name 
+        : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
+      
+      return {
+        name,
+        assets: totalAssets,
+        auditors: totalAuditors,
+        memberCount: depts.length,
+        isJoint: !isUnassigned,
+        isConsolidated: !isUnassigned,
+        id: groupId,
+        members: depts,
+        isGroup: depts.length > 1
       };
     }).sort((a, b) => b.assets - a.assets);
   }, [departments, auditGroups]);
