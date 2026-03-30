@@ -1972,34 +1972,27 @@ const App: React.FC = () => {
       let bundles: (typeof eligible)[] = [];
       let currentBundle: typeof eligible = [];
       let runningAssets = 0;
-      let runningAuditors = 0;
 
       for (const dept of eligible) {
         runningAssets += dept.totalAssets || 0;
-        runningAuditors += dept.auditorCount || 0;
         currentBundle.push(dept);
         
-        // Flush condition: Asset threshold met
-        // If strictAuditorRule is true, we ONLY flush if we also have >= 2 auditors.
-        // If not strict, we flush as soon as threshold is met (even if 0 or 1 auditor).
-        const minRequired = minAuditors; 
-        if (runningAssets >= threshold && (runningAuditors >= minRequired || minRequired < 2)) {
+        // Flush condition: simply flush when the asset threshold is met.
+        // Auditor count is NOT a gate - groups can be created regardless of
+        // how many auditors they have (the strict rule is advisory/display only).
+        if (runningAssets >= threshold) {
             bundles.push([...currentBundle]);
             currentBundle = [];
             runningAssets = 0;
-            runningAuditors = 0;
         }
       }
       
-      // Handle leftovers
+      // Handle leftovers: merge small remainders into last group, keep larger ones separate
       if (currentBundle.length > 0) {
         if (bundles.length > 0) {
-            // Only merge if the leftover is "small" (less than 70% of threshold)
-            // or if it has 0 auditors and we are in strict mode.
             const leftoverAssets = currentBundle.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-            const leftoverAuditors = currentBundle.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
-            
-            if (leftoverAssets < threshold * 0.7 || (leftoverAuditors < minAuditors && minAuditors > 1)) {
+            // Merge leftovers that are less than 70% of threshold into the last group
+            if (leftoverAssets < threshold * 0.7) {
               bundles[bundles.length - 1].push(...currentBundle);
             } else {
               bundles.push(currentBundle);
