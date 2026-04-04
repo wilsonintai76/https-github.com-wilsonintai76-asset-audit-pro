@@ -3,10 +3,11 @@ import { AppType } from '../src/server';
 import { supabase } from './supabase';
 
 const getBaseUrl = () => {
+  let base = window.location.origin;
   if (import.meta.env.MODE === 'development') {
-    return 'http://localhost:3000'; // Or whatever port wrangler runs on
+    base = 'http://localhost:3000';
   }
-  return window.location.origin;
+  return `${base}/api`;
 };
 
 export const getAuthHeaders = async () => {
