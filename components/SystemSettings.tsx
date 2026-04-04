@@ -8,6 +8,7 @@ import { TierDistributionTable } from './TierDistributionTable';
 import { DataManagementWorkflow } from './DataManagementWorkflow';
 import { RBACMatrix } from './RBACMatrix';
 import { Zap, Sliders, AlertCircle, Eye, Calendar, UserCheck, Users, UserPlus, Edit, ShieldAlert, ShieldCheck, Network, Lock, Unlock } from 'lucide-react';
+import { BackupButton } from './BackupButton';
 import { PageHeader } from './PageHeader';
 import { GroupBuilderTab } from './GroupBuilderTab';
 
@@ -51,6 +52,7 @@ interface SystemSettingsProps {
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
   onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[]) => Promise<void>;
+  locations: Location[];
   auditGroups: AuditGroup[];
   onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
@@ -114,7 +116,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   const isAdmin = (userRoles || []).includes('Admin');
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [strictAuditorRule, setStrictAuditorRule] = React.useState(true);
-
   const activePhase = React.useMemo(() => {
     const today = new Date();
     return phases.find(p => {
@@ -240,6 +241,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           )}
         </div>
       )}
+
+      {isAdmin && <BackupButton />}
 
       {isAdmin && (
         <div className={`rounded-[32px] p-8 border-2 transition-all duration-500 ${

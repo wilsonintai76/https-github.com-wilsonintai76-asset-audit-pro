@@ -290,8 +290,9 @@ const App: React.FC = () => {
     return departments.map(dept => {
       const deptLocations = locations.filter(l => l.departmentId === dept.id);
       const computedAssets = deptLocations.reduce((sum, loc) => sum + (loc.totalAssets || 0), 0);
-      // We use the larger of the two: manually entered or sum of locations
-      const finalAssets = Math.max(dept.totalAssets || 0, computedAssets);
+      // Use the mapping-derived dept.totalAssets as a floor: this captures assets that
+      // weren't matched during the granular asset sync (unresolved Bahagian values).
+      const finalAssets = Math.max(computedAssets, dept.totalAssets || 0);
       
       const auditors = users.filter(u => 
         u.departmentId === dept.id &&
@@ -303,9 +304,12 @@ const App: React.FC = () => {
       // We only auto-exempt in the specific sync function, not in the live UI memo.
       const finalIsExempted = !!dept.isExempted;
 
+      const uninspectedAssets = deptLocations.reduce((sum, loc) => sum + (loc.uninspectedAssetCount || 0), 0);
+
       return {
         ...dept,
         totalAssets: finalAssets,
+        uninspectedAssetCount: uninspectedAssets,
         auditorCount: auditors,
         isExempted: finalIsExempted
       };
@@ -328,7 +332,9 @@ const App: React.FC = () => {
 
       const updates = allDepts.map(d => {
         const calculatedAssets = deptTotals[d.id] || 0;
-        const totalAssets = Math.max(d.totalAssets || 0, calculatedAssets);
+        // Use max(location sum, mapping-derived dept total) so authoritative mapping totals
+        // act as a floor for assets that weren't matched during granular asset sync.
+        const totalAssets = Math.max(calculatedAssets, d.totalAssets || 0);
         const auditors = allUsers.filter(u => 
           u.departmentId === d.id &&
           ['Staff', 'Auditor', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
@@ -958,8 +964,21 @@ const App: React.FC = () => {
   const handleUpdateUninspectedAssetCounts = async (updates: { id: string, uninspectedCount: number }[]) => {
     try {
       await Promise.all(updates.map(u => gateway.updateLocation(u.id, { uninspectedAssetCount: u.uninspectedCount })));
-      const updated = await gateway.getLocations();
-      setLocations(updated);
+      const updatedLocs = await gateway.getLocations();
+      setLocations(updatedLocs);
+
+      // Roll up uninspected counts to each department
+      const deptUninspected: Record<string, number> = {};
+      updatedLocs.forEach(l => {
+        if (l.departmentId) deptUninspected[l.departmentId] = (deptUninspected[l.departmentId] || 0) + (l.uninspectedAssetCount || 0);
+      });
+      await Promise.all(
+        Object.entries(deptUninspected).map(([deptId, count]) =>
+          gateway.updateDepartment(deptId, { uninspectedAssetCount: count })
+        )
+      );
+      setDepartments(await gateway.getDepartments());
+
       showToast('Uninspected asset counts updated successfully');
       logActivity('UPDATE', 'Uploaded uninspected asset registry');
     } catch (e) {
@@ -1278,7 +1297,10 @@ const App: React.FC = () => {
 
         // 2. Identify Required Phases (those with target > 0)
         const requiredPhaseIds = allPhases
-          .filter(p => (tier.targets[p.id] || 0) > 0)
+          .filter(p => {
+            const t = kpiTierTargets.find(kt => kt.tierId === tier.id && kt.phaseId === p.id);
+            return (t?.targetPercentage ?? tier.targets?.[p.id] ?? 0) > 0;
+          })
           .map(p => p.id);
 
         if (requiredPhaseIds.length === 0) continue;
@@ -1635,6 +1657,17 @@ const App: React.FC = () => {
       }
     } catch (e) {
       showError(e, 'Auto-Consolidation Failed');
+    }
+  };
+
+  const handleSetDeptTotalsFromMapping = async (totals: Record<string, number>) => {
+    try {
+      for (const [deptId, total] of Object.entries(totals)) {
+        if (total > 0) await gateway.updateDepartment(deptId, { totalAssets: total });
+      }
+      setDepartments(await gateway.getDepartments());
+    } catch (e) {
+      showError(e, 'Failed to set department totals from mapping');
     }
   };
 
@@ -2205,7 +2238,9 @@ const App: React.FC = () => {
               onDeleteDepartmentMapping={handleDeleteDepartmentMapping}
               onSyncLocationMappings={handleSyncLocationMappings}
               onUpsertLocations={handleUpsertLocations}
+              onSetDeptTotalsFromMapping={handleSetDeptTotalsFromMapping}
               onUpdateUninspectedAssets={handleUpdateUninspectedAssetCounts}
+              locations={locations}
               onAddAuditGroup={handleAddAuditGroup}
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}

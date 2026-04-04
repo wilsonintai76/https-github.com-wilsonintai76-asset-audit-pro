@@ -1,16 +1,16 @@
 {
   "name": "asset-audit-pro",
   "private": true,
-  "version": "1.10.30",
+  "version": "1.10.48",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build:client": "vite build",
     "build:worker": "vite build --ssr src/server/index.ts",
-    "build": "npm run build:client && npm run build:worker",
+    "build": "vite build",
     "preview": "npm run build && wrangler dev",
     "lint": "tsc --noEmit",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm version patch --no-git-tag-version && npm run build && wrangler deploy",
     "release": "npm version patch && npm run deploy",
     "version": "npm run lint",
     "postversion": "git push && git push --tags"
@@ -18,7 +18,6 @@
   "dependencies": {
     "@base-ui/react": "^1.3.0",
     "@fontsource-variable/geist": "^5.2.8",
-    "@google/genai": "^1.34.0",
     "@hono/zod-validator": "^0.7.6",
     "@supabase/supabase-js": "^2.101.1",
     "@tailwindcss/vite": "^4.2.1",
@@ -45,6 +44,6 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "wrangler": "^4.73.0"
+    "wrangler": "^3.101.0"
   }
 }

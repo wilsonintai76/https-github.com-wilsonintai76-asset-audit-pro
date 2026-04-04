@@ -5,7 +5,7 @@ import Papa from 'papaparse';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import type { Department, Location, DepartmentMapping } from '../types';
 import { MappingRules } from './MappingRules';
-import { FileSpreadsheet, UserCheck, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { FileSpreadsheet, UserCheck, RefreshCw, CheckCircle, AlertCircle, ArrowRight, Info } from 'lucide-react';
 
 const ASSET_BUILTIN_MAP: Record<string, string> = {
   'unit kamsis':                                         'unit pengurusan kolej kediaman',
@@ -38,6 +38,7 @@ interface DataManagementWorkflowProps {
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
+  onSetDeptTotalsFromMapping: (totals: Record<string, number>) => Promise<void>;
   onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[]) => Promise<void>;
   locations: Location[];
 }
@@ -52,6 +53,7 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   onDeleteDepartmentMapping,
   onSyncLocationMappings,
   onUpsertLocations,
+  onSetDeptTotalsFromMapping,
   onUpdateUninspectedAssets,
 }) => {
   const staffFileInputRef = useRef<HTMLInputElement>(null);
@@ -129,22 +131,28 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
         const rows = results.data as any[];
         let lastValidDept = '';
         const newMappings: Omit<DepartmentMapping, 'id'>[] = [];
+        const deptAssetAccumulator: Record<string, number> = {};
         for (const row of rows) {
           const deptRaw = String(row['DEPARTMENT'] || '').trim();
           const locRaw = String(row['LOCATION'] || '').trim();
+          const totalAset = parseInt(String(row['total aset'] || row['TOTAL ASET'] || '0').replace(/[^0-9]/g, '')) || 0;
           if (deptRaw) lastValidDept = deptRaw;
           if (!locRaw || !lastValidDept) continue;
           const targetDept = departments.find(d =>
-            d.name.toLowerCase() === lastValidDept.toLowerCase() ||
+            d.name.trim().toLowerCase() === lastValidDept.toLowerCase() ||
             d.abbr?.toLowerCase() === lastValidDept.toLowerCase()
           );
           if (targetDept) {
             newMappings.push({ sourceName: locRaw, targetDepartmentId: targetDept.id });
+            deptAssetAccumulator[targetDept.id] = (deptAssetAccumulator[targetDept.id] || 0) + totalAset;
           }
         }
         if (newMappings.length > 0) {
           for (const m of newMappings) await onAddDepartmentMapping(m);
-          alert(`Successfully imported ${newMappings.length} mapping rules.`);
+          if (Object.keys(deptAssetAccumulator).length > 0) {
+            await onSetDeptTotalsFromMapping(deptAssetAccumulator);
+          }
+          alert(`Successfully imported ${newMappings.length} mapping rules and updated asset totals for ${Object.keys(deptAssetAccumulator).length} departments.`);
         } else {
           alert('No valid mappings found. Check the CSV format (columns: DEPARTMENT, LOCATION).');
         }
@@ -283,39 +291,44 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
       try {
         if (rows.length < 2) throw new Error('File appears empty.');
         const header = rows[0].map(h => String(h || '').toLowerCase().trim());
-        const labelCol = header.findIndex(h => h === 'label' || h.includes('label'));
+        const labelCol   = header.findIndex(h => h === 'label' || h.includes('label'));
+        const lokasiCol  = header.findIndex(h => h.includes('lokasi') || h.includes('location'));
         const bahagianCol = header.findIndex(h => h.includes('bahagian') || h === 'department' || h === 'unit');
-        const lokasiCol = header.findIndex(h => h.includes('lokasi') || h.includes('location'));
-        
-        if (labelCol === -1 || bahagianCol === -1 || lokasiCol === -1) {
-            throw new Error('Required columns missing. Need "Label", "Bahagian", and "Lokasi".');
+
+        if (labelCol === -1 || lokasiCol === -1) {
+          throw new Error('Required columns missing. Need "Label" and "Lokasi Terkini".');
         }
 
+        // Count unique assets per location name (+ optionally bahagian for disambiguation)
         const seenLabels = new Set<string>();
-        const locationCounts: Record<string, number> = {};
-        
+        // key: lokasi name, value: { count, bahagian hint }
+        const locationCounts: Record<string, { count: number; bahagianHint: string }> = {};
+
         for (const row of rows.slice(1)) {
-          const label = String(row[labelCol] || '').trim();
-          const bahagian = String(row[bahagianCol] || '').trim();
-          const lokasi = String(row[lokasiCol] || '').trim();
-          if (!label || !bahagian || !lokasi) continue;
+          const label   = String(row[labelCol] || '').trim();
+          const lokasi  = String(row[lokasiCol] || '').trim();
+          const bahagian = bahagianCol !== -1 ? String(row[bahagianCol] || '').trim() : '';
+          if (!label || !lokasi) continue;
           if (seenLabels.has(label)) continue;
           seenLabels.add(label);
-          
-          locationCounts[`${lokasi}|||${bahagian}`] = (locationCounts[`${lokasi}|||${bahagian}`] || 0) + 1;
+          if (!locationCounts[lokasi]) locationCounts[lokasi] = { count: 0, bahagianHint: bahagian };
+          locationCounts[lokasi].count++;
         }
 
+        // Build dept resolution (reuse same mapping logic as master registry)
         const deptByNorm: Record<string, string> = {};
         departments.forEach(d => {
           deptByNorm[d.name.trim().toLowerCase()] = d.id;
           if (d.abbr) deptByNorm[d.abbr.trim().toLowerCase()] = d.id;
         });
 
-        const resolveBahagian = (bahagian: string): string | undefined => {
+        const resolveDept = (bahagian: string): string | undefined => {
           const bLow = bahagian.toLowerCase().trim();
           const dbMap = departmentMappings.find(m => m.sourceName.trim().toLowerCase() === bLow);
           if (dbMap) return dbMap.targetDepartmentId;
           if (deptByNorm[bLow]) return deptByNorm[bLow];
+          const staticMatch = ASSET_BUILTIN_MAP[bLow];
+          if (staticMatch && deptByNorm[staticMatch.toLowerCase()]) return deptByNorm[staticMatch.toLowerCase()];
           const bNorm = bLow.replace(/\s*&\s*/g, ' dan ').replace(/\s+/g, ' ');
           for (const [name, id] of Object.entries(deptByNorm)) {
             if (name.replace(/\s*&\s*/g, ' dan ').replace(/\s+/g, ' ') === bNorm) return id;
@@ -323,32 +336,46 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           return undefined;
         };
 
-        const updates: { id: string, uninspectedCount: number }[] = [];
-        for (const [locKey, count] of Object.entries(locationCounts)) {
-          const [lokasiName, bahagian] = locKey.split('|||');
-          const deptId = resolveBahagian(bahagian);
-          if (!deptId) continue;
-          
-          // Try to find the existing location
-          // Note: In a real system we'd use IDs, but here we match by name + dept
-          const existingLoc = locations.find(l => 
-            l.name.toLowerCase() === lokasiName.toLowerCase() && 
-            l.departmentId === deptId
-          );
-          
-          if (existingLoc) {
-            updates.push({ id: existingLoc.id, uninspectedCount: count });
+        const updates: { id: string; uninspectedCount: number }[] = [];
+        let unmatched = 0;
+
+        for (const [lokasiName, { count, bahagianHint }] of Object.entries(locationCounts)) {
+          const lokasiLow = lokasiName.toLowerCase();
+
+          // 1. Try name + resolved dept (most specific)
+          const deptId = bahagianHint ? resolveDept(bahagianHint) : undefined;
+          let found = deptId
+            ? safeLocations.find(l => l.name.toLowerCase() === lokasiLow && l.departmentId === deptId)
+            : undefined;
+
+          // 2. Fall back to name-only match (location names are usually unique enough)
+          if (!found) {
+            const nameMatches = safeLocations.filter(l => l.name.toLowerCase() === lokasiLow);
+            if (nameMatches.length === 1) {
+              found = nameMatches[0];
+            } else if (nameMatches.length > 1 && deptId) {
+              found = nameMatches.find(l => l.departmentId === deptId) || nameMatches[0];
+            }
+          }
+
+          if (found) {
+            updates.push({ id: found.id, uninspectedCount: count });
+          } else {
+            unmatched++;
           }
         }
 
         if (updates.length > 0) {
           await onUpdateUninspectedAssets(updates);
           setAssetSyncStatus({
-            type: 'success',
-            message: `Successfully updated uninspected counts for ${updates.length} locations.`,
+            type: unmatched > 0 ? 'warn' : 'success',
+            message: `Updated uninspected counts for ${updates.length} location${updates.length !== 1 ? 's' : ''}.`,
+            detail: unmatched > 0
+              ? `${unmatched} location name${unmatched !== 1 ? 's' : ''} from the CSV didn't match any location in the system. Ensure Master Registry is synced first.`
+              : undefined,
           });
         } else {
-          setAssetSyncStatus({ type: 'warn', message: 'No matching locations found in the system. Ensure Master Registry is synced first.' });
+          setAssetSyncStatus({ type: 'warn', message: 'No matching locations found. Ensure Master Registry (Step 3) is synced first.' });
         }
       } catch (err: any) {
         setAssetSyncStatus({ type: 'error', message: err.message || 'Update failed' });
@@ -429,6 +456,12 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   // ────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = React.useState<'departments' | 'mappings' | 'sync' | 'uninspected' | 'staff'>('departments');
 
+  const safeLocations  = locations ?? [];
+  const hasDepts       = departments.length > 0;
+  const hasMappings    = departmentMappings.length > 0;
+  const hasRegistry    = safeLocations.length > 0;
+  const hasUninspected = safeLocations.some(l => (l.uninspectedAssetCount ?? 0) > 0);
+
   // ────────────────────────────────────────────────────────────
   // Render
   // ────────────────────────────────────────────────────────────
@@ -451,6 +484,20 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                 <h4 className="text-sm font-bold text-slate-800">Master Data Configuration</h4>
                 <p className="text-[10px] text-slate-500 font-medium">Use sequential tabs to synchronize institutional registries.</p>
               </div>
+      </div>
+
+      {/* Dependency chain banner */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-6 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] font-semibold text-amber-800">
+        <Info className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+        <span className="font-black">Required order:</span>
+        <span className={hasDepts ? 'text-emerald-700' : 'text-slate-500'}>1. Departments{hasDepts ? ' ✓' : ''}</span>
+        <ArrowRight className="w-3 h-3 text-amber-400" />
+        <span className={hasMappings ? 'text-emerald-700' : 'text-slate-500'}>2. Mappings{hasMappings ? ' ✓' : ''}</span>
+        <ArrowRight className="w-3 h-3 text-amber-400" />
+        <span className={hasRegistry ? 'text-emerald-700' : 'text-slate-500'}>3. Master Registry{hasRegistry ? ' ✓' : ''}</span>
+        <ArrowRight className="w-3 h-3 text-amber-400" />
+        <span className={hasUninspected ? 'text-emerald-700' : 'text-slate-500'}>4. Uninspected{hasUninspected ? ' ✓' : ''}</span>
+        <span className="ml-auto text-amber-600">Mapping must be done BEFORE Master Registry for correct asset totals.</span>
       </div>
 
       {/* Tab Navigation */}
@@ -505,6 +552,11 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                 <button onClick={() => deptFileInputRef.current?.click()} className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95 leading-none">
                   <FileSpreadsheet className="w-4 h-4" /> Import Departments CSV
                 </button>
+                {hasDepts && (
+                  <button onClick={() => setActiveTab('mappings')} className="ml-auto px-5 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95">
+                    Next: Mappings <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -523,17 +575,17 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                 </div>
               </div>
               <p className="text-sm text-slate-600 mb-6 max-w-2xl">
-                Upload the mapping reference ([MAPPING FROM CO TO SPPA.csv]) to automatically reconcile sub-units into parent departments. This is critical for accurate asset aggregation.
+                Upload [MAPPING FROM CO TO SPPA.csv] to reconcile sub-unit names from the old CO system into their parent SPPA departments. This mapping is used during the next step to correctly assign each asset row to its department. The <code className="bg-blue-100 px-1 rounded text-blue-700">total aset</code> column is also read and stored as the authoritative asset total per department — acting as a floor guarantee even if some sub-units remain unmatched during registry sync.
               </p>
               <div className="flex flex-wrap gap-3">
                 <button onClick={() => bulkMappingRef.current?.click()} className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95 leading-none">
                   <FileSpreadsheet className="w-4 h-4" /> Import Mapping CSV
                 </button>
-                <Button 
-                onClick={() => setActiveTab('sync')}
-              >
-                Go to Registry Sync
-              </Button>
+                {hasMappings && (
+                  <button onClick={() => setActiveTab('sync')} className="ml-auto px-5 py-3 bg-violet-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-violet-500/20 hover:bg-violet-700 transition-all flex items-center gap-2 active:scale-95">
+                    Next: Registry Sync <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -562,8 +614,15 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
                 </div>
               </div>
               <p className="text-sm text-slate-600 mb-6 max-w-2xl">
-                Upload [location.csv] or [senarai aset.csv] to define the institutional baseline. This creates location units and sets "Total Asset" targets.
+                Upload [location.csv] or [senarai aset.csv] to define the institutional baseline. This creates location units and sets "Total Asset" targets. <span className="font-semibold text-violet-700">Mapping (Step 2) must be completed first</span> so sub-unit Bahagian names resolve to their correct parent departments.
               </p>
+              {!hasMappings && (
+                <div className="flex items-center gap-2 mb-4 px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  No mapping rules found. Complete Step 2 first for correct asset-to-department assignment.
+                  <button onClick={() => setActiveTab('mappings')} className="ml-auto underline hover:no-underline">Go to Mappings →</button>
+                </div>
+              )}
               <div className="flex flex-wrap gap-3 items-center">
                 <button
                   onClick={() => assetSyncRef.current?.click()}

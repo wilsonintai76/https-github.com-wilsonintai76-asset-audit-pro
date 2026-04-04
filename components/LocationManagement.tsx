@@ -252,6 +252,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-left">Location Details</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-left w-[220px]">Supervisor Name / Contact</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center w-[120px]">Total Assets</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center w-[120px]">Uninspected</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-left w-[100px]">Actions</th>
               </tr>
             </thead>
@@ -311,6 +312,15 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                       <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
                         {loc.totalAssets || 0}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-center align-middle">
+                      {(loc.uninspectedAssetCount || 0) > 0 ? (
+                        <span className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-rose-100 text-rose-600 text-xs font-bold border border-rose-200">
+                          {(loc.uninspectedAssetCount || 0).toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 align-middle">
                       {canManage && (

@@ -1,0 +1,27 @@
+name = "inspect-able"
+main = "src/server/index.ts"
+compatibility_date = "2025-02-14"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["0 2 * * *"]  # Daily at 02:00 UTC (10:00 AM MYT)
+
+[vars]
+SUPABASE_URL = "https://qwhkrbcvbqqclqdpigzw.supabase.co"
+
+[assets]
+directory = "./dist/client"
+binding = "ASSETS"
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "inspect-able-db"
+database_id = "8b9169fb-4b7b-4ea1-a7a6-eb8572f083ee"
+
+[[r2_buckets]]
+binding = "BACKUP"
+bucket_name = "inspect-able-backups"
+

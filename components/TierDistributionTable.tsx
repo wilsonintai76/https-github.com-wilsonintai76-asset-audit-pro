@@ -38,7 +38,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
       
       const phaseStatus = sortedPhases.map(phase => {
         const hasAudit = deptAudits.some(a => a.phaseId === phase.id);
-        const isRequired = (dept.totalAssets || 0) > 0 ? (tier ? (tier.targets[phase.id] || 0) > 0 : false) : false;
+        const isRequired = (dept.totalAssets || 0) > 0 ? (tier ? (tier.targets?.[phase.id] || 0) > 0 : false) : false;
         const isCompleted = deptAudits.some(a => a.phaseId === phase.id && a.status === 'Completed');
         
         return {

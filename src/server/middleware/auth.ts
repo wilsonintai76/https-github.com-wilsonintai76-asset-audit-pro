@@ -29,11 +29,25 @@ export const authMiddleware = async (c: Context<{ Bindings: Bindings, Variables:
        return c.json({ success: false, message: 'Institutional accounts only' }, 403);
     }
 
+    // Fetch real roles from D1 (source of truth, may differ from Supabase user_metadata)
+    let roles: string[] = [user.user_metadata?.role || 'Staff'];
+    try {
+      const dbUser = await c.env.DB.prepare('SELECT roles FROM users WHERE id = ?')
+        .bind(user.id)
+        .first<{ roles: string }>();
+      if (dbUser?.roles) {
+        roles = JSON.parse(dbUser.roles);
+      }
+    } catch {
+      // If D1 query fails, fall back to metadata role — still authenticated
+    }
+
     // Attach user to context
     c.set('user', {
       id: user.id,
       email: user.email || '',
-      role: (user.user_metadata?.role as string) || 'Staff',
+      role: roles[0] || 'Staff',
+      roles,
       ...user.user_metadata
     });
 

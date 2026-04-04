@@ -92,7 +92,9 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    // Exclude totalAssets — it is auto-calculated from location totals and must not be overwritten by the form
+    const { totalAssets: _ignored, ...saveData } = formData;
+    onSave(saveData);
     onClose();
   };
 
@@ -221,17 +223,18 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Initial/Manual Asset Count</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Total Assets</Label>
                 <div className="relative">
                   <Boxes className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
                   <Input 
                     type="number"
                     min="0"
-                    className="pl-11 h-12 bg-slate-50 border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    readOnly
+                    className="pl-11 h-12 bg-slate-100 border-slate-200 rounded-2xl text-sm font-bold text-slate-400 cursor-not-allowed select-none"
                     value={formData.totalAssets}
-                    onChange={e => setFormData({ ...formData, totalAssets: parseInt(e.target.value) || 0 })}
                   />
                 </div>
+                <p className="text-[10px] text-slate-400 ml-1">Auto-calculated from location totals. Update via Location Management or asset registry sync.</p>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Notes / Mission</Label>

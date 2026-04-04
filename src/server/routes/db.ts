@@ -1,9 +1,24 @@
 import { Hono } from 'hono';
+import { Context, Next } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { Bindings, Variables } from '../types';
 
 const db = new Hono<{ Bindings: Bindings, Variables: Variables }>();
+
+// ─── RBAC Helper ────────────────────────────────────────────────────────────
+// Returns a Hono middleware that enforces minimum required roles.
+// Reads real roles from the user context (already fetched from D1 by authMiddleware).
+const requireRoles = (...allowed: string[]) =>
+  async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
+    const user = c.get('user');
+    const userRoles: string[] = user?.roles || (user?.role ? [user.role] : []);
+    if (!userRoles.some(r => allowed.includes(r))) {
+      return c.json({ error: 'Forbidden: insufficient role' }, 403);
+    }
+    await next();
+  };
+// ────────────────────────────────────────────────────────────────────────────
 
 // Schemas (Example for Assets - needs to match types.ts)
 const assetSchema = z.object({
@@ -61,14 +76,14 @@ db.post('/audits', zValidator('json', auditSchema), async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
-      audit.departmentId,
-      audit.locationId,
-      audit.supervisorId,
-      audit.auditor1Id,
-      audit.auditor2Id,
-      audit.date,
-      audit.status,
-      audit.phaseId
+      audit.departmentId ?? null,
+      audit.locationId ?? null,
+      audit.supervisorId ?? null,
+      audit.auditor1Id ?? null,
+      audit.auditor2Id ?? null,
+      audit.date ?? null,
+      audit.status ?? 'Scheduled',
+      audit.phaseId ?? null
     ).run();
 
     return c.json({
@@ -108,7 +123,7 @@ db.patch('/audits/:id', async (c) => {
   }
 });
 
-db.delete('/audits/:id', async (c) => {
+db.delete('/audits/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM audit_schedules WHERE id = ?').bind(id).run();
@@ -118,7 +133,7 @@ db.delete('/audits/:id', async (c) => {
   }
 });
 
-db.post('/audits/bulk', async (c) => {
+db.post('/audits/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
   const audits = await c.req.json();
   try {
     const statements = audits.map((a: any) => {
@@ -128,7 +143,15 @@ db.post('/audits/bulk', async (c) => {
          (id, department_id, location_id, supervisor_id, auditor1_id, auditor2_id, date, status, phase_id) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
-        id, a.departmentId, a.locationId, a.supervisorId, a.auditor1Id, a.auditor2Id, a.date, a.status, a.phaseId
+        id,
+        a.departmentId ?? null,
+        a.locationId ?? null,
+        a.supervisorId ?? null,
+        a.auditor1Id ?? null,
+        a.auditor2Id ?? null,
+        a.date ?? null,
+        a.status ?? 'Scheduled',
+        a.phaseId ?? null
       );
     });
     await c.env.DB.batch(statements);
@@ -164,7 +187,7 @@ db.get('/users', async (c) => {
   }
 });
 
-db.post('/users', async (c) => {
+db.post('/users', requireRoles('Admin', 'Coordinator'), async (c) => {
   const user = await c.req.json();
   const id = user.id || crypto.randomUUID();
   
@@ -178,15 +201,15 @@ db.post('/users', async (c) => {
       user.name,
       user.email,
       JSON.stringify(user.roles || ['Staff']),
-      user.designation,
-      user.picture,
-      user.departmentId,
-      user.contactNumber,
-      user.status || 'Active',
+      user.designation ?? null,
+      user.picture ?? null,
+      user.departmentId ?? null,
+      user.contactNumber ?? null,
+      user.status ?? 'Active',
       user.isVerified ? 1 : 0,
       user.mustChangePIN ? 1 : 0,
-      user.certificationIssued,
-      user.certificationExpiry
+      user.certificationIssued ?? null,
+      user.certificationExpiry ?? null
     ).run();
 
     return c.json({ id, ...user });
@@ -198,7 +221,20 @@ db.post('/users', async (c) => {
 db.patch('/users/:id', async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
-  
+  const caller = c.get('user');
+  const callerRoles: string[] = caller?.roles || [];
+  const isAdmin = callerRoles.includes('Admin');
+  const isCoordinator = callerRoles.includes('Coordinator');
+
+  // Non-admin/coordinator can only update their own record
+  if (!isAdmin && !isCoordinator && caller?.id !== id) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+  // Only Admin can change roles, verification, and certification
+  if (!isAdmin && (updates.roles !== undefined || updates.isVerified !== undefined || updates.certificationIssued !== undefined || updates.certificationExpiry !== undefined)) {
+    return c.json({ error: 'Forbidden: only Admin can change roles or certification' }, 403);
+  }
+
   const fields: string[] = [];
   const values: any[] = [];
 
@@ -224,7 +260,7 @@ db.patch('/users/:id', async (c) => {
   }
 });
 
-db.delete('/users/:id', async (c) => {
+db.delete('/users/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
@@ -234,7 +270,7 @@ db.delete('/users/:id', async (c) => {
   }
 });
 
-db.post('/users/:id/verify', async (c) => {
+db.post('/users/:id/verify', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('UPDATE users SET is_verified = 1, status = \'Active\' WHERE id = ?').bind(id).run();
@@ -272,14 +308,16 @@ db.get('/departments', async (c) => {
       description: d.description,
       headOfDeptId: d.head_of_dept_id,
       auditGroupId: d.audit_group_id,
-      isExempted: d.is_exempted === 1
+      isExempted: d.is_exempted === 1,
+      totalAssets: d.total_assets ?? 0,
+      uninspectedAssetCount: d.uninspected_asset_count ?? 0,
     })));
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
 });
 
-db.post('/departments', async (c) => {
+db.post('/departments', requireRoles('Admin', 'Coordinator'), async (c) => {
   const dept = await c.req.json();
   const id = dept.id || crypto.randomUUID();
   try {
@@ -289,9 +327,9 @@ db.post('/departments', async (c) => {
       id,
       dept.name,
       dept.abbr,
-      dept.description,
-      dept.headOfDeptId,
-      dept.auditGroupId,
+      dept.description ?? null,
+      dept.headOfDeptId ?? null,
+      dept.auditGroupId ?? null,
       dept.isExempted ? 1 : 0
     ).run();
     return c.json({ id, ...dept });
@@ -312,6 +350,8 @@ db.patch('/departments/:id', async (c) => {
   if (updates.headOfDeptId !== undefined) { fields.push('head_of_dept_id = ?'); values.push(updates.headOfDeptId); }
   if (updates.auditGroupId !== undefined) { fields.push('audit_group_id = ?'); values.push(updates.auditGroupId); }
   if (updates.isExempted !== undefined) { fields.push('is_exempted = ?'); values.push(updates.isExempted ? 1 : 0); }
+  if (updates.totalAssets !== undefined) { fields.push('total_assets = ?'); values.push(updates.totalAssets); }
+  if (updates.uninspectedAssetCount !== undefined) { fields.push('uninspected_asset_count = ?'); values.push(updates.uninspectedAssetCount); }
 
   if (fields.length === 0) return c.json({ success: true });
 
@@ -323,7 +363,7 @@ db.patch('/departments/:id', async (c) => {
   }
 });
 
-db.delete('/departments/:id', async (c) => {
+db.delete('/departments/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM departments WHERE id = ?').bind(id).run();
@@ -333,7 +373,7 @@ db.delete('/departments/:id', async (c) => {
   }
 });
 
-db.delete('/departments/:id/force', async (c) => {
+db.delete('/departments/:id/force', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     // In D1, we might need a stored procedure-like logic or multi-statement
@@ -345,10 +385,22 @@ db.delete('/departments/:id/force', async (c) => {
   }
 });
 
-db.post('/departments/clear', async (c) => {
-  const { keep_user_id } = await c.req.json();
+db.post('/departments/clear', requireRoles('Admin'), async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const keep_user_id: string | undefined = body?.keep_user_id;
   try {
-    await c.env.DB.prepare('DELETE FROM departments').run();
+    // Delete in FK-safe order: child tables first, then departments
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM audit_schedules'),
+      c.env.DB.prepare('DELETE FROM locations'),
+      c.env.DB.prepare('DELETE FROM cross_audit_permissions'),
+      c.env.DB.prepare('DELETE FROM department_mappings'),
+      // Delete all users except the admin who triggered the reset
+      keep_user_id
+        ? c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id)
+        : c.env.DB.prepare('DELETE FROM users'),
+      c.env.DB.prepare('DELETE FROM departments'),
+    ]);
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -370,6 +422,8 @@ db.get('/locations', async (c) => {
       description: l.description,
       supervisorId: l.supervisor_id,
       contact: l.contact,
+      totalAssets: l.total_assets ?? 0,
+      uninspectedAssetCount: l.uninspected_asset_count ?? 0,
       isActive: l.is_active === 1,
       status: l.status
     })));
@@ -378,27 +432,29 @@ db.get('/locations', async (c) => {
   }
 });
 
-db.post('/locations', async (c) => {
+db.post('/locations', requireRoles('Admin', 'Coordinator', 'Supervisor'), async (c) => {
   const loc = await c.req.json();
   const id = loc.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
       `INSERT INTO locations 
-       (id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, is_active, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
       loc.name,
       loc.abbr,
       loc.departmentId,
-      loc.buildingId,
-      loc.building,
-      loc.level,
-      loc.description,
-      loc.supervisorId,
-      loc.contact,
-      loc.isActive ? 1 : 0,
-      loc.status || 'Active'
+      loc.buildingId ?? null,
+      loc.building ?? null,
+      loc.level ?? null,
+      loc.description ?? null,
+      loc.supervisorId ?? null,
+      loc.contact ?? null,
+      loc.totalAssets ?? 0,
+      loc.uninspectedAssetCount ?? 0,
+      loc.isActive !== undefined ? (loc.isActive ? 1 : 0) : 1,
+      loc.status ?? 'Active'
     ).run();
     return c.json({ id, ...loc });
   } catch (err: any) {
@@ -421,6 +477,8 @@ db.patch('/locations/:id', async (c) => {
   if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
   if (updates.supervisorId !== undefined) { fields.push('supervisor_id = ?'); values.push(updates.supervisorId); }
   if (updates.contact !== undefined) { fields.push('contact = ?'); values.push(updates.contact); }
+  if (updates.totalAssets !== undefined) { fields.push('total_assets = ?'); values.push(updates.totalAssets); }
+  if (updates.uninspectedAssetCount !== undefined) { fields.push('uninspected_asset_count = ?'); values.push(updates.uninspectedAssetCount); }
   if (updates.isActive !== undefined) { fields.push('is_active = ?'); values.push(updates.isActive ? 1 : 0); }
   if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
 
@@ -434,7 +492,7 @@ db.patch('/locations/:id', async (c) => {
   }
 });
 
-db.delete('/locations/:id', async (c) => {
+db.delete('/locations/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM locations WHERE id = ?').bind(id).run();
@@ -444,7 +502,7 @@ db.delete('/locations/:id', async (c) => {
   }
 });
 
-db.delete('/locations/:id/force', async (c) => {
+db.delete('/locations/:id/force', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM locations WHERE id = ?').bind(id).run();
@@ -454,37 +512,43 @@ db.delete('/locations/:id/force', async (c) => {
   }
 });
 
-db.post('/locations/clear', async (c) => {
+db.post('/locations/clear', requireRoles('Admin'), async (c) => {
   try {
-    await c.env.DB.prepare('DELETE FROM locations').run();
+    // Delete audit_schedules first (they FK-reference locations)
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM audit_schedules'),
+      c.env.DB.prepare('DELETE FROM locations'),
+    ]);
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
 });
 
-db.post('/locations/bulk', async (c) => {
+db.post('/locations/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
   const locs = await c.req.json();
   try {
     const statements = locs.map((loc: any) => {
       const id = loc.id || crypto.randomUUID();
       return c.env.DB.prepare(
         `INSERT INTO locations 
-         (id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, is_active, status) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         id,
         loc.name,
         loc.abbr,
         loc.departmentId,
-        loc.buildingId,
-        loc.building,
-        loc.level,
-        loc.description,
-        loc.supervisorId,
-        loc.contact,
-        loc.isActive ? 1 : 0,
-        loc.status || 'Active'
+        loc.buildingId ?? null,
+        loc.building ?? null,
+        loc.level ?? null,
+        loc.description ?? null,
+        loc.supervisorId ?? null,
+        loc.contact ?? null,
+        loc.totalAssets ?? 0,
+        loc.uninspectedAssetCount ?? 0,
+        loc.isActive !== undefined ? (loc.isActive ? 1 : 0) : 1,
+        loc.status ?? 'Active'
       );
     });
 
@@ -509,7 +573,7 @@ db.get('/department-mappings', async (c) => {
   }
 });
 
-db.post('/department-mappings', async (c) => {
+db.post('/department-mappings', requireRoles('Admin', 'Coordinator'), async (c) => {
   const mapping = await c.req.json();
   const id = mapping.id || crypto.randomUUID();
   try {
@@ -522,7 +586,7 @@ db.post('/department-mappings', async (c) => {
   }
 });
 
-db.post('/department-mappings/clear', async (c) => {
+db.post('/department-mappings/clear', requireRoles('Admin', 'Coordinator'), async (c) => {
   try {
     await c.env.DB.prepare('DELETE FROM department_mappings').run();
     return c.json({ success: true });
@@ -531,7 +595,7 @@ db.post('/department-mappings/clear', async (c) => {
   }
 });
 
-db.delete('/department-mappings/:id', async (c) => {
+db.delete('/department-mappings/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM department_mappings WHERE id = ?').bind(id).run();
@@ -639,20 +703,20 @@ db.get('/audit-phases', async (c) => {
   }
 });
 
-db.post('/audit-phases', async (c) => {
+db.post('/audit-phases', requireRoles('Admin'), async (c) => {
   const phase = await c.req.json();
   const id = phase.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
       'INSERT INTO audit_phases (id, name, start_date, end_date, description, status) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(id, phase.name, phase.startDate, phase.endDate, phase.description, phase.status || 'Active').run();
+    ).bind(id, phase.name, phase.startDate, phase.endDate, phase.description ?? null, phase.status ?? 'Active').run();
     return c.json({ id, ...phase });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
 });
 
-db.patch('/audit-phases/:id', async (c) => {
+db.patch('/audit-phases/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields = [];
@@ -671,7 +735,7 @@ db.patch('/audit-phases/:id', async (c) => {
   }
 });
 
-db.delete('/audit-phases/:id', async (c) => {
+db.delete('/audit-phases/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM audit_phases WHERE id = ?').bind(id).run();
@@ -694,20 +758,20 @@ db.get('/kpi-tiers', async (c) => {
   }
 });
 
-db.post('/kpi-tiers', async (c) => {
+db.post('/kpi-tiers', requireRoles('Admin'), async (c) => {
   const tier = await c.req.json();
   const id = tier.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
       'INSERT INTO kpi_tiers (id, name, min_assets, description) VALUES (?, ?, ?, ?)'
-    ).bind(id, tier.name, tier.minAssets, tier.description).run();
+    ).bind(id, tier.name, tier.minAssets ?? 0, tier.description ?? null).run();
     return c.json({ id, ...tier });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
 });
 
-db.patch('/kpi-tiers/:id', async (c) => {
+db.patch('/kpi-tiers/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields = [];
@@ -724,7 +788,7 @@ db.patch('/kpi-tiers/:id', async (c) => {
   }
 });
 
-db.delete('/kpi-tiers/:id', async (c) => {
+db.delete('/kpi-tiers/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM kpi_tiers WHERE id = ?').bind(id).run();
@@ -749,12 +813,12 @@ db.get('/kpi-tier-targets', async (c) => {
   }
 });
 
-db.post('/kpi-tier-targets', async (c) => {
+db.post('/kpi-tier-targets', requireRoles('Admin'), async (c) => {
   const target = await c.req.json();
   const id = target.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
-      'INSERT INTO kpi_tier_targets (id, tier_id, phase_id, target_percentage) VALUES (?, ?, ?, ?) ON CONFLICT(tier_id, phase_id) DO UPDATE SET target_percentage=EXCLUDED.target_percentage'
+      'INSERT INTO kpi_tier_targets (id, tier_id, phase_id, target_percentage) VALUES (?, ?, ?, ?) ON CONFLICT(tier_id, phase_id) DO UPDATE SET target_percentage=excluded.target_percentage'
     ).bind(id, target.tierId, target.phaseId, target.targetPercentage).run();
     return c.json({ id, ...target });
   } catch (err: any) {
@@ -762,7 +826,7 @@ db.post('/kpi-tier-targets', async (c) => {
   }
 });
 
-db.delete('/kpi-tier-targets/:id', async (c) => {
+db.delete('/kpi-tier-targets/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM kpi_tier_targets WHERE id = ?').bind(id).run();
@@ -782,18 +846,18 @@ db.get('/audit-groups', async (c) => {
   }
 });
 
-db.post('/audit-groups', async (c) => {
+db.post('/audit-groups', requireRoles('Admin', 'Coordinator'), async (c) => {
   const group = await c.req.json();
   const id = group.id || crypto.randomUUID();
   try {
-    await c.env.DB.prepare('INSERT INTO audit_groups (id, name, description) VALUES (?, ?, ?)').bind(id, group.name, group.description).run();
+    await c.env.DB.prepare('INSERT INTO audit_groups (id, name, description) VALUES (?, ?, ?)').bind(id, group.name, group.description ?? null).run();
     return c.json({ id, ...group });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
 });
 
-db.patch('/audit-groups/:id', async (c) => {
+db.patch('/audit-groups/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields = [];
@@ -809,7 +873,7 @@ db.patch('/audit-groups/:id', async (c) => {
   }
 });
 
-db.delete('/audit-groups/:id', async (c) => {
+db.delete('/audit-groups/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM audit_groups WHERE id = ?').bind(id).run();
@@ -833,7 +897,7 @@ db.get('/institution-kpi-targets', async (c) => {
   }
 });
 
-db.post('/institution-kpi-targets', async (c) => {
+db.post('/institution-kpi-targets', requireRoles('Admin'), async (c) => {
   const target = await c.req.json();
   try {
     await c.env.DB.prepare(
@@ -858,13 +922,13 @@ db.get('/buildings', async (c) => {
   }
 });
 
-db.post('/buildings', async (c) => {
+db.post('/buildings', requireRoles('Admin', 'Coordinator'), async (c) => {
   const building = await c.req.json();
   const id = building.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
       'INSERT INTO buildings (id, name, abbr, description) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, abbr=EXCLUDED.abbr, description=EXCLUDED.description'
-    ).bind(id, building.name, building.abbr, building.description).run();
+    ).bind(id, building.name, building.abbr ?? null, building.description ?? null).run();
     const { results } = await c.env.DB.prepare('SELECT * FROM buildings WHERE id = ?').bind(id).all();
     const b = results[0] as any;
     return c.json({
@@ -876,7 +940,7 @@ db.post('/buildings', async (c) => {
   }
 });
 
-db.delete('/buildings/:id', async (c) => {
+db.delete('/buildings/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM buildings WHERE id = ?').bind(id).run();
@@ -900,7 +964,7 @@ db.get('/system-settings', async (c) => {
   }
 });
 
-db.post('/system-settings/:id', async (c) => {
+db.post('/system-settings/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   const { value } = await c.req.json();
   try {

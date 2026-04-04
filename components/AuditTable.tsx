@@ -18,7 +18,8 @@ import {
   Search,
   Filter,
   Calendar,
-  Zap
+  Zap,
+  Package
 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
@@ -657,6 +658,19 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                         <span className="inline-flex w-fit px-2.5 py-1 bg-slate-100 text-slate-600 text-[9px] font-black uppercase rounded-lg border border-slate-200 mt-1 tracking-widest">
                           {allDepartments.find(d => d.id === audit.departmentId)?.name || audit.departmentId}
                         </span>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          {(loc?.totalAssets || 0) > 0 && (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[9px] text-slate-500 font-bold border border-slate-200 flex items-center gap-1">
+                              <Package className="w-2.5 h-2.5" /> {(loc!.totalAssets || 0).toLocaleString()}
+                            </span>
+                          )}
+                          {(loc?.uninspectedAssetCount || 0) > 0 && (
+                            <span className="px-2 py-0.5 rounded-md bg-rose-50 text-[9px] text-rose-600 font-bold border border-rose-100 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block" />
+                              {(loc!.uninspectedAssetCount || 0).toLocaleString()} uninspected
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
 

@@ -117,6 +117,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Head of Department</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Auditors</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Asset</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Uninspected</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Tier & Group</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-left">Actions</th>
               </tr>
@@ -175,6 +176,17 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                       <div className="flex items-center gap-2 text-sm text-slate-600 font-bold">
                         <Boxes className="w-4 h-4 opacity-40" />
                         {(dept.totalAssets || 0).toLocaleString()}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        {(dept.uninspectedAssetCount || 0) > 0 ? (
+                          <span className="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold">
+                            {(dept.uninspectedAssetCount || 0).toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 text-xs font-medium">—</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

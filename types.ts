@@ -45,6 +45,7 @@ export interface Department {
   description: string;
   auditGroupId: string | null; // UUID of the AuditGroup (Normalized)
   totalAssets?: number;
+  uninspectedAssetCount?: number;
   auditorCount?: number;
   isExempted?: boolean;
 }
@@ -116,6 +117,8 @@ export interface AuditPhase {
   name: string;
   startDate: string;
   endDate: string;
+  description?: string;
+  status?: string;
 }
 
 export interface KPITier {

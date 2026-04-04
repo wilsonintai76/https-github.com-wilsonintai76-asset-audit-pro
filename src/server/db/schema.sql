@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   certification_issued TEXT, -- ISO Date
   certification_expiry TEXT, -- ISO Date
   last_active TEXT, -- ISO Date
+  dashboard_config TEXT, -- JSON string
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -28,6 +29,8 @@ CREATE TABLE IF NOT EXISTS departments (
   description TEXT,
   audit_group_id TEXT,
   is_exempted INTEGER DEFAULT 0,
+  total_assets INTEGER DEFAULT 0,
+  uninspected_asset_count INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,15 +50,42 @@ CREATE TABLE IF NOT EXISTS locations (
   abbr TEXT NOT NULL,
   department_id TEXT NOT NULL,
   building_id TEXT,
+  building TEXT,
   level TEXT,
   description TEXT,
   supervisor_id TEXT,
   contact TEXT,
+  total_assets INTEGER DEFAULT 0,
+  uninspected_asset_count INTEGER DEFAULT 0,
   is_active INTEGER DEFAULT 1,
   status TEXT DEFAULT 'Active', -- Active, Archived, Pending_Delete
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (department_id) REFERENCES departments(id),
   FOREIGN KEY (building_id) REFERENCES buildings(id)
+);
+
+-- Cross Audit Permissions Table
+CREATE TABLE IF NOT EXISTS cross_audit_permissions (
+  id TEXT PRIMARY KEY,
+  auditor_dept_id TEXT NOT NULL,
+  target_dept_id TEXT NOT NULL,
+  is_active INTEGER DEFAULT 1,
+  is_mutual INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Department Mappings Table
+CREATE TABLE IF NOT EXISTS department_mappings (
+  id TEXT PRIMARY KEY,
+  source_name TEXT UNIQUE NOT NULL,
+  target_department_id TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Institution KPI Targets Table
+CREATE TABLE IF NOT EXISTS institution_kpi_targets (
+  phase_id TEXT PRIMARY KEY,
+  target_percentage REAL NOT NULL
 );
 
 -- Audit Phases Table
@@ -64,6 +94,8 @@ CREATE TABLE IF NOT EXISTS audit_phases (
   name TEXT NOT NULL,
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'Active',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -116,6 +148,7 @@ CREATE TABLE IF NOT EXISTS kpi_tiers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   min_assets INTEGER NOT NULL,
+  description TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -129,6 +162,7 @@ CREATE TABLE IF NOT EXISTS kpi_tier_targets (
   FOREIGN KEY (tier_id) REFERENCES kpi_tiers(id),
   FOREIGN KEY (phase_id) REFERENCES audit_phases(id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kpi_tier_targets_unique ON kpi_tier_targets(tier_id, phase_id);
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);

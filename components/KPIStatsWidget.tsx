@@ -46,7 +46,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
         return assignedTier?.id === tier.id;
       });
       
-      const targetPercentage = activePhase ? (tier.targets[activePhase.id] || 0) : 0;
+      const targetPercentage = activePhase ? (tier.targets?.[activePhase.id] || 0) : 0;
 
       // Calculate details for each department
       const deptDetails = deptsInTier.map(d => {
