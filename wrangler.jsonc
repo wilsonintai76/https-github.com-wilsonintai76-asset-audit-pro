@@ -1,15 +1,28 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "inspect-able",
-  "compatibility_date": "2025-09-27",
-  "observability": {
-    "enabled": true
-  },
-  "assets": {
-    "directory": "dist",
-    "not_found_handling": "single-page-application"
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "inspect-able",
+	"main": "src/server/index.ts",
+	"compatibility_date": "2025-02-14",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "inspect-able-db",
+			"database_id": "8b9169fb-4b7b-4ea1-a7a6-eb8572f083ee",
+			"remote": true
+		}
+	],
+	"r2_buckets": [
+		{
+			"bucket_name": "inspect-able-media",
+			"binding": "MEDIA",
+			"remote": true
+		}
+	]
 }
