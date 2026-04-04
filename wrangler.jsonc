@@ -24,5 +24,11 @@
 			"binding": "MEDIA",
 			"remote": true
 		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SETTINGS",
+			"id": "f4a53b613eb44134b1cf483c5fb6b8563"
+		}
 	]
 }
