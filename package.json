@@ -9,7 +9,7 @@
     "preview": "npm run build && wrangler dev",
     "lint": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",
-    "release": "npm run deploy && npm version patch",
+    "release": "npm version patch && npm run deploy",
     "version": "npm run lint",
     "postversion": "git push && git push --tags"
   },
