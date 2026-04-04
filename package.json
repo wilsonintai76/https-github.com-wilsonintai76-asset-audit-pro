@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:client": "vite build",
+    "build:worker": "vite build --ssr src/server/index.ts",
+    "build": "npm run build:client && npm run build:worker",
     "preview": "npm run build && wrangler dev",
     "lint": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",

@@ -15,6 +15,9 @@ export default defineConfig(({ mode }) => {
         port: 3000,
         host: '0.0.0.0',
       },
+      build: {
+        emptyOutDir: mode === 'client' || !process.env.VITE_SSR_BUILD,
+      },
       plugins: [
         react(), 
         tailwindcss(), 
@@ -22,10 +25,28 @@ export default defineConfig(({ mode }) => {
         {
           name: 'generate-version-json',
           buildStart() {
+            const versionData = JSON.stringify({ 
+              version: packageJson.version,
+              buildTime: new Date().toISOString()
+            }, null, 2);
+            
             if (!fs.existsSync('public')) {
               fs.mkdirSync('public', { recursive: true });
             }
-            fs.writeFileSync('public/version.json', JSON.stringify({ version: packageJson.version }));
+            fs.writeFileSync('public/version.json', versionData);
+          },
+          closeBundle() {
+            if (fs.existsSync('dist')) {
+              const versionData = { 
+                version: packageJson.version,
+                buildTime: new Date().toISOString()
+              };
+              if (!fs.existsSync('dist/client')) {
+                fs.mkdirSync('dist/client', { recursive: true });
+              }
+              fs.writeFileSync(path.resolve(__dirname, 'dist/client/version.json'), JSON.stringify(versionData, null, 2));
+              console.log('✅ Generated version.json in public/ and dist/client/');
+            }
           }
         }
       ],

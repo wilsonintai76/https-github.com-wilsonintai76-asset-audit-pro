@@ -1,7 +1,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "inspect-able",
-	"main": "src/server/index.ts",
+	"main": "dist/inspect_able/index.js",
 	"compatibility_date": "2025-02-14",
 	"compatibility_flags": [
 		"nodejs_compat"
@@ -10,7 +10,7 @@
 		"SUPABASE_URL": "https://qwhkrbcvbqqclqdpigzw.supabase.co"
 	},
 	"assets": {
-		"directory": "./dist",
+		"directory": "./dist/client",
 		"binding": "ASSETS"
 	},
 	"d1_databases": [
