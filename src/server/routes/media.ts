@@ -13,10 +13,14 @@ media.get('/:key', async (c) => {
   }
 
   const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set('etag', object.httpEtag);
+  if (object && 'writeHttpMetadata' in object) {
+    (object as any).writeHttpMetadata(headers);
+  }
+  if (object && 'httpEtag' in object) {
+    headers.set('etag', (object as any).httpEtag);
+  }
 
-  return c.body(object.body, 200, Object.fromEntries(headers.entries()));
+  return c.body((object as any).body, 200, Object.fromEntries(headers.entries()));
 });
 
 // POST /api/media/upload - Upload image to R2
@@ -29,7 +33,7 @@ media.post('/upload', async (c) => {
   }
 
   const key = `${Date.now()}-${file.name}`;
-  await c.env.MEDIA.put(key, file.stream(), {
+  await c.env.MEDIA.put(key, file.stream() as any, {
     httpMetadata: { contentType: file.type },
   });
 

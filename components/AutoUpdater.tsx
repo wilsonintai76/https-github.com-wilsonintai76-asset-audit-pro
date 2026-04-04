@@ -14,7 +14,7 @@ export const AutoUpdater: React.FC = () => {
         const res = await fetch(`/version.json?t=${Date.now()}`);
         if (!res.ok) return;
         
-        const data = await res.json();
+        const data = await res.json() as { version: string };
         const deployedVersion = data.version;
 
         // If a new version exists on the server, prompt reload

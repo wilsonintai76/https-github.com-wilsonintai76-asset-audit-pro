@@ -107,9 +107,9 @@ const App: React.FC = () => {
         auditId,
         metadata
       };
-      await gateway.addActivity(activity);
+      await gateway.addSystemActivity(activity);
       // Refresh activities
-      const updated = await gateway.getActivities();
+      const updated = await gateway.getSystemActivity();
       setActivities(updated);
     } catch (e) {
       console.error("Failed to log activity:", e);
@@ -128,7 +128,7 @@ const App: React.FC = () => {
         gateway.getAuditPhases(),
         gateway.getKPITiers(),
         gateway.getDepartmentMappings(),
-        gateway.getActivities(),
+        gateway.getSystemActivity(),
         gateway.getAuditGroups(),
         gateway.getInstitutionKPIs(),
         gateway.getBuildings()

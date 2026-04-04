@@ -385,6 +385,15 @@ class DataGateway {
     });
   }
 
+  // --- PERMISSIONS ---
+  async getPermissions(): Promise<CrossAuditPermission[]> {
+    const res = await (api as any).db.permissions.$get({}, {
+      headers: await getAuthHeaders()
+    });
+    if (!res.ok) return [];
+    return await res.json() as CrossAuditPermission[];
+  }
+
   async addPermission(perm: Omit<CrossAuditPermission, 'id'>) {
     await (api as any).db.permissions.$post({
       json: perm as any
@@ -541,7 +550,7 @@ class DataGateway {
   }
 
   async updateAuditGroup(id: string, updates: Partial<AuditGroup>): Promise<void> {
-    await (api.db as any)['audit-groups'][':id'].$patch({
+    await (api as any).db['audit-groups'][':id'].$patch({
       param: { id },
       json: updates as any
     }, {
@@ -550,7 +559,7 @@ class DataGateway {
   }
 
   async deleteAuditGroup(id: string): Promise<void> {
-    await (api.db as any)['audit-groups'][':id'].$delete({
+    await (api as any).db['audit-groups'][':id'].$delete({
       param: { id }
     }, {
       headers: await getAuthHeaders()
@@ -558,7 +567,7 @@ class DataGateway {
   }
 
   async getInstitutionKPIs(): Promise<InstitutionKPITarget[]> {
-    const res = await (api.db as any)['institution-kpi-targets'].$get({}, {
+    const res = await (api as any).db['institution-kpi-targets'].$get({}, {
       headers: await getAuthHeaders()
     });
     if (!res.ok) return [];
@@ -566,7 +575,7 @@ class DataGateway {
   }
 
   async updateInstitutionKPI(phaseId: string, percentage: number): Promise<void> {
-    await (api.db as any)['institution-kpi-targets'].$post({
+    await (api as any).db['institution-kpi-targets'].$post({
       json: { phaseId, targetPercentage: percentage }
     }, {
       headers: await getAuthHeaders()
@@ -575,7 +584,7 @@ class DataGateway {
 
   // --- BUILDINGS ---
   async getBuildings(): Promise<Building[]> {
-    const res = await (api.db as any).buildings.$get({}, {
+    const res = await (api as any).db.buildings.$get({}, {
       headers: await getAuthHeaders()
     });
     if (!res.ok) return [];
@@ -583,7 +592,7 @@ class DataGateway {
   }
 
   async updateBuilding(building: Partial<Building>): Promise<Building> {
-    const res = await (api.db as any).buildings.$post({
+    const res = await (api as any).db.buildings.$post({
       json: building as any
     }, {
       headers: await getAuthHeaders()
@@ -593,7 +602,7 @@ class DataGateway {
   }
 
   async deleteBuilding(id: string): Promise<void> {
-    await (api.db as any).buildings[':id'].$delete({
+    await (api as any).db.buildings[':id'].$delete({
       param: { id }
     }, {
       headers: await getAuthHeaders()
@@ -601,7 +610,7 @@ class DataGateway {
   }
 
   async getSystemSettings(): Promise<SystemSetting[]> {
-    const res = await (api.db as any)['system-settings'].$get({}, {
+    const res = await (api as any).db['system-settings'].$get({}, {
       headers: await getAuthHeaders()
     });
     if (!res.ok) return [];
@@ -609,7 +618,7 @@ class DataGateway {
   }
 
   async updateSystemSetting(id: string, value: any): Promise<void> {
-    await (api.db as any)['system-settings'][':id'].$post({
+    await (api as any).db['system-settings'][':id'].$post({
       param: { id },
       json: { value }
     }, {
