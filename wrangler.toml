@@ -8,6 +8,7 @@ crons = ["0 2 * * *"]  # Daily at 02:00 UTC (10:00 AM MYT)
 
 [vars]
 SUPABASE_URL = "https://qwhkrbcvbqqclqdpigzw.supabase.co"
+ALLOWED_DOMAIN = "poliku.edu.my"
 
 [assets]
 directory = "./dist/client"

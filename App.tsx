@@ -214,13 +214,28 @@ const App: React.FC = () => {
         { min: 70,  max: 100 }
       ];
       // Rename legacy 'Tier 1/2/3' entries on first load after upgrade
+      let renamedAny = false;
       for (const tier of kpiTiersData) {
         const legacyNameMap: Record<string, string> = { 'Tier 1': 'Small', 'Tier 2': 'Medium', 'Tier 3': 'Large' };
         if (legacyNameMap[tier.name]) {
           await gateway.updateKPITier(tier.id, { name: legacyNameMap[tier.name] });
+          renamedAny = true;
         }
       }
-      
+      // Re-fetch after renames so we see the correct names before duplicate check
+      if (renamedAny) finalKpiTiers = await gateway.getKPITiers();
+
+      // Deduplicate: if more than one tier shares the same name, delete extras
+      const seenTierNames = new Map<string, string>(); // name -> first id
+      for (const tier of finalKpiTiers) {
+        if (seenTierNames.has(tier.name)) {
+          await gateway.deleteKPITier(tier.id);
+        } else {
+          seenTierNames.set(tier.name, tier.id);
+        }
+      }
+      finalKpiTiers = await gateway.getKPITiers();
+
       if (finalKpiTiers.length < 3) {
         const existingNames = finalKpiTiers.map(p => p.name);
         for (let i = 0; i < requiredTierNames.length; i++) {
@@ -961,19 +976,51 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateUninspectedAssetCounts = async (updates: { id: string, uninspectedCount: number }[]) => {
+  const handleUpdateUninspectedAssetCounts = async (
+    updates: { id: string, uninspectedCount: number }[],
+    deptExtras?: Record<string, number>
+  ) => {
     try {
-      await Promise.all(updates.map(u => gateway.updateLocation(u.id, { uninspectedAssetCount: u.uninspectedCount })));
+      if (updates.length > 0) {
+        await Promise.all(updates.map(u => gateway.updateLocation(u.id, { uninspectedAssetCount: u.uninspectedCount })));
+      }
       const updatedLocs = await gateway.getLocations();
       setLocations(updatedLocs);
 
-      // Roll up uninspected counts to each department
+      // Roll up uninspected counts from locations to departments
       const deptUninspected: Record<string, number> = {};
       updatedLocs.forEach(l => {
         if (l.departmentId) deptUninspected[l.departmentId] = (deptUninspected[l.departmentId] || 0) + (l.uninspectedAssetCount || 0);
       });
+      // Add dept-level extras (assets whose lokasi didn't match any location)
+      if (deptExtras) {
+        Object.entries(deptExtras).forEach(([deptId, count]) => {
+          deptUninspected[deptId] = (deptUninspected[deptId] || 0) + count;
+        });
+      }
+
+      // Build the full set of dept updates — zero out depts NOT in the CSV,
+      // but preserve depts whose locations have active schedules (mid-inspection safety)
+      const allDeptIds = (await gateway.getDepartments()).map(d => d.id);
+      const activeDeptIds = new Set(
+        schedules
+          .filter(s => s.date && (s.auditor1Id || s.auditor2Id))
+          .map(s => s.departmentId)
+          .filter(Boolean)
+      );
+      const deptUninspectedFinal: Record<string, number> = {};
+      allDeptIds.forEach(id => {
+        if (deptUninspected[id] !== undefined) {
+          deptUninspectedFinal[id] = deptUninspected[id];
+        } else if (!activeDeptIds.has(id)) {
+          // No assets in CSV and no active schedule — safe to zero
+          deptUninspectedFinal[id] = 0;
+        }
+        // If active schedule exists but no CSV data, leave the current value unchanged
+      });
+
       await Promise.all(
-        Object.entries(deptUninspected).map(([deptId, count]) =>
+        Object.entries(deptUninspectedFinal).map(([deptId, count]) =>
           gateway.updateDepartment(deptId, { uninspectedAssetCount: count })
         )
       );
@@ -1279,76 +1326,119 @@ const App: React.FC = () => {
       let updatedCount = 0;
       let createdCount = 0;
 
-      for (const dept of allDepts) {
-        // Skip departments with zero assets
-        if ((dept.totalAssets || 0) === 0) continue;
+      const institutionTotalAssets = allDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0) || 1;
 
-        // 1. Find Tier
-        let maxGlobalAssets = 0;
-        for (const d of allDepts) {
-            if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
-        }
-        const deptPercentage = maxGlobalAssets > 0 ? ((dept.totalAssets || 0) / maxGlobalAssets) * 100 : 0;
-        
+      for (const dept of allDepts) {
+        // Use totalAssets as the scheduling basis — skip if zero
+        const totalAssets = dept.totalAssets || 0;
+        if (totalAssets === 0) continue;
+
+        // 1. Match dept to KPI tier by dept's share of institution total assets
+        const deptPercentage = (totalAssets / institutionTotalAssets) * 100;
         const tier = [...allTiers]
-           .filter(t => deptPercentage >= t.minAssets)
-           .sort((a,b) => b.minAssets - a.minAssets)[0];
+          .filter(t => deptPercentage >= t.minAssets)
+          .sort((a, b) => b.minAssets - a.minAssets)[0];
         if (!tier) continue;
 
-        // 2. Identify Required Phases (those with target > 0)
-        const requiredPhaseIds = allPhases
-          .filter(p => {
-            const t = kpiTierTargets.find(kt => kt.tierId === tier.id && kt.phaseId === p.id);
-            return (t?.targetPercentage ?? tier.targets?.[p.id] ?? 0) > 0;
+        // 2. Convert cumulative KPI % → incremental per-phase allocation targets
+        // e.g. Large: 30% / 70% / 100% → Phase1=30%, Phase2=40%, Phase3=30%
+        // targetAssets is compared against locWeight values, so use deptLocs.length as basis when assets unavailable
+        const phaseTargets = allPhases
+          .map((p, idx) => {
+            const kt = kpiTierTargets.find(k => k.tierId === tier.id && k.phaseId === p.id);
+            const cumulativePct = kt?.targetPercentage ?? tier.targets?.[p.id] ?? 0;
+            const prevPhase = allPhases[idx - 1];
+            const prevKt = prevPhase ? kpiTierTargets.find(k => k.tierId === tier.id && k.phaseId === prevPhase.id) : null;
+            const prevCumulativePct = prevKt?.targetPercentage ?? (prevPhase ? (tier.targets?.[prevPhase.id] ?? 0) : 0);
+            const incrementalPct = Math.max(0, cumulativePct - prevCumulativePct);
+            return {
+              phaseId: p.id,
+              cumulativePct,
+              incrementalPct,
+              targetAssets: Math.ceil(totalAssets * incrementalPct / 100)
+            };
           })
-          .map(p => p.id);
+          .filter(pt => pt.incrementalPct > 0);
 
-        if (requiredPhaseIds.length === 0) continue;
+        if (phaseTargets.length === 0) continue;
 
-        // 3. Get existing audits for this department
-        const deptAudits = allAudits.filter(a => a.departmentId === dept.id);
-        const deptLocs = allLocs.filter(l => l.departmentId === dept.id);
-
+        // 3. Locations for this dept — include ALL active locations, not just those with totalAssets > 0
+        // If per-location asset counts are missing, distribute by count proportionally
+        const deptLocs = allLocs
+          .filter(l => l.departmentId === dept.id)
+          .sort((a, b) => (b.totalAssets || 0) - (a.totalAssets || 0));
         if (deptLocs.length === 0) continue;
 
-        // 4. Ensure at least one audit exists for each required phase
-        for (const phaseId of requiredPhaseIds) {
-          const exists = deptAudits.some(a => a.phaseId === phaseId);
-          if (!exists) {
-            // Create a new audit for the first location in this phase
-            const firstLoc = deptLocs[0];
-            await gateway.addAudit({
-              departmentId: dept.id,
-              locationId: firstLoc.id,
-              supervisorId: firstLoc.supervisorId || '',
-              phaseId: phaseId,
-              status: 'Pending',
-              auditor1Id: null,
-              auditor2Id: null,
-              date: ''
-            });
-            createdCount++;
+        // Compute effective asset weight per location for greedy distribution.
+        // If all locations have 0 assets, fall back to equal weight so phases fill proportionally by count.
+        const sumLocAssets = deptLocs.reduce((s, l) => s + (l.totalAssets || 0), 0);
+        const fallbackWeight = sumLocAssets === 0 ? Math.ceil(totalAssets / deptLocs.length) : 0;
+        const locWeight = (l: typeof deptLocs[0]) => Math.max(1, (l.totalAssets || 0) || fallbackWeight);
+
+        const deptAudits = allAudits.filter(a => a.departmentId === dept.id);
+        const lockedLocationIds = new Set(deptAudits.filter(a => isAuditLocked(a)).map(a => a.locationId));
+        const unlockedLocs = deptLocs.filter(l => !lockedLocationIds.has(l.id));
+
+        // 4. Greedy phase assignment using INCREMENTAL targets and effective weights
+        // Assign phases earliest-first: fill Phase 1 incrementalTarget, then Phase 2, etc.
+        const phaseHeld: Record<string, number> = {};
+        const phaseAssignments: Record<string, string[]> = {};
+        phaseTargets.forEach(pt => { phaseHeld[pt.phaseId] = 0; phaseAssignments[pt.phaseId] = []; });
+
+        for (const loc of unlockedLocs) {
+          // Find the earliest phase that still has room (capacity = incremental targetAssets)
+          let assigned = false;
+          for (const pt of phaseTargets) {
+            if ((phaseHeld[pt.phaseId] || 0) < pt.targetAssets) {
+              phaseAssignments[pt.phaseId].push(loc.id);
+              phaseHeld[pt.phaseId] = (phaseHeld[pt.phaseId] || 0) + locWeight(loc);
+              assigned = true;
+              break;
+            }
+          }
+          // Overflow: all phases filled, put remainder in last phase
+          if (!assigned) {
+            const lastPhase = phaseTargets[phaseTargets.length - 1];
+            phaseAssignments[lastPhase.phaseId].push(loc.id);
           }
         }
 
-        // 5. Re-distribute UNLOCKED audits across required phases
-        const unlockedAudits = deptAudits.filter(a => !isAuditLocked(a));
-        if (unlockedAudits.length > 0) {
-          unlockedAudits.forEach(async (audit, index) => {
-            const targetPhaseId = requiredPhaseIds[index % requiredPhaseIds.length];
-            if (audit.phaseId !== targetPhaseId) {
-              await gateway.updateAudit(audit.id, { phaseId: targetPhaseId });
-              updatedCount++;
+        // 5. Create or update audit rows — collect new rows for bulk insert
+        const newAudits: Omit<AuditSchedule, 'id'>[] = [];
+        for (const [phaseId, locationIds] of Object.entries(phaseAssignments)) {
+          for (const locId of locationIds) {
+            const loc = allLocs.find(l => l.id === locId)!;
+            const existingAudit = deptAudits.find(a => a.locationId === locId && !isAuditLocked(a));
+            if (existingAudit) {
+              if (existingAudit.phaseId !== phaseId) {
+                await gateway.updateAudit(existingAudit.id, { phaseId });
+                updatedCount++;
+              }
+            } else {
+              newAudits.push({
+                departmentId: dept.id,
+                locationId: locId,
+                supervisorId: loc.supervisorId || '',
+                phaseId,
+                status: 'Pending',
+                auditor1Id: null,
+                auditor2Id: null,
+                date: '',
+              });
             }
-          });
+          }
+        }
+        if (newAudits.length > 0) {
+          await gateway.bulkAddAudits(newAudits);
+          createdCount += newAudits.length;
         }
       }
 
       if (updatedCount > 0 || createdCount > 0) {
         setSchedules(await gateway.getAudits());
-        customAlert(`Schedule rebalanced: ${createdCount} new audits created and ${updatedCount} audits moved to match Tier requirements.`);
+        customAlert(`Schedule rebalanced: ${createdCount} new audits created, ${updatedCount} audits reassigned to match KPI tier targets.`);
       } else {
-        customAlert("Schedule is already balanced according to Tier requirements.");
+        customAlert('Schedule is already balanced. Ensure departments have uninspected assets uploaded and KPI tier targets are configured.');
       }
     } catch (e) {
       showError(e, 'Rebalance Failed');
@@ -1595,8 +1685,11 @@ const App: React.FC = () => {
 
       // Step 3: Use fresh, authoritative data for calculation
       const freshDepts = await gateway.getDepartments();
+
+      // excludedIds = departments AT OR ABOVE the standalone cutoff (large enough to self-audit)
+      // They appear as standalone entities in the Unit Inventory view
       const eligible = freshDepts
-        .filter(d => !excludedIds.includes(d.id) && d.isExempted !== true)
+        .filter(d => !excludedIds.includes(d.id) && d.isExempted !== true && (d.totalAssets || 0) > 0)
         .sort((a, b) => (a.totalAssets || 0) - (b.totalAssets || 0));
 
       if (eligible.length === 0) {
@@ -1680,6 +1773,11 @@ const App: React.FC = () => {
         const key = `${loc.name.toUpperCase()}|${loc.departmentId}`;
         const existing = existingMap.get(key);
         if (existing) {
+          // Skip locations that already have an active audit scheduled (date + auditor assigned)
+          const hasActiveSchedule = schedules.some(
+            s => s.locationId === existing.id && s.date && (s.auditor1Id || s.auditor2Id)
+          );
+          if (hasActiveSchedule) continue;
           if (loc.totalAssets !== undefined && loc.totalAssets !== existing.totalAssets) {
             toUpdate.push({ id: existing.id, updates: { totalAssets: loc.totalAssets } });
           }
@@ -2067,6 +2165,7 @@ const App: React.FC = () => {
               institutionKPIs={institutionKPIs}
               buildings={buildings}
               rbacMatrix={rbacMatrix}
+              kpiTierTargets={kpiTierTargets}
             />
           )}
           {activeView === 'auditor-dashboard' && (

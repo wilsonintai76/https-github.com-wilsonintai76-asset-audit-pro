@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
@@ -27,6 +27,7 @@ interface OverviewDashboardProps {
   maxAssetsPerDay?: number;
   institutionKPIs?: InstitutionKPITarget[];
   buildings?: Building[];
+  kpiTierTargets?: KPITierTarget[];
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
@@ -41,7 +42,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   auditGroups = [],
   maxAssetsPerDay = 500,
   institutionKPIs = [],
-  buildings = []
+  buildings = [],
+  kpiTierTargets = []
 }) => {
   const { t } = useLanguage();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
@@ -415,7 +417,9 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
             <KPIStatsWidget 
                 phases={phases}
                 kpiTiers={kpiTiers}
+                kpiTierTargets={kpiTierTargets}
                 departments={departments}
+                locations={locations}
                 schedules={filteredSchedules}
                 institutionKPIs={institutionKPIs}
             />
@@ -425,6 +429,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
             <TierDistributionTable 
               departments={departments}
               kpiTiers={kpiTiers}
+              kpiTierTargets={kpiTierTargets}
               phases={phases}
               schedules={schedules}
             />

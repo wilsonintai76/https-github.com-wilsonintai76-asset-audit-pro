@@ -9,6 +9,7 @@ export type Bindings = {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   SUPABASE_JWT_SECRET: string;
+  ALLOWED_DOMAIN: string; // e.g. "poliku.edu.my" — set in wrangler.toml [vars]
 };
 
 export type Variables = {
@@ -16,7 +17,8 @@ export type Variables = {
     id: string;
     email: string;
     role: string;
-    roles: string[]; // Populated from D1 users table
+    roles: string[];      // Populated from D1 users table
+    departmentId: string | null; // Populated from D1 users table
     [key: string]: any;
   };
 };

@@ -1,10 +1,21 @@
 import { Hono } from 'hono';
 import { Context, Next } from 'hono';
+import { cache } from 'hono/cache';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { Bindings, Variables } from '../types';
+import { requirePermission } from '../middleware/rbac';
+import { auditAssignmentGuard } from '../middleware/conflictOfInterest';
 
 const db = new Hono<{ Bindings: Bindings, Variables: Variables }>();
+
+// ─── Edge Cache Helper ────────────────────────────────────────────────────────
+// Wraps Hono's cache() for Cloudflare Workers Cache Storage API.
+// Only safe for GET routes whose data changes infrequently (admin config, phases, tiers).
+// Cache-Control max-age controls both the CF edge cache and browser cache.
+const edgeCache = (seconds: number) =>
+  cache({ cacheName: 'db', cacheControl: `public, max-age=${seconds}, s-maxage=${seconds}` });
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─── RBAC Helper ────────────────────────────────────────────────────────────
 // Returns a Hono middleware that enforces minimum required roles.
@@ -18,6 +29,87 @@ const requireRoles = (...allowed: string[]) =>
     }
     await next();
   };
+
+// ─── Audit Lock Guard ────────────────────────────────────────────────────────
+// Blocks structural PATCH changes (phaseId, departmentId, locationId) on a
+// "locked" audit (one that already has a date AND at least one auditor assigned).
+// Mirrors the isAuditLocked check in App.tsx — now enforced server-side.
+const auditLockGuard = async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
+  const id = c.req.param('id');
+  const updates = (c.req as any).valid('json') as Record<string, any>;
+  const structuralFields = ['phaseId', 'departmentId', 'locationId'];
+  const touchesStructure = structuralFields.some(f => updates[f] !== undefined);
+
+  if (!touchesStructure) return next();
+
+  const existing = await c.env.DB.prepare(
+    'SELECT date, auditor1_id, auditor2_id FROM audit_schedules WHERE id = ?',
+  ).bind(id).first<{ date: string | null; auditor1_id: string | null; auditor2_id: string | null }>();
+
+  if (existing && existing.date && (existing.auditor1_id || existing.auditor2_id)) {
+    return c.json(
+      { error: 'Locked audits cannot have their phase, department, or location changed' },
+      409,
+    );
+  }
+  return next();
+};
+
+// ─── Zero-Asset Guard ────────────────────────────────────────────────────────
+// Prevents scheduling a new audit for a department with zero total assets.
+// Mirrors the client-side check in handleAddAudit in App.tsx.
+const zeroAssetGuard = async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
+  const body = (c.req as any).valid('json') as { departmentId?: string | null };
+  const deptId = body?.departmentId;
+  if (!deptId) return next();
+
+  const dept = await c.env.DB.prepare(
+    'SELECT total_assets, name FROM departments WHERE id = ?',
+  ).bind(deptId).first<{ total_assets: number; name: string }>();
+
+  if (dept && (dept.total_assets || 0) === 0) {
+    return c.json(
+      { error: `Cannot schedule an audit for '${dept.name}' — it has zero total assets` },
+      422,
+    );
+  }
+  return next();
+};
+
+// ─── Status Transition Guard ─────────────────────────────────────────────────
+// Enforces the valid audit state machine:
+//   Pending → In Progress → Completed (no skipping, no going backwards)
+// Applies to PATCH /audits/:id when status is being changed.
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  'Pending':     ['In Progress'],
+  'In Progress': ['Completed'],
+  'Completed':   [],
+};
+
+const statusTransitionGuard = async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
+  const updates = (c.req as any).valid('json') as { status?: string };
+  if (!updates.status) return next();
+
+  const id = c.req.param('id');
+  const existing = await c.env.DB.prepare(
+    'SELECT status FROM audit_schedules WHERE id = ?',
+  ).bind(id).first<{ status: string }>();
+
+  if (!existing) return next(); // Will 404 in handler
+
+  const allowed = VALID_TRANSITIONS[existing.status] || [];
+  if (!allowed.includes(updates.status)) {
+    return c.json(
+      {
+        error: `Invalid status transition: '${existing.status}' → '${updates.status}' is not permitted`,
+        allowedTransitions: allowed,
+        code: 'INVALID_TRANSITION',
+      },
+      422,
+    );
+  }
+  return next();
+};
 // ────────────────────────────────────────────────────────────────────────────
 
 // Schemas (Example for Assets - needs to match types.ts)
@@ -43,10 +135,49 @@ const auditSchema = z.object({
   phaseId: z.string().nullable(),
 });
 
+const patchAuditSchema = z.object({
+  status: z.string().optional(),
+  date: z.string().nullable().optional(),
+  departmentId: z.string().nullable().optional(),
+  locationId: z.string().nullable().optional(),
+  supervisorId: z.string().nullable().optional(),
+  auditor1Id: z.string().nullable().optional(),
+  auditor2Id: z.string().nullable().optional(),
+  phaseId: z.string().nullable().optional(),
+});
+
+const userSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().min(1),
+  email: z.string().email(),
+  roles: z.array(z.string()).optional(),
+  designation: z.string().nullable().optional(),
+  picture: z.string().nullable().optional(),
+  departmentId: z.string().nullable().optional(),
+  contactNumber: z.string().nullable().optional(),
+  status: z.string().optional(),
+  isVerified: z.boolean().optional(),
+  mustChangePIN: z.boolean().optional(),
+  certificationIssued: z.string().nullable().optional(),
+  certificationExpiry: z.string().nullable().optional(),
+});
+
+const patchUserSchema = z.object({
+  email: z.string().email().optional(),
+  name: z.string().min(1).optional(),
+  roles: z.array(z.string()).optional(),
+  departmentId: z.string().nullable().optional(),
+  contactNumber: z.string().nullable().optional(),
+  isVerified: z.boolean().optional(),
+  lastActive: z.string().optional(),
+  certificationIssued: z.string().nullable().optional(),
+  certificationExpiry: z.string().nullable().optional(),
+});
+
 db.get('/audits', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
-      'SELECT * FROM audit_schedules'
+      'SELECT id, department_id, location_id, supervisor_id, auditor1_id, auditor2_id, date, status, phase_id FROM audit_schedules'
     ).all();
     
     return c.json((results || []).map((a: any) => ({
@@ -65,7 +196,7 @@ db.get('/audits', async (c) => {
   }
 });
 
-db.post('/audits', zValidator('json', auditSchema), async (c) => {
+db.post('/audits', zValidator('json', auditSchema), requirePermission('edit:audit:assign'), zeroAssetGuard, auditAssignmentGuard, async (c) => {
   const audit = c.req.valid('json');
   const id = audit.id || crypto.randomUUID();
   
@@ -95,10 +226,10 @@ db.post('/audits', zValidator('json', auditSchema), async (c) => {
   }
 });
 
-db.patch('/audits/:id', async (c) => {
+db.patch('/audits/:id', zValidator('json', patchAuditSchema), requirePermission('edit:audit:assign'), auditLockGuard, statusTransitionGuard, auditAssignmentGuard, async (c) => {
   const id = c.req.param('id');
-  const updates = await c.req.json();
-  
+  const updates = c.req.valid('json');
+
   const fields: string[] = [];
   const values: any[] = [];
 
@@ -164,7 +295,9 @@ db.post('/audits/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
 // Users
 db.get('/users', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM users').all();
+    const { results } = await c.env.DB.prepare(
+    'SELECT id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, last_active FROM users',
+  ).all();
 
     return c.json((results || []).map((u: any) => ({
       id: u.id,
@@ -187,8 +320,8 @@ db.get('/users', async (c) => {
   }
 });
 
-db.post('/users', requireRoles('Admin', 'Coordinator'), async (c) => {
-  const user = await c.req.json();
+db.post('/users', requireRoles('Admin', 'Coordinator'), zValidator('json', userSchema), async (c) => {
+  const user = c.req.valid('json');
   const id = user.id || crypto.randomUUID();
   
   try {
@@ -218,9 +351,9 @@ db.post('/users', requireRoles('Admin', 'Coordinator'), async (c) => {
   }
 });
 
-db.patch('/users/:id', async (c) => {
+db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
   const id = c.req.param('id');
-  const updates = await c.req.json();
+  const updates = c.req.valid('json');
   const caller = c.get('user');
   const callerRoles: string[] = caller?.roles || [];
   const isAdmin = callerRoles.includes('Admin');
@@ -298,9 +431,11 @@ db.post('/users/:id/verify', requireRoles('Admin'), async (c) => {
 });
 
 // Departments
-db.get('/departments', async (c) => {
+db.get('/departments', edgeCache(60), async (c) => {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM departments').all();
+    const { results } = await c.env.DB.prepare(
+    'SELECT id, name, abbr, description, head_of_dept_id, audit_group_id, is_exempted, total_assets, uninspected_asset_count FROM departments',
+  ).all();
     return c.json((results || []).map((d: any) => ({
       id: d.id,
       name: d.name,
@@ -317,7 +452,7 @@ db.get('/departments', async (c) => {
   }
 });
 
-db.post('/departments', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.post('/departments', requirePermission('manage:departments'), async (c) => {
   const dept = await c.req.json();
   const id = dept.id || crypto.randomUUID();
   try {
@@ -338,7 +473,7 @@ db.post('/departments', requireRoles('Admin', 'Coordinator'), async (c) => {
   }
 });
 
-db.patch('/departments/:id', async (c) => {
+db.patch('/departments/:id', requirePermission('manage:departments'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields: string[] = [];
@@ -363,7 +498,7 @@ db.patch('/departments/:id', async (c) => {
   }
 });
 
-db.delete('/departments/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.delete('/departments/:id', requirePermission('manage:departments'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM departments WHERE id = ?').bind(id).run();
@@ -408,9 +543,11 @@ db.post('/departments/clear', requireRoles('Admin'), async (c) => {
 });
 
 // Locations
-db.get('/locations', async (c) => {
+db.get('/locations', edgeCache(60), async (c) => {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM locations').all();
+    const { results } = await c.env.DB.prepare(
+    'SELECT id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status FROM locations',
+  ).all();
     return c.json((results || []).map((l: any) => ({
       id: l.id,
       name: l.name,
@@ -432,7 +569,7 @@ db.get('/locations', async (c) => {
   }
 });
 
-db.post('/locations', requireRoles('Admin', 'Coordinator', 'Supervisor'), async (c) => {
+db.post('/locations', requirePermission('manage:locations'), async (c) => {
   const loc = await c.req.json();
   const id = loc.id || crypto.randomUUID();
   try {
@@ -462,7 +599,7 @@ db.post('/locations', requireRoles('Admin', 'Coordinator', 'Supervisor'), async 
   }
 });
 
-db.patch('/locations/:id', async (c) => {
+db.patch('/locations/:id', requirePermission('manage:locations'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields: string[] = [];
@@ -492,7 +629,7 @@ db.patch('/locations/:id', async (c) => {
   }
 });
 
-db.delete('/locations/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.delete('/locations/:id', requirePermission('manage:locations'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM locations WHERE id = ?').bind(id).run();
@@ -690,7 +827,7 @@ db.patch('/permissions/:id', async (c) => {
 });
 
 // Audit Phases
-db.get('/audit-phases', async (c) => {
+db.get('/audit-phases', edgeCache(300), async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM audit_phases').all();
     return c.json((results || []).map((p: any) => ({
@@ -746,7 +883,7 @@ db.delete('/audit-phases/:id', requireRoles('Admin'), async (c) => {
 });
 
 // KPI Tiers
-db.get('/kpi-tiers', async (c) => {
+db.get('/kpi-tiers', edgeCache(300), async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM kpi_tiers').all();
     return c.json((results || []).map((t: any) => ({
@@ -799,7 +936,7 @@ db.delete('/kpi-tiers/:id', requireRoles('Admin'), async (c) => {
 });
 
 // KPI Tier Targets
-db.get('/kpi-tier-targets', async (c) => {
+db.get('/kpi-tier-targets', edgeCache(300), async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM kpi_tier_targets').all();
     return c.json((results || []).map((t: any) => ({
@@ -837,7 +974,7 @@ db.delete('/kpi-tier-targets/:id', requireRoles('Admin'), async (c) => {
 });
 
 // Audit Groups
-db.get('/audit-groups', async (c) => {
+db.get('/audit-groups', edgeCache(300), async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM audit_groups').all();
     return c.json(results);
@@ -884,7 +1021,7 @@ db.delete('/audit-groups/:id', requireRoles('Admin'), async (c) => {
 });
 
 // Institution KPI Targets
-db.get('/institution-kpi-targets', async (c) => {
+db.get('/institution-kpi-targets', edgeCache(300), async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM institution_kpi_targets').all();
     return c.json((results || []).map((k: any) => ({
@@ -910,7 +1047,7 @@ db.post('/institution-kpi-targets', requireRoles('Admin'), async (c) => {
 });
 
 // Buildings
-db.get('/buildings', async (c) => {
+db.get('/buildings', edgeCache(300), async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM buildings ORDER BY name').all();
     return c.json((results || []).map((b: any) => ({

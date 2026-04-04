@@ -54,15 +54,11 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
     return map;
   }, [tierTargets]);
 
-  const highestDeptAssets = useMemo(() => {
-    let max = 0;
-    for (const d of departments) {
-      if ((d.totalAssets || 0) > max) max = d.totalAssets || 0;
-    }
-    return max;
+  const institutionTotalAssets = useMemo(() => {
+    return departments.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
   }, [departments]);
 
-  if (highestDeptAssets === 0) {
+  if (institutionTotalAssets === 0) {
     return (
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden p-12 mt-8 text-center animate-in fade-in">
         <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
@@ -109,23 +105,20 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
 
 
   const autoBalanceTiers = () => {
-    let maxGlobalAssets = 0;
     const validDepts = departments.filter(d => (d.totalAssets || 0) > 0);
-    validDepts.forEach(d => {
-      if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
-    });
+    const totalAssets = validDepts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
 
-    if (maxGlobalAssets === 0 || sortedTiers.length < 3) return;
+    if (totalAssets === 0 || sortedTiers.length < 3) return;
 
     validDepts.sort((a,b) => (a.totalAssets || 0) - (b.totalAssets || 0));
     const idx33 = Math.floor(validDepts.length * 0.33);
     const idx66 = Math.floor(validDepts.length * 0.66);
-    
+
     const val33 = validDepts[idx33]?.totalAssets || 0;
     const val66 = validDepts[idx66]?.totalAssets || 0;
-    
-    const p33 = Math.max(1, Math.round((val33 / maxGlobalAssets) * 100));
-    const p66 = Math.max(p33 + 1, Math.round((val66 / maxGlobalAssets) * 100));
+
+    const p33 = Math.max(1, Math.round((val33 / totalAssets) * 100));
+    const p66 = Math.max(p33 + 1, Math.round((val66 / totalAssets) * 100));
     
     // Save to database
     onUpdateTier(sortedTiers[1].id, { minAssets: p33 });
@@ -285,8 +278,8 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                           {idx === sortedTiers.length - 1 ? ' and above' : ` to ${(sortedTiers[idx+1]?.minAssets || 100) - 1}%`}
                         </span>
                         <span className="text-[10px] text-slate-400 mt-0.5">
-                           ({Math.round(highestDeptAssets * (tier.minAssets / 100))} 
-                           {idx === sortedTiers.length - 1 ? ' assets +' : ` to ${Math.round(highestDeptAssets * (((sortedTiers[idx+1]?.minAssets || 100)) / 100)) - 1} assets`})
+                           ({Math.round(institutionTotalAssets * (tier.minAssets / 100)).toLocaleString()} 
+                           {idx === sortedTiers.length - 1 ? ' assets +' : ` to ${(Math.round(institutionTotalAssets * (((sortedTiers[idx+1]?.minAssets || 100)) / 100)) - 1).toLocaleString()} assets`})
                         </span>
                       </div>
                     )}

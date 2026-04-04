@@ -1,11 +1,12 @@
 
 import React, { useMemo } from 'react';
-import { Department, KPITier, AuditPhase, AuditSchedule } from '../types';
-import { Boxes, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget } from '../types';
+import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle } from 'lucide-react';
 
 interface TierDistributionTableProps {
   departments: Department[];
   kpiTiers: KPITier[];
+  kpiTierTargets: KPITierTarget[];
   phases: AuditPhase[];
   schedules: AuditSchedule[];
   maxAssetsPerDay?: number;
@@ -15,6 +16,7 @@ interface TierDistributionTableProps {
 export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({ 
   departments, 
   kpiTiers, 
+  kpiTierTargets,
   phases,
   schedules,
   maxAssetsPerDay = 1000,
@@ -24,13 +26,10 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
   const sortedTiers = useMemo(() => [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets), [kpiTiers]);
 
   const tableData = useMemo(() => {
-    let maxGlobalAssets = 0;
-    for (const d of departments) {
-      if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
-    }
+    const institutionTotalAssets = departments.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
 
     return departments.map(dept => {
-      const deptPercentage = maxGlobalAssets > 0 ? ((dept.totalAssets || 0) / maxGlobalAssets) * 100 : 0;
+      const deptPercentage = institutionTotalAssets > 0 ? ((dept.totalAssets || 0) / institutionTotalAssets) * 100 : 0;
       const tier = sortedTiers
         .filter(t => deptPercentage >= t.minAssets)
         .sort((a,b) => b.minAssets - a.minAssets)[0];
@@ -38,24 +37,34 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
       
       const phaseStatus = sortedPhases.map(phase => {
         const hasAudit = deptAudits.some(a => a.phaseId === phase.id);
-        const isRequired = (dept.totalAssets || 0) > 0 ? (tier ? (tier.targets?.[phase.id] || 0) > 0 : false) : false;
+        const targetPct = tier
+          ? (kpiTierTargets.find(kt => kt.tierId === tier.id && kt.phaseId === phase.id)?.targetPercentage
+             ?? tier.targets?.[phase.id]
+             ?? 0)
+          : 0;
+        const isRequired = (dept.totalAssets || 0) > 0 && targetPct > 0;
         const isCompleted = deptAudits.some(a => a.phaseId === phase.id && a.status === 'Completed');
+        const targetAssets = Math.ceil((dept.totalAssets || 0) * targetPct / 100);
         
         return {
           phaseId: phase.id,
           hasAudit,
           isRequired,
-          isCompleted
+          isCompleted,
+          targetPct,
+          targetAssets
         };
       });
 
-      const isFullyScheduled = phaseStatus.every(p => !p.isRequired || p.hasAudit);
+      const hasNoAssets = (dept.totalAssets || 0) === 0;
+      const isFullyScheduled = !hasNoAssets && phaseStatus.every(p => !p.isRequired || p.hasAudit);
       
       return {
         ...dept,
         tierName: tier?.name || 'Unassigned',
         phaseStatus,
-        isFullyScheduled
+        isFullyScheduled,
+        hasNoAssets
       };
     }).sort((a, b) => (b.totalAssets || 0) - (a.totalAssets || 0));
   }, [departments, sortedTiers, sortedPhases, schedules]);
@@ -64,8 +73,8 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-6 border-b border-slate-100 flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-slate-900">Movable Asset Inspection Schedule</h3>
-          <p className="text-xs text-slate-500 mt-1">Status of inspections across required phases per department tier.</p>
+          <h3 className="text-lg font-bold text-slate-900">KPI Phase Inspection Plan</h3>
+          <p className="text-xs text-slate-500 mt-1">Required inspection phases per department based on their KPI tier. Click <strong>Rebalance</strong> to auto-assign.</p>
         </div>
         <div className="flex gap-4">
            <div className="flex items-center gap-1.5">
@@ -128,14 +137,16 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                 {row.phaseStatus.map((ps, idx) => (
                   <td key={idx} className="px-4 py-4 text-center">
                     {ps.isRequired ? (
-                      <div className={`inline-flex items-center justify-center w-8 h-8 rounded-xl border-2 transition-all ${
+                      <div className={`inline-flex flex-col items-center justify-center w-14 min-h-[48px] rounded-xl border-2 px-1 py-1 transition-all ${
                         ps.isCompleted 
                           ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
                           : ps.hasAudit 
                           ? 'bg-blue-50 border-blue-200 text-blue-600' 
                           : 'bg-rose-50 border-rose-100 text-rose-400 border-dashed'
                       }`}>
-                        {ps.isCompleted ? <CheckCircle2 className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+                        {ps.isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Layers className="w-3.5 h-3.5" />}
+                        <span className="text-[9px] font-black mt-0.5">{ps.targetPct}%</span>
+                        <span className="text-[8px] opacity-70">{ps.targetAssets.toLocaleString()} aset</span>
                       </div>
                     ) : (
                       <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 mx-auto opacity-30"></div>
@@ -143,7 +154,11 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                   </td>
                 ))}
                 <td className="px-6 py-4 text-right">
-                  {row.isFullyScheduled ? (
+                  {row.hasNoAssets ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase">
+                      <MinusCircle className="w-3 h-3" /> Not Required
+                    </span>
+                  ) : row.isFullyScheduled ? (
                     <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-600 uppercase">
                       <CheckCircle2 className="w-3 h-3" /> Ready
                     </span>

@@ -39,7 +39,7 @@ interface DataManagementWorkflowProps {
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
   onSetDeptTotalsFromMapping: (totals: Record<string, number>) => Promise<void>;
-  onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[]) => Promise<void>;
+  onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[], deptExtras?: Record<string, number>) => Promise<void>;
   locations: Location[];
 }
 
@@ -299,20 +299,20 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           throw new Error('Required columns missing. Need "Label" and "Lokasi Terkini".');
         }
 
-        // Count unique assets per location name (+ optionally bahagian for disambiguation)
+        // Count unique assets per lokasi+bahagian combination (mirrors master registry keying)
         const seenLabels = new Set<string>();
-        // key: lokasi name, value: { count, bahagian hint }
-        const locationCounts: Record<string, { count: number; bahagianHint: string }> = {};
+        // key: "lokasi|||bahagian", value: count
+        const locationCounts: Record<string, number> = {};
 
         for (const row of rows.slice(1)) {
-          const label   = String(row[labelCol] || '').trim();
-          const lokasi  = String(row[lokasiCol] || '').trim();
+          const label    = String(row[labelCol] || '').trim();
+          const lokasi   = String(row[lokasiCol] || '').trim();
           const bahagian = bahagianCol !== -1 ? String(row[bahagianCol] || '').trim() : '';
           if (!label || !lokasi) continue;
           if (seenLabels.has(label)) continue;
           seenLabels.add(label);
-          if (!locationCounts[lokasi]) locationCounts[lokasi] = { count: 0, bahagianHint: bahagian };
-          locationCounts[lokasi].count++;
+          const key = `${lokasi}|||${bahagian}`;
+          locationCounts[key] = (locationCounts[key] || 0) + 1;
         }
 
         // Build dept resolution (reuse same mapping logic as master registry)
@@ -337,9 +337,14 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
         };
 
         const updates: { id: string; uninspectedCount: number }[] = [];
-        let unmatched = 0;
+        const locationAccum: Record<string, number> = {}; // accumulate per location id in case same loc appears under two bahagians
+        const deptExtras: Record<string, number> = {}; // fallback: asset counts for unmatched lokasi resolved via bahagian
+        let fullyUnmatched = 0;
 
-        for (const [lokasiName, { count, bahagianHint }] of Object.entries(locationCounts)) {
+        for (const [key, count] of Object.entries(locationCounts)) {
+          const sepIdx = key.lastIndexOf('|||');
+          const lokasiName  = sepIdx !== -1 ? key.slice(0, sepIdx) : key;
+          const bahagianHint = sepIdx !== -1 ? key.slice(sepIdx + 3) : '';
           const lokasiLow = lokasiName.toLowerCase();
 
           // 1. Try name + resolved dept (most specific)
@@ -348,7 +353,7 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
             ? safeLocations.find(l => l.name.toLowerCase() === lokasiLow && l.departmentId === deptId)
             : undefined;
 
-          // 2. Fall back to name-only match (location names are usually unique enough)
+          // 2. Fall back to name-only match
           if (!found) {
             const nameMatches = safeLocations.filter(l => l.name.toLowerCase() === lokasiLow);
             if (nameMatches.length === 1) {
@@ -359,23 +364,33 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           }
 
           if (found) {
-            updates.push({ id: found.id, uninspectedCount: count });
+            locationAccum[found.id] = (locationAccum[found.id] || 0) + count;
+          } else if (deptId) {
+            // 3. Lokasi unmatched but Bahagian resolves to a department — count at dept level
+            deptExtras[deptId] = (deptExtras[deptId] || 0) + count;
           } else {
-            unmatched++;
+            fullyUnmatched++;
           }
         }
 
-        if (updates.length > 0) {
-          await onUpdateUninspectedAssets(updates);
+        // Convert accumulator to updates array
+        for (const [id, count] of Object.entries(locationAccum)) {
+          updates.push({ id, uninspectedCount: count });
+        }
+
+        const hasDeptFallback = Object.keys(deptExtras).length > 0;
+        if (updates.length > 0 || hasDeptFallback) {
+          await onUpdateUninspectedAssets(updates, hasDeptFallback ? deptExtras : undefined);
+          const deptFallbackCount = Object.values(deptExtras).reduce((a, b) => a + b, 0);
           setAssetSyncStatus({
-            type: unmatched > 0 ? 'warn' : 'success',
-            message: `Updated uninspected counts for ${updates.length} location${updates.length !== 1 ? 's' : ''}.`,
-            detail: unmatched > 0
-              ? `${unmatched} location name${unmatched !== 1 ? 's' : ''} from the CSV didn't match any location in the system. Ensure Master Registry is synced first.`
+            type: fullyUnmatched > 0 ? 'warn' : 'success',
+            message: `Updated uninspected counts for ${updates.length} location${updates.length !== 1 ? 's' : ''}${hasDeptFallback ? ` + ${deptFallbackCount} assets mapped directly to departments` : ''}.`,
+            detail: fullyUnmatched > 0
+              ? `${fullyUnmatched} location${fullyUnmatched !== 1 ? 's' : ''} could not be matched by name or department.`
               : undefined,
           });
         } else {
-          setAssetSyncStatus({ type: 'warn', message: 'No matching locations found. Ensure Master Registry (Step 3) is synced first.' });
+          setAssetSyncStatus({ type: 'warn', message: 'No matching locations or departments found. Ensure Master Registry (Step 3) is synced and Mappings are configured.' });
         }
       } catch (err: any) {
         setAssetSyncStatus({ type: 'error', message: err.message || 'Update failed' });

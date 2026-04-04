@@ -3,7 +3,7 @@ import { Department, AuditGroup } from '../types';
 import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users, RotateCcw } from 'lucide-react';
 
 const THRESHOLD_STORAGE_KEY = 'group_builder_threshold';
-const MEGA_THRESHOLD_STORAGE_KEY = 'group_builder_mega_threshold';
+const STANDALONE_CUTOFF_KEY = 'group_builder_standalone_cutoff';
 
 function loadThreshold(): number {
   return parseInt(localStorage.getItem(THRESHOLD_STORAGE_KEY) || '1000', 10);
@@ -11,11 +11,11 @@ function loadThreshold(): number {
 function saveThreshold(t: number) {
   localStorage.setItem(THRESHOLD_STORAGE_KEY, String(t));
 }
-function loadMegaThreshold(): number {
-  return parseInt(localStorage.getItem(MEGA_THRESHOLD_STORAGE_KEY) || '3000', 10);
+function loadStandaloneCutoff(): number {
+  return parseInt(localStorage.getItem(STANDALONE_CUTOFF_KEY) || '300', 10);
 }
-function saveMegaThreshold(t: number) {
-  localStorage.setItem(MEGA_THRESHOLD_STORAGE_KEY, String(t));
+function saveStandaloneCutoff(t: number) {
+  localStorage.setItem(STANDALONE_CUTOFF_KEY, String(t));
 }
 
 interface GroupBuilderTabProps {
@@ -48,7 +48,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 }) => {
   const [builderTab, setBuilderTab] = useState<1 | 2>(1);
   const [threshold, setThreshold] = useState<number>(() => loadThreshold());
-  const [megaThreshold, setMegaThreshold] = useState<number>(() => loadMegaThreshold());
+  const [standaloneCutoff, setStandaloneCutoff] = useState<number>(() => loadStandaloneCutoff());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   // Derive which departments are currently locked into the editing group
@@ -62,22 +62,23 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     saveThreshold(val);
   };
 
-  const handleMegaThresholdChange = (val: number) => {
-    setMegaThreshold(val);
-    saveMegaThreshold(val);
+  const handleStandaloneCutoffChange = (val: number) => {
+    setStandaloneCutoff(val);
+    saveStandaloneCutoff(val);
   };
 
   const handleRunAutoConsolidate = async () => {
     if (!onAutoConsolidate) return;
     setIsProcessing(true);
     try {
-      const megaExcludedIds = departments
-        .filter(d => (d.totalAssets || 0) >= megaThreshold)
+      // Departments ABOVE the standalone cutoff are exempt — they're large enough to self-audit
+      const standaloneExemptIds = departments
+        .filter(d => (d.totalAssets || 0) >= standaloneCutoff)
         .map(d => d.id);
-        
+
       const minAuditors = strictAuditorRule ? 2 : 1;
-      await onAutoConsolidate(threshold, megaExcludedIds, minAuditors);
-      setBuilderTab(2); // Automatically jump to review tab when finished
+      await onAutoConsolidate(threshold, standaloneExemptIds, minAuditors);
+      setBuilderTab(2);
     } finally {
       setIsProcessing(false);
     }
@@ -102,23 +103,24 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
   const entities = useMemo(() => {
     const groupedDepts: Record<string, Department[]> = {};
-    
+
+    // Show all non-exempted departments in groups
+    // Standalone-exempt (small) departments appear as their own solo entity
     departments.filter(d => !d.isExempted).forEach(dept => {
       const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
       groupedDepts[key].push(dept);
     });
 
-    return Object.entries(groupedDepts).map(([groupId, depts]) => {
+    const result = Object.entries(groupedDepts).map(([groupId, depts]) => {
       const isUnassigned = groupId.startsWith('unassigned_');
-      
       const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
-      
-      const name = isUnassigned 
-        ? depts[0].name 
+      const name = isUnassigned
+        ? depts[0].name
         : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
-      
+      const isStandaloneExempt = isUnassigned && totalAssets >= standaloneCutoff;
+
       return {
         name,
         assets: totalAssets,
@@ -126,12 +128,15 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
         memberCount: depts.length,
         isJoint: !isUnassigned,
         isConsolidated: !isUnassigned,
+        isStandaloneExempt,
         id: groupId,
         members: depts,
         isGroup: depts.length > 1
       };
     }).sort((a, b) => b.assets - a.assets);
-  }, [departments, auditGroups]);
+
+    return result;
+  }, [departments, auditGroups, standaloneCutoff]);
 
   const grandTotalAssets = useMemo(() => {
     return entities.reduce((sum, e) => sum + e.assets, 0);
@@ -238,16 +243,19 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                   </div>
 
                   <div className="space-y-4">
-                     <label className="text-[10px] font-black text-amber-500 block uppercase tracking-widest">Standalone Cutoff</label>
+                     <label className="text-[10px] font-black text-amber-500 block uppercase tracking-widest">Large Dept Exemption Cutoff</label>
+                     <p className="text-[10px] text-slate-400 leading-relaxed -mt-2">
+                       Departments <strong>at or above</strong> this asset count are considered standalone — exempt from group forming as they can self-audit.
+                     </p>
                      <div className="flex items-center gap-4 bg-amber-50/30 p-6 border border-amber-100 rounded-[28px] focus-within:border-amber-300 transition-all">
                        <Sparkles className="w-7 h-7 text-amber-500" />
                        <input 
                          type="number"
-                         min={100}
+                         min={0}
                          step={100}
                          className="w-full text-3xl font-black text-slate-800 outline-none bg-transparent tabular-nums"
-                         value={megaThreshold}
-                         onChange={e => handleMegaThresholdChange(parseInt(e.target.value) || 3000)}
+                         value={standaloneCutoff}
+                         onChange={e => handleStandaloneCutoffChange(parseInt(e.target.value) || 0)}
                        />
                      </div>
                   </div>
@@ -337,7 +345,12 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                                 {e.isConsolidated && (
                                   <div className="px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest italic flex items-center gap-1.5 translate-x-1">
                                     <Boxes className="w-2.5 h-2.5" />
-                                    Unit
+                                    Group
+                                  </div>
+                                )}
+                                {!e.isConsolidated && e.isStandaloneExempt && (
+                                  <div className="px-2.5 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-lg text-[8px] font-black uppercase tracking-widest italic flex items-center gap-1.5">
+                                    Standalone
                                   </div>
                                 )}
                                 {e.isGroup && onDeleteAuditGroup && (

@@ -1,18 +1,20 @@
 
 import React, { useMemo, useState } from 'react';
-import { AuditPhase, KPITier, Department, AuditSchedule, InstitutionKPITarget } from '../types';
+import { AuditPhase, KPITier, KPITierTarget, Department, Location, AuditSchedule, InstitutionKPITarget } from '../types';
 import { ChevronDown, Building2, TrendingUp, AlertCircle, CheckCircle2, Trophy } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface KPIStatsWidgetProps {
   phases: AuditPhase[];
   kpiTiers: KPITier[];
+  kpiTierTargets: KPITierTarget[];
   departments: Department[];
+  locations: Location[];
   schedules: AuditSchedule[];
   institutionKPIs: InstitutionKPITarget[];
 }
 
-export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers, departments, schedules, institutionKPIs }) => {
+export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers, kpiTierTargets, departments, locations, schedules, institutionKPIs }) => {
   const { t } = useLanguage();
   const [expandedTierId, setExpandedTierId] = useState<string | null>(null);
   const today = new Date();
@@ -26,80 +28,88 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
     }) || phases.sort((a,b) => a.startDate.localeCompare(b.startDate))[0]; // Default to first phase if none active
   }, [phases, today]);
 
-  // 2. Compute Stats per Tier
+  // 2. Compute Stats per Tier (asset-based)
   const tierStats = useMemo(() => {
     if (!activePhase || !kpiTiers || kpiTiers.length === 0) return [];
 
-    let maxGlobalAssets = 0;
-    for (const d of departments) {
-      if ((d.totalAssets || 0) > maxGlobalAssets) maxGlobalAssets = d.totalAssets || 0;
-    }
-    
+    const institutionTotalAssets = departments.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+
+    // Build location asset lookup
+    const locAssets: Record<string, number> = {};
+    for (const l of locations) { locAssets[l.id] = l.totalAssets || 0; }
+
     const sortedTiers = [...kpiTiers].sort((a,b) => a.minAssets - b.minAssets);
 
     return sortedTiers.map((tier, idx) => {
       const deptsInTier = departments.filter(d => {
-        const deptPercentage = maxGlobalAssets > 0 ? ((d.totalAssets || 0) / maxGlobalAssets) * 100 : 0;
+        const deptPercentage = institutionTotalAssets > 0 ? ((d.totalAssets || 0) / institutionTotalAssets) * 100 : 0;
         const assignedTier = sortedTiers
           .filter(t => deptPercentage >= t.minAssets)
           .sort((a,b) => b.minAssets - a.minAssets)[0];
         return assignedTier?.id === tier.id;
       });
-      
-      const targetPercentage = activePhase ? (tier.targets?.[activePhase.id] || 0) : 0;
 
-      // Calculate details for each department
+      // Use relational kpiTierTargets table
+      const targetPercentage = kpiTierTargets.find(kt => kt.tierId === tier.id && kt.phaseId === activePhase.id)?.targetPercentage ?? 0;
+
+      // Asset-based per-department progress for the active phase
       const deptDetails = deptsInTier.map(d => {
-        const deptSchedules = schedules.filter(s => s.departmentId === d.id);
-        const total = deptSchedules?.length || 0;
-        const completed = deptSchedules?.filter(s => s.status === 'Completed').length || 0;
-        const isZeroAsset = (d.totalAssets || 0) === 0;
-        const percentage = isZeroAsset ? 100 : (total > 0 ? Math.round((completed / total) * 100) : 0);
-        
+        const totalDeptAssets = d.totalAssets || 0;
+        const completedLocIds = schedules
+          .filter(s => s.departmentId === d.id && s.phaseId === activePhase.id && s.status === 'Completed')
+          .map(s => s.locationId);
+        const inspectedAssets = completedLocIds.reduce((sum, locId) => sum + (locAssets[locId] || 0), 0);
+        const isZeroAsset = totalDeptAssets === 0;
+        const percentage = isZeroAsset ? 100 : Math.round((inspectedAssets / totalDeptAssets) * 100);
         return {
           id: d.id,
           name: d.name,
-          assets: d.totalAssets,
-          totalInspections: total,
-          completedInspections: completed,
+          assets: totalDeptAssets,
+          inspectedAssets,
           percentage,
           status: (isZeroAsset || percentage >= targetPercentage) ? 'On Track' : 'At Risk'
         };
-      }).sort((a, b) => a.percentage - b.percentage); // Sort by lowest completion first (prioritize risk)
+      }).sort((a, b) => a.percentage - b.percentage);
 
-      // Aggregate for the Tier Level
-      const totalScheduled = deptDetails.reduce((acc, d) => acc + d.totalInspections, 0);
-      const totalCompleted = deptDetails.reduce((acc, d) => acc + d.completedInspections, 0);
-      const actualPercentage = totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0;
-      
+      const totalTierAssets = deptsInTier.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+      const inspectedTierAssets = deptDetails.reduce((sum, d) => sum + d.inspectedAssets, 0);
+      const actualPercentage = totalTierAssets > 0 ? Math.round((inspectedTierAssets / totalTierAssets) * 100) : 0;
+
       return {
         ...tier,
         isHighestTier: idx === sortedTiers.length - 1,
         nextMin: sortedTiers[idx + 1]?.minAssets || 100,
         departments: deptDetails,
-        deptCount: deptsInTier?.length || 0,
+        deptCount: deptsInTier.length,
         actualPercentage,
         targetPercentage,
         status: actualPercentage >= targetPercentage ? 'On Track' : 'At Risk'
       };
     }).sort((a,b) => a.minAssets - b.minAssets);
-  }, [kpiTiers, departments, schedules, activePhase]);
+  }, [kpiTiers, kpiTierTargets, departments, locations, schedules, activePhase]);
 
-  // Global Institutional Progress
+  // Global Institutional Progress — asset-based (Global KPI % × institution total assets)
   const globalStats = useMemo(() => {
     if (!activePhase) return null;
-    const totalScheduled = schedules.length;
-    const totalCompleted = schedules.filter(s => s.status === 'Completed').length;
-    const actualPercentage = totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0;
+    const totalInstitutionAssets = departments.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
     const targetPercentage = institutionKPIs.find(k => k.phaseId === activePhase.id)?.targetPercentage ?? 0;
+    const targetAssets = Math.ceil(totalInstitutionAssets * targetPercentage / 100);
+    const completedLocIds = new Set(
+      schedules.filter(s => s.phaseId === activePhase.id && s.status === 'Completed').map(s => s.locationId)
+    );
+    const inspectedAssets = locations
+      .filter(l => completedLocIds.has(l.id))
+      .reduce((sum, l) => sum + (l.totalAssets || 0), 0);
+    const actualPercentage = totalInstitutionAssets > 0 ? Math.round((inspectedAssets / totalInstitutionAssets) * 100) : 0;
     return {
-      totalScheduled,
-      totalCompleted,
+      totalInstitutionAssets,
+      inspectedAssets,
+      targetAssets,
       actualPercentage,
       targetPercentage,
       isOnTrack: actualPercentage >= targetPercentage
     };
-  }, [schedules, institutionKPIs, activePhase]);
+  }, [schedules, locations, departments, institutionKPIs, activePhase]);
 
   const toggleExpand = (id: string) => {
     setExpandedTierId(prev => prev === id ? null : id);
@@ -143,8 +153,9 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
 
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-                       <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Global Goal</p>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Phase Goal</p>
                        <p className="text-lg font-bold">{globalStats.targetPercentage}%</p>
+                       <p className="text-[10px] text-white/50 mt-0.5">{globalStats.targetAssets.toLocaleString()} assets</p>
                     </div>
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
                        <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Status</p>
@@ -164,9 +175,9 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
 
               <div className="w-full md:w-48 shrink-0 flex flex-col items-center justify-center p-6 bg-white/5 rounded-[24px] border border-white/10">
                  <TrendingUp className={`w-8 h-8 mb-3 ${globalStats.isOnTrack ? 'text-emerald-400' : 'text-amber-400'}`} />
-                 <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center mb-1">Inspection Velocity</p>
-                 <p className="text-2xl font-black">{globalStats.totalCompleted}/{globalStats.totalScheduled}</p>
-                 <p className="text-[10px] text-white/40 font-medium">Inspections Completed</p>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-white/40 text-center mb-1">Assets Inspected</p>
+                 <p className="text-2xl font-black">{globalStats.inspectedAssets.toLocaleString()}</p>
+                 <p className="text-[10px] text-white/40 font-medium">of {globalStats.targetAssets.toLocaleString()} target</p>
               </div>
            </div>
 
@@ -256,10 +267,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                                     </div>
                                     <div className="text-right shrink-0 min-w-[60px]">
                                         <div className="text-[9px] text-slate-400 font-mono">
-                                            {dept.assets.toLocaleString()} Assets
-                                        </div>
-                                        <div className="text-[9px] text-slate-400">
-                                            {dept.completedAudits}/{dept.totalAudits}
+                                            {dept.inspectedAssets.toLocaleString()}/{dept.assets.toLocaleString()} aset
                                         </div>
                                     </div>
                                 </div>

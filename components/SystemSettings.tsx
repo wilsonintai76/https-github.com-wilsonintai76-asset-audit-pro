@@ -51,7 +51,7 @@ interface SystemSettingsProps {
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
-  onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[]) => Promise<void>;
+  onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[], deptExtras?: Record<string, number>) => Promise<void>;
   locations: Location[];
   auditGroups: AuditGroup[];
   onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
@@ -172,6 +172,35 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateInstitutionKPI={onUpdateInstitutionKPI}
       />
 
+      {(phases?.length > 0 && kpiTiers?.length > 0) && (
+        <div className="space-y-8">
+          <TierDistributionTable
+            departments={departments}
+            kpiTiers={kpiTiers}
+            kpiTierTargets={kpiTierTargets}
+            phases={phases}
+            schedules={schedules}
+            maxAssetsPerDay={maxAssetsPerDay}
+            maxLocationsPerDay={maxLocationsPerDay}
+          />
+          
+          {isAdmin && (
+            <div className="flex justify-center">
+              <button
+                onClick={onRebalanceSchedule}
+                className="group relative px-8 py-4 bg-slate-900 text-white rounded-[24px] text-sm font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="relative flex items-center gap-3">
+                  <Zap className="w-5 h-5 text-emerald-400" />
+                  Rebalance Inspection Schedule
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <GroupBuilderTab 
         departments={departments}
         auditGroups={auditGroups}
@@ -213,34 +242,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       />
 
       {isAdmin && <RBACMatrix showToast={showToast} />}
-
-      {(phases?.length > 0 && kpiTiers?.length > 0) && (
-        <div className="space-y-8">
-          <TierDistributionTable
-            departments={departments}
-            kpiTiers={kpiTiers}
-            phases={phases}
-            schedules={schedules}
-            maxAssetsPerDay={maxAssetsPerDay}
-            maxLocationsPerDay={maxLocationsPerDay}
-          />
-          
-          {isAdmin && (
-            <div className="flex justify-center">
-              <button
-                onClick={onRebalanceSchedule}
-                className="group relative px-8 py-4 bg-slate-900 text-white rounded-[24px] text-sm font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative flex items-center gap-3">
-                  <Zap className="w-5 h-5 text-emerald-400" />
-                  Rebalance Inspection Schedule
-                </div>
-              </button>
-            </div>
-          )}
-        </div>
-      )}
 
       {isAdmin && <BackupButton />}
 

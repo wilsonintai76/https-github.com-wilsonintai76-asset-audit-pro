@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
+import { cache } from 'hono/cache';
 import { Bindings, Variables } from '../types';
 
 const media = new Hono<{ Bindings: Bindings, Variables: Variables }>();
 
 // GET /api/media/:key - Get image from R2
+// R2 supplies a native httpEtag; we also add Cache-Control for browser + CDN caching.
 media.get('/:key', async (c) => {
   const key = c.req.param('key');
   const object = await c.env.MEDIA.get(key);
@@ -19,6 +21,8 @@ media.get('/:key', async (c) => {
   if (object && 'httpEtag' in object) {
     headers.set('etag', (object as any).httpEtag);
   }
+  // Images are immutable by name (timestamp-prefixed) — cache aggressively.
+  headers.set('cache-control', 'public, max-age=31536000, immutable');
 
   return c.body((object as any).body, 200, Object.fromEntries(headers.entries()));
 });
@@ -40,8 +44,8 @@ media.post('/upload', async (c) => {
   return c.json({ key, url: `/api/media/${key}` });
 });
 
-// KV Settings Example
-media.get('/settings/:key', async (c) => {
+// KV Settings Example — cache at the edge for 60 s (admin settings rarely change)
+media.get('/settings/:key', cache({ cacheName: 'settings', cacheControl: 'public, max-age=60, s-maxage=60' }), async (c) => {
   const key = c.req.param('key');
   const value = await c.env.SETTINGS.get(key);
   return c.json({ [key]: value });
