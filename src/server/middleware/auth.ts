@@ -1,5 +1,4 @@
 import { Context, Next } from 'hono';
-import { verify } from 'hono/jwt';
 import { Bindings, Variables } from '../types';
 
 // ─── KV key prefixes ──────────────────────────────────────────────────────────
@@ -9,16 +8,83 @@ import { Bindings, Variables } from '../types';
 const USER_CACHE_TTL = 300;        // 5 minutes — roles rarely change mid-session
 const SESSION_TTL    = 86_400;     // 24 hours  — refreshed on every token renew
 
+// ─── Embedded Supabase ES256 public key (P-256) ──────────────────────────────
+// kid: db069a95-cddc-4d89-ba17-d069611907aa
+const SUPABASE_JWK: JsonWebKey = {
+  kty: 'EC', crv: 'P-256', alg: 'ES256',
+  x: '7DQTDIFuZB3YwEDUSl7ILk5MBw_0VDCb12geHCZBvCM',
+  y: 'NaccbHTfagGztZCVmorQoykjZCH9y8JbVhIQBChRUZQ',
+  key_ops: ['verify'],
+};
+const SUPABASE_JWK_KID = 'db069a95-cddc-4d89-ba17-d069611907aa';
+
+// Lazily imported once per isolate lifetime
+let _es256Key: CryptoKey | null = null;
+async function getEs256Key(): Promise<CryptoKey> {
+  if (!_es256Key) {
+    _es256Key = await crypto.subtle.importKey(
+      'jwk', SUPABASE_JWK,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false, ['verify'],
+    );
+  }
+  return _es256Key;
+}
+
+function b64urlToBytes(b64url: string): Uint8Array {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
 /**
- * Verifies the Supabase JWT locally (HS256) — zero network round-trips.
- * Returns the raw payload or null on failure.
+ * Verifies a Supabase JWT — supports both:
+ *   ES256 (new projects, P-256 ECC)  — verified via embedded public key
+ *   HS256 (legacy projects)          — verified via base64-decoded JWT secret
  */
 export async function verifySupabaseJwt(
   token: string,
   secret: string,
+  supabaseUrl?: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    return await verify(token, secret, 'HS256') as Record<string, unknown>;
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [headerB64, payloadB64, signatureB64] = parts;
+
+    const header = JSON.parse(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/'))) as { alg?: string; kid?: string };
+    const alg = header.alg ?? 'HS256';
+    const sig = b64urlToBytes(signatureB64);
+    const sigInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+
+    let valid = false;
+
+    if (alg === 'ES256') {
+      // New Supabase: asymmetric P-256 — use embedded public key
+      const cryptoKey = await getEs256Key();
+      valid = await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        cryptoKey,
+        sig,
+        sigInput,
+      );
+    } else if (alg === 'HS256') {
+      // Legacy Supabase: symmetric HS256 — base64-decode secret → key bytes
+      const keyBytes = Uint8Array.from(atob(secret), c => c.charCodeAt(0));
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw', keyBytes,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false, ['verify'],
+      );
+      valid = await crypto.subtle.verify('HMAC', cryptoKey, sig, sigInput);
+    } else {
+      return null;
+    }
+
+    if (!valid) return null;
+
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -39,8 +105,8 @@ export const authMiddleware = async (
 
   const token = authHeader.slice(7);
 
-  // 1. Local JWT verification — no Supabase API call
-  const payload = await verifySupabaseJwt(token, c.env.SUPABASE_JWT_SECRET);
+  // 1. JWT verification — ES256 via JWKS or HS256 via secret
+  const payload = await verifySupabaseJwt(token, c.env.SUPABASE_JWT_SECRET, c.env.SUPABASE_URL);
   if (!payload) {
     return c.json({ success: false, message: 'Unauthorized' }, 401);
   }

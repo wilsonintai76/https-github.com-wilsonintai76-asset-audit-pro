@@ -15,7 +15,7 @@ const auth = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 async function requireJwt(c: any): Promise<{ userId: string; sessionId: string; roles: string[] } | null> {
   const token = c.req.header('Authorization')?.slice(7);
   if (!token) return null;
-  const payload = await verifySupabaseJwt(token, c.env.SUPABASE_JWT_SECRET);
+  const payload = await verifySupabaseJwt(token, c.env.SUPABASE_JWT_SECRET, c.env.SUPABASE_URL);
   if (!payload) return null;
   const userId = payload.sub as string;
   const sessionId = (payload.session_id as string) || '';
