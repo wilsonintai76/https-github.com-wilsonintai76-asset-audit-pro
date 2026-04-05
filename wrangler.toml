@@ -9,6 +9,9 @@ crons = ["0 2 * * *"]  # Daily at 02:00 UTC (10:00 AM MYT)
 [vars]
 SUPABASE_URL = "https://qwhkrbcvbqqclqdpigzw.supabase.co"
 ALLOWED_DOMAIN = "poliku.edu.my"
+# Secrets (set via `wrangler secret put`):
+#   SUPABASE_JWT_SECRET      — Project Settings → API → JWT Secret
+#   SUPABASE_SERVICE_ROLE_KEY — Project Settings → API → service_role
 
 [assets]
 directory = "./dist/client"
@@ -25,4 +28,11 @@ database_id = "8b9169fb-4b7b-4ea1-a7a6-eb8572f083ee"
 [[r2_buckets]]
 binding = "BACKUP"
 bucket_name = "inspect-able-backups"
+
+# KV Namespace — config, RBAC matrix, user-role cache, session registry and buildings cache.
+# Create with: wrangler kv:namespace create SETTINGS
+# Then replace the id below with the output ID.
+[[kv_namespaces]]
+binding = "SETTINGS"
+id = "19aabea7e6584cbb9aa912be4409312a"
 

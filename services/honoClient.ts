@@ -17,13 +17,38 @@ const getBaseUrl = () => {
 let _cachedToken: string | null = null;
 let _tokenExpiresAt = 0; // Unix ms
 
+// ─── Single-Session Registration ─────────────────────────────────────────────
+// Called on SIGNED_IN and TOKEN_REFRESHED so the server always has the
+// current session_id (Supabase JWT claim) stored in KV.  Any parallel
+// session on another device that already wrote a different session_id will
+// be displaced (SESSION_DISPLACED 401) on its next request.
+async function registerSession(accessToken: string): Promise<void> {
+  try {
+    const hint = `${navigator.userAgent.slice(0, 60)} @ ${new Date().toISOString()}`;
+    await fetch(`${getBaseUrl()}/auth/session`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ deviceHint: hint }),
+    });
+  } catch {
+    // Non-fatal — single-session enforcement is best-effort during network errors
+  }
+}
+
 if (supabase) {
-  // Invalidate immediately when the user signs in or out.
-  supabase.auth.onAuthStateChange((_event, session) => {
-    _cachedToken = session?.access_token ?? null;
-    _tokenExpiresAt = session?.expires_at
+  supabase.auth.onAuthStateChange((event, session) => {
+    _cachedToken     = session?.access_token ?? null;
+    _tokenExpiresAt  = session?.expires_at
       ? session.expires_at * 1000 - 4 * 60 * 1000 // refresh 4 min early
       : 0;
+
+    if (session?.access_token && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+      // Register / renew the KV session entry so single-session enforcement stays current
+      registerSession(session.access_token);
+    }
   });
 }
 
@@ -35,21 +60,39 @@ export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   if (!supabase) return {};
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
-    _cachedToken = session.access_token;
-    _tokenExpiresAt = session.expires_at
+    _cachedToken     = session.access_token;
+    _tokenExpiresAt  = session.expires_at
       ? session.expires_at * 1000 - 4 * 60 * 1000
       : now + 56 * 60 * 1000; // fallback: 56-minute window
     return { Authorization: `Bearer ${_cachedToken}` };
   }
-  _cachedToken = null;
-  _tokenExpiresAt = 0;
+  _cachedToken     = null;
+  _tokenExpiresAt  = 0;
   return {};
 };
 
 /** Invalidate the cached token immediately (e.g. on sign-out). */
 export const clearAuthCache = () => {
-  _cachedToken = null;
+  _cachedToken    = null;
   _tokenExpiresAt = 0;
+};
+
+/**
+ * Calls the server-side DELETE /api/auth/session to evict the KV session entry
+ * and clear the role cache BEFORE the Supabase token is revoked.
+ * Must be called while the access token is still valid.
+ */
+export const serverLogout = async (): Promise<void> => {
+  const token = _cachedToken;
+  if (!token) return;
+  try {
+    await fetch(`${getBaseUrl()}/auth/session`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    // Non-fatal — Supabase signOut will still invalidate the refresh token
+  }
 };
 // ─────────────────────────────────────────────────────────────────────────────
 

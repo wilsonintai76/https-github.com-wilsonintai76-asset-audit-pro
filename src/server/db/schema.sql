@@ -44,13 +44,14 @@ CREATE TABLE IF NOT EXISTS buildings (
 );
 
 -- Locations Table
+-- NOTE: the `building` TEXT column that was here is removed (normalization migration below).
+--       Use building_id → buildings.name for display instead.
 CREATE TABLE IF NOT EXISTS locations (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   abbr TEXT NOT NULL,
   department_id TEXT NOT NULL,
   building_id TEXT,
-  building TEXT,
   level TEXT,
   description TEXT,
   supervisor_id TEXT,
@@ -166,6 +167,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_kpi_tier_targets_unique ON kpi_tier_target
 
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
 CREATE INDEX IF NOT EXISTS idx_locations_dept ON locations(department_id);
+CREATE INDEX IF NOT EXISTS idx_locations_building ON locations(building_id);
+CREATE INDEX IF NOT EXISTS idx_locations_status ON locations(status);
 CREATE INDEX IF NOT EXISTS idx_schedules_phase ON audit_schedules(phase_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_dept ON audit_schedules(department_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_status ON audit_schedules(status);
 CREATE INDEX IF NOT EXISTS idx_activities_timestamp ON system_activities(timestamp);
+CREATE INDEX IF NOT EXISTS idx_activities_user ON system_activities(user_id);
+CREATE INDEX IF NOT EXISTS idx_deptmapping_source ON department_mappings(source_name);
+CREATE INDEX IF NOT EXISTS idx_cross_audit_auditor ON cross_audit_permissions(auditor_dept_id);
+CREATE INDEX IF NOT EXISTS idx_cross_audit_target ON cross_audit_permissions(target_dept_id);
+
+-- ─── Migration: remove denormalized `building` column from locations ──────────
+-- Run once against existing databases with:
+--   wrangler d1 execute inspect-able-db --remote --command "ALTER TABLE locations DROP COLUMN building;"
+-- The column is no longer written by the server. building_id → buildings.name for display.
+-- ─────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { clearAuthCache, serverLogout } from './honoClient';
 import { User } from '../types';
 
 export const authService = {
@@ -26,10 +27,17 @@ export const authService = {
 
   logout: async () => {
     try {
-      // Clear all local and session storage to prevent data leakage
+      // 1. Evict the server-side KV session WHILE the token is still valid.
+      //    This immediately invalidates the session for any other browser/tab.
+      await serverLogout();
+
+      // 2. Clear all local and session storage to prevent data leakage
       localStorage.clear();
       sessionStorage.clear();
-      
+
+      // 3. Clear the in-memory token cache
+      clearAuthCache();
+
       if (supabase) {
         // We use a promise with a timeout for signOut to ensure it doesn't hang the app
         const signOutPromise = supabase.auth.signOut();

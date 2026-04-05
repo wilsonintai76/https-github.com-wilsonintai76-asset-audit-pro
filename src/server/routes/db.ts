@@ -387,6 +387,13 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
     await c.env.DB.prepare(
       `UPDATE users SET ${fields.join(', ')} WHERE id = ?`
     ).bind(...values, id).run();
+    // Evict cached roles/departmentId if any privileged fields changed
+    const privilegedChanged = updates.roles !== undefined || updates.departmentId !== undefined
+      || updates.isVerified !== undefined || updates.certificationIssued !== undefined
+      || updates.certificationExpiry !== undefined;
+    if (privilegedChanged) {
+      await c.env.SETTINGS.delete(`ucache:${id}`).catch(() => {});
+    }
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -397,6 +404,11 @@ db.delete('/users/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
+    // Evict roles cache + force-out active session
+    await Promise.allSettled([
+      c.env.SETTINGS.delete(`ucache:${id}`),
+      c.env.SETTINGS.delete(`sess:${id}`),
+    ]);
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -407,6 +419,8 @@ db.post('/users/:id/verify', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('UPDATE users SET is_verified = 1, status = \'Active\' WHERE id = ?').bind(id).run();
+    // Evict stale role cache so next request fetches updated status from D1
+    await c.env.SETTINGS.delete(`ucache:${id}`).catch(() => {});
     const { results } = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).all();
     const u = results[0] as any;
     return c.json({
@@ -546,7 +560,7 @@ db.post('/departments/clear', requireRoles('Admin'), async (c) => {
 db.get('/locations', edgeCache(60), async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
-    'SELECT id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status FROM locations',
+    'SELECT id, name, abbr, department_id, building_id, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status FROM locations',
   ).all();
     return c.json((results || []).map((l: any) => ({
       id: l.id,
@@ -554,7 +568,6 @@ db.get('/locations', edgeCache(60), async (c) => {
       abbr: l.abbr,
       departmentId: l.department_id,
       buildingId: l.building_id,
-      building: l.building,
       level: l.level,
       description: l.description,
       supervisorId: l.supervisor_id,
@@ -575,15 +588,14 @@ db.post('/locations', requirePermission('manage:locations'), async (c) => {
   try {
     await c.env.DB.prepare(
       `INSERT INTO locations 
-       (id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, abbr, department_id, building_id, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
       loc.name,
       loc.abbr,
       loc.departmentId,
       loc.buildingId ?? null,
-      loc.building ?? null,
       loc.level ?? null,
       loc.description ?? null,
       loc.supervisorId ?? null,
@@ -609,7 +621,6 @@ db.patch('/locations/:id', requirePermission('manage:locations'), async (c) => {
   if (updates.abbr !== undefined) { fields.push('abbr = ?'); values.push(updates.abbr); }
   if (updates.departmentId !== undefined) { fields.push('department_id = ?'); values.push(updates.departmentId); }
   if (updates.buildingId !== undefined) { fields.push('building_id = ?'); values.push(updates.buildingId); }
-  if (updates.building !== undefined) { fields.push('building = ?'); values.push(updates.building); }
   if (updates.level !== undefined) { fields.push('level = ?'); values.push(updates.level); }
   if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
   if (updates.supervisorId !== undefined) { fields.push('supervisor_id = ?'); values.push(updates.supervisorId); }
@@ -669,15 +680,14 @@ db.post('/locations/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
       const id = loc.id || crypto.randomUUID();
       return c.env.DB.prepare(
         `INSERT INTO locations 
-         (id, name, abbr, department_id, building_id, building, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, name, abbr, department_id, building_id, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         id,
         loc.name,
         loc.abbr,
         loc.departmentId,
         loc.buildingId ?? null,
-        loc.building ?? null,
         loc.level ?? null,
         loc.description ?? null,
         loc.supervisorId ?? null,
@@ -1046,32 +1056,82 @@ db.post('/institution-kpi-targets', requireRoles('Admin'), async (c) => {
   }
 });
 
-// Buildings
-db.get('/buildings', edgeCache(300), async (c) => {
+// ─── Buildings — KV read-through cache ──────────────────────────────────────
+// Buildings change very rarely. We cache the full list in KV (1h) and
+// invalidate immediately on any write so readers always get fresh data.
+const KV_BUILDINGS = 'buildings';
+const KV_BUILDINGS_TTL = 3600; // 1 hour
+
+async function buildingsFromKVorD1(c: any) {
   try {
-    const { results } = await c.env.DB.prepare('SELECT * FROM buildings ORDER BY name').all();
-    return c.json((results || []).map((b: any) => ({
-      ...b,
-      createdAt: b.created_at
-    })));
+    const cached = await c.env.SETTINGS.get(KV_BUILDINGS, { cacheTtl: 60 });
+    if (cached) return JSON.parse(cached);
+  } catch { /* KV unavailable */ }
+
+  const { results } = await c.env.DB.prepare(
+    'SELECT id, name, abbr, description, created_at FROM buildings ORDER BY name',
+  ).all();
+  const mapped = (results || []).map((b: any) => ({ ...b, createdAt: b.created_at }));
+
+  try {
+    await c.env.SETTINGS.put(KV_BUILDINGS, JSON.stringify(mapped), {
+      expirationTtl: KV_BUILDINGS_TTL,
+    });
+  } catch { /* KV write failure is non-fatal */ }
+
+  return mapped;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+db.get('/buildings', async (c) => {
+  try {
+    return c.json(await buildingsFromKVorD1(c));
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
 });
 
-db.post('/buildings', requireRoles('Admin', 'Coordinator'), async (c) => {
-  const building = await c.req.json();
+db.post('/buildings', requireRoles('Admin', 'Coordinator'), zValidator('json', z.object({
+  id:          z.string().optional(),
+  name:        z.string().min(1),
+  abbr:        z.string().min(1),
+  description: z.string().nullable().optional(),
+})), async (c) => {
+  const building = c.req.valid('json');
   const id = building.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
-      'INSERT INTO buildings (id, name, abbr, description) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, abbr=EXCLUDED.abbr, description=EXCLUDED.description'
-    ).bind(id, building.name, building.abbr ?? null, building.description ?? null).run();
-    const { results } = await c.env.DB.prepare('SELECT * FROM buildings WHERE id = ?').bind(id).all();
-    const b = results[0] as any;
-    return c.json({
-      ...b,
-      createdAt: b.created_at
-    });
+      'INSERT INTO buildings (id, name, abbr, description) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, abbr=EXCLUDED.abbr, description=EXCLUDED.description',
+    ).bind(id, building.name, building.abbr, building.description ?? null).run();
+
+    // Invalidate KV cache so next read fetches from D1
+    await c.env.SETTINGS.delete(KV_BUILDINGS).catch(() => {});
+
+    const b = await c.env.DB.prepare('SELECT * FROM buildings WHERE id = ?').bind(id).first<any>();
+    return c.json({ ...b, createdAt: b?.created_at });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.patch('/buildings/:id', requireRoles('Admin', 'Coordinator'), zValidator('json', z.object({
+  name:        z.string().min(1).optional(),
+  abbr:        z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+})), async (c) => {
+  const id      = c.req.param('id');
+  const updates = c.req.valid('json');
+  const fields: string[] = [];
+  const values: any[]   = [];
+  if (updates.name        !== undefined) { fields.push('name = ?');        values.push(updates.name); }
+  if (updates.abbr        !== undefined) { fields.push('abbr = ?');        values.push(updates.abbr); }
+  if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
+  if (fields.length === 0) return c.json({ success: true });
+  try {
+    await c.env.DB.prepare(`UPDATE buildings SET ${fields.join(', ')} WHERE id = ?`)
+      .bind(...values, id).run();
+    await c.env.SETTINGS.delete(KV_BUILDINGS).catch(() => {});
+    return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -1081,6 +1141,7 @@ db.delete('/buildings/:id', requireRoles('Admin'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM buildings WHERE id = ?').bind(id).run();
+    await c.env.SETTINGS.delete(KV_BUILDINGS).catch(() => {});
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);

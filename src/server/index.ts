@@ -8,6 +8,7 @@ import { dbRoutes } from './routes/db';
 import { aiRoutes } from './routes/ai';
 import { mediaRoutes } from './routes/media';
 import { computeRoutes } from './routes/compute';
+import { authRoutes } from './routes/auth';
 import { Bindings, Variables } from './types';
 import { authMiddleware } from './middleware/auth';
 import { domainGuard } from './middleware/domainGuard';
@@ -72,7 +73,8 @@ app.use('/compute/*', authMiddleware, domainGuard);
 const routes = app.route('/db', dbRoutes)
   .route('/ai', aiRoutes)
   .route('/media', mediaRoutes)
-  .route('/compute', computeRoutes);
+  .route('/compute', computeRoutes)
+  .route('/auth', authRoutes);
 
 export type AppType = typeof routes;
 
