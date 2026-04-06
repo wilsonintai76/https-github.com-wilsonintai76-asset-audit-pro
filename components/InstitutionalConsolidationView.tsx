@@ -3,6 +3,8 @@ import React from 'react';
 import { Department, AuditGroup } from '../types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PrintButton } from './PrintButton';
+import { printUnitConsolidation } from '../lib/printUtils';
 
 interface InstitutionalConsolidationViewProps {
   departments: Department[];
@@ -58,9 +60,16 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
           <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{title}</h3>
           <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{subtitle}</p>
         </div>
-        <div className="bg-slate-900 px-6 py-4 rounded-3xl border-2 border-slate-700 shadow-lg shrink-0">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Institutional Grand Total</p>
-          <p className="text-2xl font-mono font-black text-white">{overallTotal.toLocaleString()}</p>
+        <div className="flex items-center gap-3 shrink-0">
+          <PrintButton
+            onClick={() => printUnitConsolidation(groupedData, overallTotal)}
+            label="Print"
+            title="Print Unit Consolidation"
+          />
+          <div className="bg-slate-900 px-6 py-4 rounded-3xl border-2 border-slate-700 shadow-lg">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Institutional Grand Total</p>
+            <p className="text-2xl font-mono font-black text-white">{overallTotal.toLocaleString()}</p>
+          </div>
         </div>
       </div>
 

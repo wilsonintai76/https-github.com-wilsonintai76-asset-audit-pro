@@ -163,6 +163,7 @@ function mapProfileToUser(profile: any): User {
   if (result.last_active) result.lastActive = result.last_active;
   if (result.certification_issued) result.certificationIssued = result.certification_issued;
   if (result.certification_expiry) result.certificationExpiry = result.certification_expiry;
+  if (result.renewal_requested !== undefined) result.renewalRequested = result.renewal_requested;
   if (result.dashboard_config) result.dashboardConfig = result.dashboard_config;
   if (result.department_id) result.departmentId = result.department_id;
 

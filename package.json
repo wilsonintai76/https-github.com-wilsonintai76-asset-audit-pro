@@ -1,7 +1,7 @@
 {
   "name": "asset-audit-pro",
   "private": true,
-  "version": "1.10.66",
+  "version": "1.10.79",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.28.0",
-    "@cloudflare/workers-types": "^4.20260404.1",
+    "@cloudflare/workers-types": "^4.20260405.1",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",

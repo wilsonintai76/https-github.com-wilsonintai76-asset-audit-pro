@@ -9,6 +9,7 @@ import { aiRoutes } from './routes/ai';
 import { mediaRoutes } from './routes/media';
 import { computeRoutes } from './routes/compute';
 import { authRoutes } from './routes/auth';
+import { publicRoutes } from './routes/public';
 import { Bindings, Variables } from './types';
 import { authMiddleware } from './middleware/auth';
 import { domainGuard } from './middleware/domainGuard';
@@ -48,8 +49,9 @@ app.onError((err, c) => {
 app.notFound((c) => c.json({ success: false, error: 'Route not found' }, 404));
 // ────────────────────────────────────────────────────────────────────────────
 
-// Public routes
+// Public routes (no auth required)
 app.get('/health', (c) => c.json({ status: 'ok', time: new Date().toISOString() }));
+app.route('/public', publicRoutes);
 
 // Manual backup trigger (Admin only)
 app.post('/admin/backup', authMiddleware, async (c) => {
@@ -74,7 +76,8 @@ const routes = app.route('/db', dbRoutes)
   .route('/ai', aiRoutes)
   .route('/media', mediaRoutes)
   .route('/compute', computeRoutes)
-  .route('/auth', authRoutes);
+  .route('/auth', authRoutes)
+  .route('/public', publicRoutes);
 
 export type AppType = typeof routes;
 

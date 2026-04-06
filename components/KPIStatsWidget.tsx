@@ -3,6 +3,8 @@ import React, { useMemo, useState } from 'react';
 import { AuditPhase, KPITier, KPITierTarget, Department, Location, AuditSchedule, InstitutionKPITarget } from '../types';
 import { ChevronDown, Building2, TrendingUp, AlertCircle, CheckCircle2, Trophy } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
+import { PrintButton } from './PrintButton';
+import { printKPICompletionTarget } from '../lib/printUtils';
 
 interface KPIStatsWidgetProps {
   phases: AuditPhase[];
@@ -126,9 +128,16 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
             {t('dashboard.current_phase')}: {activePhase.name}
           </p>
         </div>
-        <div className="bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100 hidden sm:block">
-            <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest text-right">{t('dashboard.phase_ends')}</p>
-            <p className="text-sm font-black text-slate-700">{activePhase.endDate}</p>
+        <div className="flex items-center gap-3">
+          <PrintButton
+            onClick={() => printKPICompletionTarget(globalStats, tierStats, activePhase)}
+            label="Print"
+            title="Print Inspection Completion KPI Target"
+          />
+          <div className="bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100 hidden sm:block">
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest text-right">{t('dashboard.phase_ends')}</p>
+              <p className="text-sm font-black text-slate-700">{activePhase.endDate}</p>
+          </div>
         </div>
       </div>
 

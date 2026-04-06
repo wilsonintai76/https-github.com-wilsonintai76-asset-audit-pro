@@ -4,7 +4,7 @@ import {
   Users, MapPin, Calendar, Clock, AlertTriangle, 
   CheckCircle2, XCircle, Activity, ShieldAlert,
   Search, Filter, ArrowUpRight, Check, X,
-  AlertCircle, History
+  AlertCircle, History, GraduationCap
 } from 'lucide-react';
 import { 
   User, Location, AuditSchedule, SystemActivity, 
@@ -22,11 +22,12 @@ interface AdminDashboardProps {
   phases: AuditPhase[];
   onApproveArchive: (locationId: string) => void;
   onRejectArchive: (locationId: string) => void;
+  onApproveCert: (user: User) => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   users, locations, schedules, activities, departments, buildings, phases,
-  onApproveArchive, onRejectArchive
+  onApproveArchive, onRejectArchive, onApproveCert
 }) => {
   // 1. Pending Location Deletions
   const pendingDeletions = useMemo(() => 
@@ -68,6 +69,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return { expired, expiringSoon };
   }, [users]);
 
+  // 5. Certificate Renewal Requests
+  const renewalRequests = useMemo(() =>
+    users.filter(u => u.renewalRequested),
+    [users]
+  );
+
   // Utility to get building abbreviation
   const getBuildingAbbr = (buildingId?: string | null) => {
     if (!buildingId) return 'N/A';
@@ -105,7 +112,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <StatCard 
           icon={Clock} 
           label="Certifications At Risk" 
-          value={certWatch.expired.length + certWatch.expiringSoon.length} 
+          value={certWatch.expired.length + certWatch.expiringSoon.length + renewalRequests.length} 
           color="orange"
         />
       </div>
@@ -181,7 +188,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </section>
 
-          {/* 2. AUDIT GAPS SUMMARY */}
+          {/* 2. CERT RENEWAL REQUESTS */}
+          <section className="bg-white rounded-[32px] border border-slate-200 overflow-hidden shadow-sm">
+            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Certificate Renewal Requests</h3>
+                  <p className="text-xs text-slate-500 font-medium">Officers who have applied for certification renewal.</p>
+                </div>
+              </div>
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-200">
+                {renewalRequests.length} Pending
+              </span>
+            </div>
+            <div className="divide-y divide-slate-50">
+              {renewalRequests.map(u => {
+                const dept = departments.find(d => d.id === u.departmentId);
+                const requestedDate = u.renewalRequested ? new Date(u.renewalRequested).toLocaleDateString() : '—';
+                return (
+                  <div key={u.id} className="p-6 flex items-center justify-between hover:bg-slate-50/50 transition-colors group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 group-hover:border-blue-200 group-hover:text-blue-500 transition-colors shrink-0">
+                        <GraduationCap className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-900">{u.name}</div>
+                        <div className="text-xs text-slate-500 font-medium">{dept?.name || 'Unknown Dept'}</div>
+                        <div className="text-[10px] text-slate-400 font-medium mt-0.5">Applied: {requestedDate}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => onApproveCert(u)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10 active:scale-95"
+                    >
+                      <Check className="w-4 h-4" />
+                      Approve & Issue Cert
+                    </button>
+                  </div>
+                );
+              })}
+              {renewalRequests.length === 0 && (
+                <div className="p-12 text-center">
+                  <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3 opacity-50">
+                    <CheckCircle2 className="w-6 h-6 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-medium text-slate-400 italic">No pending certificate renewal requests.</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* 3. AUDIT GAPS SUMMARY */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
              <DataGapCard 
                 title="Missing Date Assets" 

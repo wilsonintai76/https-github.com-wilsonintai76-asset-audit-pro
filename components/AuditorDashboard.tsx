@@ -22,6 +22,7 @@ interface AuditorDashboardProps {
   departments: Department[];
   locations: Location[];
   institutionKPIs: InstitutionKPITarget[];
+  onRequestRenewal: () => void;
 }
 
 export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({ 
@@ -31,7 +32,8 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
   kpiTiers,
   departments,
   locations,
-  institutionKPIs
+  institutionKPIs,
+  onRequestRenewal,
 }) => {
   // Filter audits assigned to the current user
   const myAudits = useMemo(() => {
@@ -84,9 +86,17 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                     ? "Your inspecting officer certification has expired. You must renew your certification to access the dashboard and perform inspections."
                     : "You do not have an active inspecting officer certification. Please contact an administrator to update your certification status."}
             </p>
-            <button className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">
-                Request Certification
-            </button>
+            {currentUser.renewalRequested
+              ? <div className="px-6 py-3 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl font-bold text-sm">
+                  ⏳ Renewal Pending — Awaiting Admin Approval
+                </div>
+              : <button
+                  onClick={onRequestRenewal}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                >
+                  Apply for Certificate Renewal
+                </button>
+            }
         </div>
      )
   }
@@ -248,15 +258,21 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                   {certInfo.status === 'expired' && `Critical: Your certificate has expired. Inspection operations suspended.`}
                 </p>
 
-                <button 
-                    className={`w-full py-3 bg-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${
-                        certInfo.status === 'safe' ? 'text-blue-700 hover:bg-blue-50' :
-                        certInfo.status === 'warning' ? 'text-amber-700 hover:bg-amber-50' :
-                        'text-rose-700 hover:bg-rose-50'
-                    }`}
-                >
-                  Renew Certificate
-                </button>
+                {currentUser.renewalRequested
+                  ? <div className="w-full py-3 bg-white/10 border border-white/20 text-white/80 rounded-xl text-xs font-bold text-center">
+                      ⏳ Renewal Pending — Awaiting Admin Approval
+                    </div>
+                  : <button
+                      onClick={onRequestRenewal}
+                      className={`w-full py-3 bg-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 ${
+                          certInfo.status === 'safe' ? 'text-blue-700 hover:bg-blue-50' :
+                          certInfo.status === 'warning' ? 'text-amber-700 hover:bg-amber-50' :
+                          'text-rose-700 hover:bg-rose-50'
+                      }`}
+                    >
+                      Apply for Certificate Renewal
+                    </button>
+                }
               </div>
             </div>
           )}

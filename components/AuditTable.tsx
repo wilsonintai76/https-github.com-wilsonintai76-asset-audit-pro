@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
+import { PrintButton } from './PrintButton';
+import { printInspectionSchedule } from '../lib/printUtils';
 
 interface AuditTableProps {
   schedules: AuditSchedule[];
@@ -409,6 +411,11 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         activePhase={activePhase}
         description="Plan and manage institutional inspection windows and inspecting officer assignments."
       >
+        <PrintButton
+          onClick={() => printInspectionSchedule(displaySchedules, allDepartments, allLocations, users, auditPhases, selectedDept)}
+          label="Print"
+          title="Print Inspection Schedule"
+        />
         {canAutoAssign && (
           <button
             onClick={handleAutoAssign}

@@ -1,7 +1,8 @@
-
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+﻿
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useRBAC } from './contexts/RBACContext';
 import { gateway } from './services/dataGateway';
+import { awaitSessionRegistered } from './services/honoClient';
 import { supabase } from './services/supabase';
 import { authService } from './services/auth';
 import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, RBACMatrix } from './types';
@@ -20,6 +21,7 @@ import { LandingPage } from './components/LandingPage';
 import { KnowledgeBase } from './components/KnowledgeBase';
 import { AutoUpdater } from './components/AutoUpdater';
 import { AdminDashboard } from './components/AdminDashboard';
+import { IssueCertificateModal } from './components/IssueCertificateModal';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { bulkManagement } from './services/bulkManagement';
 import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X } from 'lucide-react';
@@ -37,6 +39,11 @@ const App: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>('landing');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<AppView>('overview');
+  // Prevents duplicate loadAllData() calls when both initSession and SIGNED_IN fire
+  const dataLoadedRef = useRef(false);
+
+  // State for admin cert-renewal approval modal
+  const [certRenewalModalUser, setCertRenewalModalUser] = useState<User | null>(null);
 
   // Data State
   const [schedules, setSchedules] = useState<AuditSchedule[]>([]);
@@ -57,6 +64,17 @@ const App: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // Public landing page stats — fetched without auth so the landing page
+  // renders real data immediately for all visitors.
+  const [publicStats, setPublicStats] = useState<{
+    totalAssets: number;
+    totalPhases: number;
+    complianceProgress: number;
+    phases: AuditPhase[];
+    activities: SystemActivity[];
+    topDepartments: { name: string; compliance: number }[];
+  } | null>(null);
 
   const { rbacMatrix, hasPermission, updateRBAC } = useRBAC();
 
@@ -117,6 +135,21 @@ const App: React.FC = () => {
   }, [currentUser]);
 
   // --- INITIAL DATA LOAD ---
+
+  // Fetch public landing page stats — no auth, edge-cached by Cloudflare (5 min).
+  // A single aggregated D1 query replaces the 12+ authenticated calls that were
+  // previously fired on init.  Falls back silently if the endpoint is unavailable.
+  const loadPublicStats = useCallback(async () => {
+    try {
+      const base = import.meta.env.MODE === 'development' ? 'http://localhost:3000' : window.location.origin;
+      const res = await fetch(`${base}/api/public/stats`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setPublicStats(data);
+    } catch {
+      // Non-fatal — landing page will show '---' placeholders
+    }
+  }, []);
   const loadAllData = useCallback(async () => {
     try {
       const results = await Promise.all([
@@ -548,6 +581,11 @@ const App: React.FC = () => {
                 setActiveView('overview');
               }
             }
+            // Load data for page-refresh sessions (INITIAL_SESSION event — no SIGNED_IN fires)
+            if (!dataLoadedRef.current) {
+              dataLoadedRef.current = true;
+              loadAllData();
+            }
           } else {
             console.warn("getCurrentUser returned null despite having a session. Falling back to local storage.");
             fallbackToLocalSession();
@@ -562,10 +600,10 @@ const App: React.FC = () => {
     };
 
     const initialize = async () => {
-      // Start data loading and session check in parallel for speed
+      // Fetch public landing stats (no auth) and check session in parallel.
       await Promise.allSettled([
         initSession(),
-        loadAllData()
+        loadPublicStats(),
       ]);
       
       setIsInitialLoading(false);
@@ -596,6 +634,13 @@ const App: React.FC = () => {
                 setActiveView('overview');
               }
             }
+            // Await session registration in KV before loading data — prevents
+            // SESSION_DISPLACED 401s caused by loadAllData racing the KV write.
+            if (!dataLoadedRef.current) {
+              dataLoadedRef.current = true;
+              await awaitSessionRegistered();
+              loadAllData();
+            }
           } else {
             fallbackToLocalSession();
           }
@@ -604,8 +649,11 @@ const App: React.FC = () => {
           fallbackToLocalSession();
         }
       } else if (event === 'SIGNED_OUT') {
+        dataLoadedRef.current = false;
         setCurrentUser(null);
         setViewState('landing');
+        // Refresh public stats so the landing page shows up-to-date data
+        loadPublicStats();
       }
     }) || { data: { subscription: null } };
 
@@ -1786,7 +1834,7 @@ const App: React.FC = () => {
         }
       }
       if (toAdd.length > 0) {
-        // Supabase insert limit â€” batch at 200 rows
+        // Supabase insert limit — batch at 200 rows
         for (let i = 0; i < toAdd.length; i += 200) {
           await gateway.bulkAddLocations(toAdd.slice(i, i + 200));
         }
@@ -1822,9 +1870,9 @@ const App: React.FC = () => {
       }
       if (updatedCount > 0) {
         setLocations(await gateway.getLocations());
-        showToast(`Sync complete â€” ${updatedCount} location${updatedCount !== 1 ? 's' : ''} reassigned.`);
+        showToast(`Sync complete — ${updatedCount} location${updatedCount !== 1 ? 's' : ''} reassigned.`);
       } else {
-        showToast('Sync complete â€” no locations needed updating.');
+        showToast('Sync complete — no locations needed updating.');
       }
     } catch (e) {
       showError(e, 'Failed to sync location mappings');
@@ -1908,6 +1956,50 @@ const App: React.FC = () => {
     } catch (e: any) {
       showError(e, 'Member Update Failed');
       throw e;
+    }
+  };
+
+  // Officer: apply for certificate renewal
+  const handleRequestRenewal = async () => {
+    if (!currentUser) return;
+    try {
+      const ts = new Date().toISOString();
+      await gateway.updateUser(currentUser.id, { renewalRequested: ts } as any);
+      const updated = { ...currentUser, renewalRequested: ts };
+      setCurrentUser(updated);
+      localStorage.setItem('audit_pro_session', JSON.stringify(updated));
+      setUsers(await gateway.getUsers());
+      showToast('Renewal application submitted — an admin will review your request.');
+    } catch (e) {
+      showError(e, 'Renewal Request Failed');
+    }
+  };
+
+  // Admin: open IssueCertificateModal for a renewal applicant
+  const handleApproveCert = (user: User) => {
+    setCertRenewalModalUser(user);
+  };
+
+  // Admin: issue cert from the renewal modal (also clears renewalRequested)
+  const handleIssueCertForRenewal = async (issuedDate: string, expiryDate: string) => {
+    if (!certRenewalModalUser) return;
+    try {
+      await gateway.updateUser(certRenewalModalUser.id, {
+        certificationIssued: issuedDate,
+        certificationExpiry: expiryDate,
+        renewalRequested: null,
+      } as any);
+      setUsers(await gateway.getUsers());
+      // If the renewed user is the currently logged-in user, refresh currentUser too
+      if (currentUser?.id === certRenewalModalUser.id) {
+        const freshUser = { ...currentUser, certificationIssued: issuedDate, certificationExpiry: expiryDate, renewalRequested: null };
+        setCurrentUser(freshUser);
+        localStorage.setItem('audit_pro_session', JSON.stringify(freshUser));
+      }
+      setCertRenewalModalUser(null);
+      showToast(`Certificate issued for ${certRenewalModalUser.name}`);
+    } catch (e) {
+      showError(e, 'Issue Certificate Failed');
     }
   };
 
@@ -2019,10 +2111,19 @@ const App: React.FC = () => {
   }
 
   if (viewState === 'landing') {
-    const totalAssets = departmentsWithAssets.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
-    const completedAudits = schedules.filter(s => s.status === 'Completed').length;
-    const totalAuditsCount = schedules.length;
-    const complianceProgress = totalAuditsCount > 0 ? Math.round((completedAudits / totalAuditsCount) * 100) : 0;
+    // If user is signed in, use live computed values; otherwise use public stats
+    const hasLiveData = !!currentUser;
+    const liveTotalAssets = departmentsWithAssets.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
+    const liveCompleted = schedules.filter(s => s.status === 'Completed').length;
+    const liveTotal = schedules.length;
+    const liveCompliance = liveTotal > 0 ? Math.round((liveCompleted / liveTotal) * 100) : 0;
+
+    const landingTotalAssets      = hasLiveData ? liveTotalAssets      : (publicStats?.totalAssets      ?? undefined);
+    const landingTotalPhases      = hasLiveData ? auditPhases.length   : (publicStats?.totalPhases      ?? undefined);
+    const landingComplianceProgress = hasLiveData ? liveCompliance     : (publicStats?.complianceProgress ?? undefined);
+    const landingPhases           = hasLiveData ? auditPhases          : (publicStats?.phases           ?? []);
+    const landingActivities       = hasLiveData ? activities           : (publicStats?.activities       ?? []);
+    const landingTopDepartments   = hasLiveData ? topDepartments       : (publicStats?.topDepartments   ?? []);
 
     return (
       <LandingPage
@@ -2034,12 +2135,12 @@ const App: React.FC = () => {
           }
         }}
         onShowKnowledgeBase={() => setViewState('docs')}
-        totalAssets={totalAssets}
-        totalPhases={auditPhases.length}
-        complianceProgress={complianceProgress}
-        phases={auditPhases}
-        activities={activities}
-        topDepartments={topDepartments}
+        totalAssets={landingTotalAssets}
+        totalPhases={landingTotalPhases}
+        complianceProgress={landingComplianceProgress}
+        phases={landingPhases}
+        activities={landingActivities}
+        topDepartments={landingTopDepartments}
         onDemoLogin={undefined}
       />
     );
@@ -2177,6 +2278,7 @@ const App: React.FC = () => {
               departments={departmentsWithAssets}
               locations={locations}
               institutionKPIs={institutionKPIs}
+              onRequestRenewal={handleRequestRenewal}
             />
           )}
           {activeView === 'schedule' && (
@@ -2277,6 +2379,7 @@ const App: React.FC = () => {
                phases={auditPhases}
                onApproveArchive={handleApproveArchive}
                onRejectArchive={handleRejectArchive}
+               onApproveCert={handleApproveCert}
              />
            )}
           {activeView === 'buildings' && (
@@ -2356,11 +2459,11 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
             <span className="font-semibold text-slate-500">Inspect-<span className="text-blue-500">able</span></span>
-            <span className="hidden sm:inline">â€” Institutional Asset Audit Platform</span>
+            <span className="hidden sm:inline">— Institutional Asset Audit Platform</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="font-mono">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</span>
-            <span>Â© {new Date().getFullYear()} Politeknik Kuching Sarawak. All rights reserved.</span>
+            <span>© {new Date().getFullYear()} Politeknik Kuching Sarawak. All rights reserved.</span>
           </div>
         </footer>
       </div>
@@ -2396,6 +2499,14 @@ const App: React.FC = () => {
       )}
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onClose={closeToast} />
+      {/* Admin cert-renewal approval modal */}
+      {certRenewalModalUser && (
+        <IssueCertificateModal
+          user={certRenewalModalUser}
+          onClose={() => setCertRenewalModalUser(null)}
+          onIssue={handleIssueCertForRenewal}
+        />
+      )}
       </div>
     </div>
   );

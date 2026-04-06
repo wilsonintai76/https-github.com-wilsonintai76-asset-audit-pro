@@ -1,64 +1,103 @@
-import React, { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { RefreshCw, LogOut, Sparkles } from 'lucide-react';
+import { authService } from '../services/auth';
+
+const COUNTDOWN_SEC = 30;
 
 export const AutoUpdater: React.FC = () => {
-  const [isUpdating, setIsUpdating] = useState(false);
+  const [newVersion, setNewVersion] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(COUNTDOWN_SEC);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const doLogout = useCallback(async () => {
+    setIsLoggingOut(true);
+    // Full logout: evicts KV session, clears local storage, signs out of Supabase
+    await authService.logout();
+    window.location.href = '/';
+  }, []);
+
+  // Countdown timer — fires once newVersion is set
   useEffect(() => {
-    // Current running version baked in by Vite using import.meta.env
+    if (!newVersion) return;
+    if (countdown <= 0) { doLogout(); return; }
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [newVersion, countdown, doLogout]);
+
+  // Version poller
+  useEffect(() => {
     const currentVersion = import.meta.env.VITE_APP_VERSION;
 
     const checkVersion = async () => {
       try {
-        // Fetch public/version.json with a cache-busting timestamp param
+        if (newVersion) return; // already detected — don't re-check
         const res = await fetch(`/version.json?t=${Date.now()}`);
         if (!res.ok) return;
-        
         const data = await res.json() as { version: string };
-        const deployedVersion = data.version;
-
-        // If a new version exists on the server, prompt reload
-        if (deployedVersion && deployedVersion !== currentVersion) {
-            
-          console.log(`New version detected: ${deployedVersion}. Current: ${currentVersion}. Refreshing...`);
-          setIsUpdating(true);
-
-          // Force a reload safely after showing loading state for 2 seconds
-          setTimeout(() => {
-            window.location.reload();
-          }, 2000);
+        if (data.version && data.version !== currentVersion) {
+          console.log(`[AutoUpdater] New version: ${data.version} (was ${currentVersion})`);
+          setNewVersion(data.version);
         }
-      } catch (err) {
-        // Silently ignore network errors to prevent annoying users if offline
-        console.error('Failed to check for app updates', err);
+      } catch {
+        // Offline — silently ignore
       }
     };
 
-    // Check version silently every 5 minutes in the background
     const intervalId = setInterval(checkVersion, 5 * 60 * 1000);
-
-    // Actively check whenever the user brings the web app tab back into focus
     window.addEventListener('focus', checkVersion);
-
-    // Initial check (gives Vite 2 seconds to finish hydration initially)
     setTimeout(checkVersion, 2000);
 
     return () => {
       clearInterval(intervalId);
       window.removeEventListener('focus', checkVersion);
     };
-  }, []);
+  }, [newVersion]);
 
-  if (!isUpdating) return null;
+  if (!newVersion) return null;
+
+  const currentVersion = import.meta.env.VITE_APP_VERSION;
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center animate-in fade-in zoom-in-95 duration-200">
-      <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center">
-        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-6">
-            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+    <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 px-8 pt-8 pb-6 text-center">
+          <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Sparkles className="w-7 h-7 text-white" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-1">New Update Available</h3>
+          <p className="text-blue-200 text-xs font-medium">
+            v{currentVersion} &rarr; v{newVersion}
+          </p>
         </div>
-        <h3 className="text-xl font-bold text-slate-900 mb-2">Update Installed</h3>
-        <p className="text-slate-500 text-sm font-medium">A new version of the app was just deployed. Refreshing to apply changes...</p>
+
+        {/* Body */}
+        <div className="px-8 py-6 text-center">
+          <p className="text-slate-600 text-sm mb-1">
+            A new version has been deployed. Sign out to apply the update — you'll be redirected to log back in.
+          </p>
+          <p className="text-slate-400 text-xs mt-3">
+            Auto sign-out in{' '}
+            <span className="font-bold text-blue-600 tabular-nums">{countdown}s</span>
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="px-8 pb-8 flex flex-col gap-3">
+          <button
+            onClick={doLogout}
+            disabled={isLoggingOut}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-sm rounded-xl transition-colors"
+          >
+            {isLoggingOut
+              ? <RefreshCw className="w-4 h-4 animate-spin" />
+              : <LogOut className="w-4 h-4" />}
+            {isLoggingOut ? 'Signing out…' : 'Sign out & update now'}
+          </button>
+          <p className="text-center text-[10px] text-slate-400 font-medium uppercase tracking-widest">
+            Your session will end — please sign back in
+          </p>
+        </div>
       </div>
     </div>
   );

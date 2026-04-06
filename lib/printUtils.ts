@@ -1,0 +1,637 @@
+/**
+ * Print Utilities — window.print() popup approach
+ * Zero Worker CPU, zero free-tier requests consumed.
+ */
+
+const PRINT_CSS = `
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; background: white; }
+  h1 { font-size: 16pt; font-weight: 900; margin-bottom: 2pt; letter-spacing: -0.5pt; }
+  h2 { font-size: 13pt; font-weight: 800; margin: 12pt 0 6pt; letter-spacing: -0.3pt; }
+  h3 { font-size: 11pt; font-weight: 700; margin: 10pt 0 4pt; }
+  p { font-size: 9pt; color: #555; margin-bottom: 2pt; }
+  .header { border-bottom: 2pt solid #111; padding-bottom: 8pt; margin-bottom: 14pt; }
+  .subtitle { font-size: 9pt; color: #666; margin-top: 2pt; }
+  .meta { font-size: 8pt; color: #888; margin-top: 4pt; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6pt; font-size: 9pt; }
+  thead th { background: #f0f0f0; border: 1pt solid #ccc; padding: 5pt 8pt; font-weight: 800; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.5pt; text-align: left; }
+  thead th.center { text-align: center; }
+  thead th.right { text-align: right; }
+  tbody td { border: 1pt solid #ddd; padding: 5pt 8pt; vertical-align: top; }
+  tbody td.center { text-align: center; }
+  tbody td.right { text-align: right; }
+  tbody tr:nth-child(even) { background: #fafafa; }
+  .badge { display: inline-block; padding: 1pt 5pt; border-radius: 4pt; font-size: 7.5pt; font-weight: 700; border: 1pt solid; }
+  .badge-green { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+  .badge-amber { background: #fffbeb; color: #92400e; border-color: #fcd34d; }
+  .badge-slate { background: #f8fafc; color: #475569; border-color: #cbd5e1; }
+  .badge-blue { background: #eff6ff; color: #1e40af; border-color: #93c5fd; }
+  .pill { display: inline-block; padding: 1pt 4pt; border-radius: 3pt; font-size: 7pt; font-weight: 700; background: #e2e8f0; color: #334155; margin: 0.5pt; }
+  .stat-row { display: flex; gap: 16pt; margin-bottom: 12pt; }
+  .stat-box { flex: 1; border: 1pt solid #e2e8f0; border-radius: 6pt; padding: 8pt 10pt; }
+  .stat-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5pt; }
+  .stat-value { font-size: 18pt; font-weight: 900; margin-top: 2pt; color: #0f172a; }
+  .stat-sub { font-size: 8pt; color: #64748b; margin-top: 1pt; }
+  .section { margin-top: 16pt; }
+  .page-break { page-break-before: always; }
+  .no-break { page-break-inside: avoid; }
+  .progress-bar-bg { background: #e2e8f0; border-radius: 3pt; height: 7pt; width: 100%; position: relative; }
+  .progress-bar-fill { height: 7pt; border-radius: 3pt; }
+  .bg-green { background: #10b981; }
+  .bg-amber { background: #f59e0b; }
+  .text-green { color: #059669; }
+  .text-amber { color: #d97706; }
+  .text-red { color: #dc2626; }
+  .subrow { background: #f8fafc !important; }
+  .subrow td { font-size: 8.5pt; color: #475569; padding-left: 20pt !important; }
+  .divider { border: none; border-top: 1pt solid #e2e8f0; margin: 10pt 0; }
+  @page { margin: 1.5cm; size: A4; }
+  @page :right { @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #888; } }
+`;
+
+const PRINT_CSS_LANDSCAPE = `
+  ${PRINT_CSS}
+  @page { margin: 1.2cm; size: A4 landscape; }
+`;
+
+function openPrint(title: string, bodyHtml: string, landscape = false): void {
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) { alert('Please allow pop-ups to print reports.'); return; }
+  const printedAt = new Date().toLocaleString('en-GB', { dateStyle: 'long', timeStyle: 'short' });
+  w.document.write(`<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>${title}</title>
+<style>${landscape ? PRINT_CSS_LANDSCAPE : PRINT_CSS}</style>
+</head><body>
+${bodyHtml}
+<p class="meta" style="margin-top:18pt;border-top:1pt solid #e2e8f0;padding-top:6pt;">Printed: ${printedAt}</p>
+<script>window.onload=()=>{window.print();}<\/script>
+</body></html>`);
+  w.document.close();
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString('en-MY');
+}
+
+function pct(n: number): string {
+  return `${n}%`;
+}
+
+// ─── REPORT 1: Inspection Completion KPI Target ──────────────────────────────
+
+interface GlobalStats {
+  totalInstitutionAssets: number;
+  inspectedAssets: number;
+  targetAssets: number;
+  actualPercentage: number;
+  targetPercentage: number;
+  isOnTrack: boolean;
+}
+
+interface DeptDetail {
+  id: string;
+  name: string;
+  assets: number;
+  inspectedAssets: number;
+  percentage: number;
+  status: string;
+}
+
+interface TierStat {
+  id: string;
+  name: string;
+  minAssets: number;
+  isHighestTier: boolean;
+  nextMin: number;
+  deptCount: number;
+  actualPercentage: number;
+  targetPercentage: number;
+  status: string;
+  departments: DeptDetail[];
+}
+
+interface ActivePhase {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+export function printKPICompletionTarget(
+  globalStats: GlobalStats | null,
+  tierStats: TierStat[],
+  activePhase: ActivePhase | null,
+): void {
+  if (!globalStats) { alert('No active phase data to print.'); return; }
+
+  const statusBadge = (s: string) =>
+    s === 'On Track'
+      ? `<span class="badge badge-green">${s}</span>`
+      : `<span class="badge badge-amber">${s}</span>`;
+
+  const phaseLabel = activePhase
+    ? `${activePhase.name} (${activePhase.startDate} – ${activePhase.endDate})`
+    : 'All Phases';
+
+  const tierRows = tierStats.map(tier => {
+    const deptRows = tier.departments.map(d =>
+      `<tr class="subrow">
+        <td>${d.name}</td>
+        <td class="center">${fmt(d.assets)}</td>
+        <td class="center">${fmt(d.inspectedAssets)}</td>
+        <td class="center">${pct(d.percentage)}</td>
+        <td class="center">${pct(tier.targetPercentage)}</td>
+        <td class="center">${statusBadge(d.status)}</td>
+      </tr>`
+    ).join('');
+
+    return `<tr class="no-break" style="background:#eff6ff;">
+      <td><strong>${tier.name}</strong>&nbsp;<span style="font-size:8pt;color:#64748b;">(${tier.minAssets}%–${tier.isHighestTier ? '100' : tier.nextMin - 1}% threshold)</span></td>
+      <td class="center" colspan="2"><strong>${tier.deptCount} depts</strong></td>
+      <td class="center"><strong>${pct(tier.actualPercentage)}</strong></td>
+      <td class="center">${pct(tier.targetPercentage)}</td>
+      <td class="center">${statusBadge(tier.status)}</td>
+    </tr>${deptRows}`;
+  }).join('');
+
+  const html = `
+<div class="header">
+  <h1>Inspection Completion KPI Target</h1>
+  <p class="subtitle">Active Phase: ${phaseLabel}</p>
+</div>
+
+<div class="stat-row">
+  <div class="stat-box">
+    <div class="stat-label">Overall Completion</div>
+    <div class="stat-value ${globalStats.isOnTrack ? 'text-green' : 'text-amber'}">${pct(globalStats.actualPercentage)}</div>
+    <div class="stat-sub">${fmt(globalStats.inspectedAssets)} assets inspected</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Phase Target</div>
+    <div class="stat-value">${pct(globalStats.targetPercentage)}</div>
+    <div class="stat-sub">${fmt(globalStats.targetAssets)} target assets</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Total Institution Assets</div>
+    <div class="stat-value">${fmt(globalStats.totalInstitutionAssets)}</div>
+    <div class="stat-sub">&nbsp;</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Status</div>
+    <div class="stat-value" style="font-size:13pt;">${statusBadge(globalStats.isOnTrack ? 'On Track' : 'At Risk')}</div>
+    <div class="stat-sub">&nbsp;</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>KPI Tier Breakdown</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Tier / Department</th>
+        <th class="center">Total Assets</th>
+        <th class="center">Inspected Assets</th>
+        <th class="center">Actual %</th>
+        <th class="center">Target %</th>
+        <th class="center">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tierRows || '<tr><td colspan="6" style="text-align:center;color:#888;">No tier data available.</td></tr>'}
+    </tbody>
+  </table>
+</div>`;
+
+  openPrint('Inspection Completion KPI Target', html);
+}
+
+// ─── REPORT 2: KPI Phase Inspection Plan ─────────────────────────────────────
+
+interface Phase {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface PhaseStatus {
+  phaseId: string;
+  hasAudit: boolean;
+  isRequired: boolean;
+  isCompleted: boolean;
+  targetPct: number;
+  targetAssets: number;
+}
+
+interface TableRow {
+  id: string;
+  name: string;
+  abbr?: string;
+  totalAssets?: number;
+  auditorCount?: number;
+  tierName: string;
+  phaseStatus: PhaseStatus[];
+  isFullyScheduled: boolean;
+  hasNoAssets: boolean;
+}
+
+export function printKPIPhasePlan(
+  tableData: TableRow[],
+  sortedPhases: Phase[],
+): void {
+  const phaseHeaders = sortedPhases.map(p =>
+    `<th class="center">${p.name}<br><span style="font-weight:400;font-size:7pt;">${p.startDate}</span></th>`
+  ).join('');
+
+  const bodyRows = tableData.map(row => {
+    const phaseCells = row.phaseStatus.map(ps => {
+      if (!ps.isRequired) return `<td class="center"><span style="color:#cbd5e1;">—</span></td>`;
+      if (ps.isCompleted) return `<td class="center"><span class="badge badge-green">Done</span></td>`;
+      if (ps.hasAudit) return `<td class="center"><span class="badge badge-blue">Sched.</span></td>`;
+      return `<td class="center"><span class="badge badge-amber">${pct(ps.targetPct)}</span></td>`;
+    }).join('');
+
+    const status = row.hasNoAssets
+      ? `<span class="badge badge-slate">No Assets</span>`
+      : row.isFullyScheduled
+      ? `<span class="badge badge-green">Scheduled</span>`
+      : `<span class="badge badge-amber">Incomplete</span>`;
+
+    return `<tr>
+      <td>${row.name}<br><span style="font-size:8pt;color:#94a3b8;">${row.abbr || ''}</span></td>
+      <td class="center">${fmt(row.totalAssets || 0)}</td>
+      <td class="center">${row.auditorCount || 0}</td>
+      <td>${row.tierName}</td>
+      ${phaseCells}
+      <td class="center">${status}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `
+<div class="header">
+  <h1>KPI Phase Inspection Plan</h1>
+  <p class="subtitle">Required inspection phases per department based on their KPI tier assignment.</p>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Department</th>
+      <th class="center">Assets</th>
+      <th class="center">Officers</th>
+      <th>KPI Tier</th>
+      ${phaseHeaders}
+      <th class="center">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${bodyRows || '<tr><td colspan="10" style="text-align:center;color:#888;">No data available.</td></tr>'}
+  </tbody>
+</table>
+
+<div class="section" style="margin-top:12pt;">
+  <p style="font-size:8pt;"><strong>Legend:</strong>&nbsp;
+    <span class="badge badge-green">Done</span> Completed &nbsp;
+    <span class="badge badge-blue">Sched.</span> Scheduled &nbsp;
+    <span class="badge badge-amber">XX%</span> Required (target%) but not scheduled &nbsp;
+    <span style="color:#cbd5e1;font-weight:700;">—</span> Not required
+  </p>
+</div>`;
+
+  openPrint('KPI Phase Inspection Plan', html, true);
+}
+
+// ─── REPORT 3: Unit Consolidation ────────────────────────────────────────────
+
+interface GroupedDept {
+  id: string;
+  name: string;
+  abbr?: string;
+  totalAssets?: number;
+}
+
+interface AuditGroupData {
+  id: string;
+  name: string;
+  color?: string;
+  departments: GroupedDept[];
+  subTotal: number;
+}
+
+interface GroupedData {
+  groups: AuditGroupData[];
+  unassignedDepts: GroupedDept[];
+}
+
+export function printUnitConsolidation(
+  groupedData: GroupedData,
+  overallTotal: number,
+): void {
+  const groupRows = groupedData.groups.map(group => {
+    const deptRows = group.departments.map(d =>
+      `<tr class="subrow">
+        <td style="padding-left:20pt;">${d.name}</td>
+        <td>${d.abbr || ''}</td>
+        <td class="right">${fmt(d.totalAssets || 0)}</td>
+      </tr>`
+    ).join('');
+    return `
+      <tr style="background:#eff6ff;" class="no-break">
+        <td colspan="2"><strong>${group.name}</strong></td>
+        <td class="right"><strong>${fmt(group.subTotal)}</strong></td>
+      </tr>
+      ${deptRows}`;
+  }).join('');
+
+  const unassignedRows = groupedData.unassignedDepts.length > 0
+    ? `<tr style="background:#fef9c3;" class="no-break">
+        <td colspan="2"><strong>Unassigned (Standalone Units)</strong></td>
+        <td class="right"><strong>${fmt(groupedData.unassignedDepts.reduce((s, d) => s + (d.totalAssets || 0), 0))}</strong></td>
+      </tr>` +
+      groupedData.unassignedDepts.map(d =>
+        `<tr class="subrow">
+          <td style="padding-left:20pt;">${d.name}</td>
+          <td>${d.abbr || ''}</td>
+          <td class="right">${fmt(d.totalAssets || 0)}</td>
+        </tr>`
+      ).join('')
+    : '';
+
+  const html = `
+<div class="header">
+  <h1>Unit Consolidation</h1>
+  <p class="subtitle">Institutional grouping of departments for the cross-audit programme.</p>
+</div>
+
+<div class="stat-row">
+  <div class="stat-box">
+    <div class="stat-label">Total Groups</div>
+    <div class="stat-value">${groupedData.groups.length}</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Standalone Units</div>
+    <div class="stat-value">${groupedData.unassignedDepts.length}</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Institution Total Assets</div>
+    <div class="stat-value">${fmt(overallTotal)}</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Group / Department</th>
+      <th>Abbr.</th>
+      <th class="right">Assets</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${groupRows}
+    ${unassignedRows}
+    <tr style="border-top:2pt solid #111;">
+      <td colspan="2"><strong>Grand Total</strong></td>
+      <td class="right"><strong>${fmt(overallTotal)}</strong></td>
+    </tr>
+  </tbody>
+</table>`;
+
+  openPrint('Unit Consolidation', html);
+}
+
+// ─── REPORT 4: Cross-Audit Active Assignment ──────────────────────────────────
+
+interface Entity {
+  id?: string;
+  name: string;
+  assets: number;
+  auditors: number;
+  isConsolidated?: boolean;
+  isJoint?: boolean;
+  members?: { id: string; abbr?: string; name?: string }[];
+}
+
+interface EntityPermission {
+  auditorEntityId: string;
+  targetEntityId: string;
+  isMutual: boolean;
+  rawPermIds?: string[];
+}
+
+export function printCrossAuditAssignments(
+  entityPermissions: EntityPermission[],
+  entities: Entity[],
+): void {
+  if (entityPermissions.length === 0) {
+    alert('No active cross-audit pairings to print.');
+    return;
+  }
+
+  const getEntity = (id: string) => entities.find(e => e.id === id);
+
+  const bodyRows = entityPermissions.map((ep, i) => {
+    const auditor = getEntity(ep.auditorEntityId);
+    const target = getEntity(ep.targetEntityId);
+    const dir = ep.isMutual ? '⇄ Mutual' : '→';
+    const auditorMembers = auditor?.members?.map(m => m.abbr || m.name || '').filter(Boolean) || [];
+    const targetMembers = target?.members?.map(m => m.abbr || m.name || '').filter(Boolean) || [];
+
+    return `<tr>
+      <td>${i + 1}</td>
+      <td>
+        <strong>${auditor?.name || ep.auditorEntityId}</strong><br>
+        ${auditorMembers.map(m => `<span class="pill">${m}</span>`).join(' ')}
+        ${(auditor?.isConsolidated || (auditorMembers.length > 0)) ? '<span style="font-size:7.5pt;color:#6366f1;"> [Group]</span>' : ''}
+      </td>
+      <td class="center"><strong>${dir}</strong></td>
+      <td>
+        <strong>${target?.name || ep.targetEntityId}</strong><br>
+        ${targetMembers.map(m => `<span class="pill">${m}</span>`).join(' ')}
+        ${(target?.isConsolidated || (targetMembers.length > 0)) ? '<span style="font-size:7.5pt;color:#6366f1;"> [Group]</span>' : ''}
+      </td>
+      <td class="right">${fmt(target?.assets || 0)}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `
+<div class="header">
+  <h1>Cross-Audit Active Assignment</h1>
+  <p class="subtitle">Active inspection pairings — inspecting entity and their assigned target.</p>
+</div>
+
+<div class="stat-row">
+  <div class="stat-box">
+    <div class="stat-label">Total Active Pairings</div>
+    <div class="stat-value">${entityPermissions.length}</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Mutual Pairings</div>
+    <div class="stat-value">${entityPermissions.filter(ep => ep.isMutual).length}</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:28pt;">#</th>
+      <th>Inspecting Entity</th>
+      <th class="center" style="width:50pt;">Dir.</th>
+      <th>Target Entity</th>
+      <th class="right" style="width:70pt;">Target Assets</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${bodyRows}
+  </tbody>
+</table>`;
+
+  openPrint('Cross-Audit Active Assignment', html);
+}
+
+// ─── REPORT 5: Inspection Schedule by Department ──────────────────────────────
+
+interface PrintSchedule {
+  id: string;
+  date?: string;
+  locationId: string;
+  departmentId: string;
+  phaseId: string;
+  status: string;
+  auditor1Id?: string;
+  auditor2Id?: string;
+}
+
+interface PrintLocation {
+  id: string;
+  name: string;
+  building?: string;
+  level?: string;
+  totalAssets?: number;
+  contact?: string;
+}
+
+interface PrintDept {
+  id: string;
+  name: string;
+  abbr?: string;
+}
+
+interface PrintUser {
+  id: string;
+  name: string;
+  contactNumber?: string;
+}
+
+interface PrintPhase {
+  id: string;
+  name: string;
+}
+
+export function printInspectionSchedule(
+  schedules: PrintSchedule[],
+  allDepartments: PrintDept[],
+  allLocations: PrintLocation[],
+  users: PrintUser[],
+  phases: PrintPhase[],
+  selectedDept: string,
+): void {
+  if (schedules.length === 0) {
+    alert('No schedules to print for the current selection.');
+    return;
+  }
+
+  const getDept = (id: string) => allDepartments.find(d => d.id === id);
+  const getLoc = (id: string) => allLocations.find(l => l.id === id);
+  const getUser = (id?: string) => id ? users.find(u => u.id === id) : null;
+  const getPhaseName = (id: string) => phases.find(p => p.id === id)?.name || id;
+
+  // Group schedules by department
+  const byDept = new Map<string, PrintSchedule[]>();
+  schedules.forEach(s => {
+    const key = s.departmentId || 'unknown';
+    if (!byDept.has(key)) byDept.set(key, []);
+    byDept.get(key)!.push(s);
+  });
+
+  // Sort within each dept by date
+  byDept.forEach(rows => rows.sort((a, b) => (a.date || '').localeCompare(b.date || '')));
+
+  const statusBadge = (s: string) => {
+    if (s === 'Completed') return `<span class="badge badge-green">${s}</span>`;
+    if (s === 'In Progress') return `<span class="badge badge-blue">${s}</span>`;
+    return `<span class="badge badge-slate">${s}</span>`;
+  };
+
+  const deptSections: string[] = [];
+  let firstSection = true;
+
+  byDept.forEach((rows, deptId) => {
+    const dept = getDept(deptId);
+    const deptName = dept ? `${dept.name}${dept.abbr ? ` (${dept.abbr})` : ''}` : deptId;
+
+    const tableRows = rows.map(s => {
+      const loc = getLoc(s.locationId);
+      const a1 = getUser(s.auditor1Id);
+      const a2 = getUser(s.auditor2Id);
+      const officers = [a1?.name, a2?.name].filter(Boolean).join(', ') || '—';
+
+      return `<tr>
+        <td>${s.date || '<span style="color:#f59e0b;">Unset</span>'}</td>
+        <td>${loc?.name || s.locationId}</td>
+        <td>${loc?.building || '—'}</td>
+        <td>${loc?.level || '—'}</td>
+        <td class="right">${fmt(loc?.totalAssets || 0)}</td>
+        <td>${getPhaseName(s.phaseId)}</td>
+        <td>${officers}</td>
+        <td class="center">${statusBadge(s.status)}</td>
+      </tr>`;
+    }).join('');
+
+    const completed = rows.filter(r => r.status === 'Completed').length;
+    const inProgress = rows.filter(r => r.status === 'In Progress').length;
+    const pending = rows.filter(r => r.status === 'Pending').length;
+
+    deptSections.push(`
+      ${!firstSection ? '<div class="page-break"></div>' : ''}
+      <div class="no-break" style="margin-bottom:4pt;">
+        <h2>${deptName}</h2>
+        <p>${rows.length} inspection(s) &nbsp;|&nbsp;
+          <span class="badge badge-green">Completed: ${completed}</span>&nbsp;
+          <span class="badge badge-blue">In Progress: ${inProgress}</span>&nbsp;
+          <span class="badge badge-slate">Pending: ${pending}</span>
+        </p>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:65pt;">Date</th>
+            <th>Asset Location</th>
+            <th>Block</th>
+            <th>Level</th>
+            <th class="right" style="width:55pt;">Assets</th>
+            <th style="width:65pt;">Phase</th>
+            <th>Inspecting Officers</th>
+            <th class="center" style="width:70pt;">Status</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>`);
+
+    firstSection = false;
+  });
+
+  const filterLabel = selectedDept === 'All'
+    ? 'All Departments'
+    : allDepartments.find(d => d.name === selectedDept)?.name || selectedDept;
+
+  const html = `
+<div class="header">
+  <h1>Inspection Schedule by Department</h1>
+  <p class="subtitle">Filter: ${filterLabel} &nbsp;|&nbsp; ${schedules.length} total inspection(s)</p>
+</div>
+${deptSections.join('\n')}`;
+
+  openPrint(`Inspection Schedule — ${filterLabel}`, html);
+}

@@ -11,6 +11,7 @@ interface PageHeaderProps {
   icon: any;
   activePhase?: AuditPhase | null;
   className?: string;
+  children?: React.ReactNode;
 }
 
 export const PageHeader: React.FC<PageHeaderProps> = ({
@@ -19,7 +20,8 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   description,
   icon: Icon,
   activePhase,
-  className = ''
+  className = '',
+  children
 }) => {
   return (
     <div className={`p-8 rounded-[40px] border-2 transition-all duration-500 overflow-hidden relative ${activePhase
@@ -59,16 +61,21 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           </div>
         </div>
 
-        {activePhase && (
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter mb-1">Window Progress</span>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-xs font-bold font-mono text-emerald-400">
-                  {activePhase.startDate} <ArrowRight className="inline-block w-3 h-3 mx-1 opacity-40" /> {activePhase.endDate}
-                </p>
+        {(children || activePhase) && (
+          <div className="flex items-center gap-3 shrink-0">
+            {children}
+            {activePhase && (
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter mb-1">Window Progress</span>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-xs font-bold font-mono text-emerald-400">
+                      {activePhase.startDate} <ArrowRight className="inline-block w-3 h-3 mx-1 opacity-40" /> {activePhase.endDate}
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

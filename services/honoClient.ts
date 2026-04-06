@@ -38,6 +38,15 @@ async function registerSession(accessToken: string): Promise<void> {
   }
 }
 
+// Tracks the in-flight registerSession promise so App.tsx can await it
+// before firing loadAllData(), preventing SESSION_DISPLACED 401s.
+let _sessionRegistrationPromise: Promise<void> = Promise.resolve();
+
+/** Await this before calling loadAllData() to ensure the KV session entry is written. */
+export function awaitSessionRegistered(): Promise<void> {
+  return _sessionRegistrationPromise;
+}
+
 if (supabase) {
   supabase.auth.onAuthStateChange((event, session) => {
     _cachedToken     = session?.access_token ?? null;
@@ -46,8 +55,8 @@ if (supabase) {
       : 0;
 
     if (session?.access_token && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-      // Register / renew the KV session entry so single-session enforcement stays current
-      registerSession(session.access_token);
+      // Store the promise so App.tsx can await it before loading data
+      _sessionRegistrationPromise = registerSession(session.access_token);
     }
   });
 }

@@ -30,6 +30,7 @@ export interface User {
   lastActive?: string;
   certificationIssued?: string; // ISO-8601 date string
   certificationExpiry?: string; // ISO-8601 date string
+  renewalRequested?: string | null; // ISO-8601 date string when officer applied for renewal
   status: 'Active' | 'Inactive' | 'Suspended' | 'Pending';
   isVerified?: boolean;
   mustChangePIN?: boolean;

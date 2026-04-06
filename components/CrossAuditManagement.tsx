@@ -8,6 +8,8 @@ import { MatrixCard } from './MatrixCard';
 import { InstitutionalConsolidationView } from './InstitutionalConsolidationView';
 import { GroupBuilderTab } from './GroupBuilderTab';
 import { AuditConstraints } from './AuditConstraints';
+import { PrintButton } from './PrintButton';
+import { printCrossAuditAssignments } from '../lib/printUtils';
 
 interface StrategicPair {
   target: { id: string; name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
@@ -703,6 +705,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
               <p className="text-slate-500 font-medium">Configure institutional consolidation and generate anti-bias pairing strategies.</p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
+              <PrintButton
+                onClick={() => printCrossAuditAssignments(liveEntityPermissions, entities)}
+                label="Print"
+                title="Print Active Cross-Audit Assignments"
+              />
               <button
                 onClick={() => setShowConstraints(!showConstraints)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all ${

@@ -195,10 +195,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Language Selection Removed (v1.9.6) */}
             <div className="bg-slate-900 rounded-2xl p-4 text-white relative overflow-hidden">
               <div className="relative z-10">
-                <p className="text-xs font-medium text-slate-400 mb-1">Database Connection</p>
+                <p className="text-xs font-medium text-slate-400 mb-1">Infrastructure</p>
                 <p className="text-sm font-bold mb-3 flex items-center gap-2">
                   <Server className="w-4 h-4 text-emerald-400" />
-                  Supabase Cloud
+                  Cloudflare Workers
                 </p>
                 <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full w-full bg-emerald-500"></div>
@@ -206,7 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-[10px] text-emerald-300 font-bold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-                    Cloud Instance
+                    D1 · KV · R2
                   </p>
                   <span className="text-[10px] text-slate-500 font-mono font-medium">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</span>
                 </div>

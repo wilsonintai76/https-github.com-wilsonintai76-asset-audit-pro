@@ -2,6 +2,8 @@
 import React, { useMemo } from 'react';
 import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget } from '../types';
 import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle } from 'lucide-react';
+import { PrintButton } from './PrintButton';
+import { printKPIPhasePlan } from '../lib/printUtils';
 
 interface TierDistributionTableProps {
   departments: Department[];
@@ -76,15 +78,22 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
           <h3 className="text-lg font-bold text-slate-900">KPI Phase Inspection Plan</h3>
           <p className="text-xs text-slate-500 mt-1">Required inspection phases per department based on their KPI tier. Click <strong>Rebalance</strong> to auto-assign.</p>
         </div>
-        <div className="flex gap-4">
-           <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Inspection Scheduled</span>
-           </div>
-           <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-slate-200"></div>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Not Required</span>
-           </div>
+        <div className="flex items-center gap-4">
+          <PrintButton
+            onClick={() => printKPIPhasePlan(tableData, sortedPhases)}
+            label="Print"
+            title="Print KPI Phase Inspection Plan"
+          />
+          <div className="flex gap-4">
+             <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Inspection Scheduled</span>
+             </div>
+             <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-slate-200"></div>
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Not Required</span>
+             </div>
+          </div>
         </div>
       </div>
       

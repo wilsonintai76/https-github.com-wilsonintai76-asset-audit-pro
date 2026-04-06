@@ -172,6 +172,7 @@ const patchUserSchema = z.object({
   lastActive: z.string().optional(),
   certificationIssued: z.string().nullable().optional(),
   certificationExpiry: z.string().nullable().optional(),
+  renewalRequested: z.string().nullable().optional(),
 });
 
 db.get('/audits', async (c) => {
@@ -296,7 +297,7 @@ db.post('/audits/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
 db.get('/users', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
-    'SELECT id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, last_active FROM users',
+    'SELECT id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, renewal_requested, last_active FROM users',
   ).all();
 
     return c.json((results || []).map((u: any) => ({
@@ -313,6 +314,7 @@ db.get('/users', async (c) => {
       mustChangePIN: u.must_change_pin === 1,
       certificationIssued: u.certification_issued,
       certificationExpiry: u.certification_expiry,
+      renewalRequested: u.renewal_requested ?? null,
       lastActive: u.last_active,
     })));
   } catch (err: any) {
@@ -380,6 +382,7 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
   if (updates.lastActive !== undefined) { fields.push('last_active = ?'); values.push(updates.lastActive); }
   if (updates.certificationIssued !== undefined) { fields.push('certification_issued = ?'); values.push(updates.certificationIssued); }
   if (updates.certificationExpiry !== undefined) { fields.push('certification_expiry = ?'); values.push(updates.certificationExpiry); }
+  if (updates.renewalRequested !== undefined) { fields.push('renewal_requested = ?'); values.push(updates.renewalRequested); }
 
   if (fields.length === 0) return c.json({ success: true });
 
@@ -390,7 +393,7 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
     // Evict cached roles/departmentId if any privileged fields changed
     const privilegedChanged = updates.roles !== undefined || updates.departmentId !== undefined
       || updates.isVerified !== undefined || updates.certificationIssued !== undefined
-      || updates.certificationExpiry !== undefined;
+      || updates.certificationExpiry !== undefined || updates.renewalRequested !== undefined;
     if (privilegedChanged) {
       await c.env.SETTINGS.delete(`ucache:${id}`).catch(() => {});
     }
