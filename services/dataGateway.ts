@@ -155,6 +155,18 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db.departments.clear.$post({ json: { keep_user_id: currentUserId } }, { headers: h }));
   }
 
+  async clearAllUsers(currentUserId?: string) {
+    await this.rpc<unknown>(h => (api as any).db.users.clear.$post({ json: { keep_user_id: currentUserId } }, { headers: h }));
+  }
+
+  async clearAuditPhases() {
+    await this.rpc<unknown>(h => (api as any).db['audit-phases'].clear.$post({}, { headers: h }));
+  }
+
+  async clearKPI() {
+    await this.rpc<unknown>(h => (api as any).db.kpi.clear.$post({}, { headers: h }));
+  }
+
   async fullSystemReset(adminUserId?: string) {
     await this.rpc<unknown>(h => (api as any).db.system['full-reset'].$post({ json: { keep_user_id: adminUserId } }, { headers: h }));
   }

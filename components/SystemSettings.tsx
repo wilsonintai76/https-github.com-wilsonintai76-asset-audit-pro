@@ -7,7 +7,7 @@ import { KPISettings } from './KPISettings';
 import { TierDistributionTable } from './TierDistributionTable';
 import { DataManagementWorkflow } from './DataManagementWorkflow';
 import { RBACMatrix } from './RBACMatrix';
-import { Zap, Sliders, AlertCircle, Eye, Calendar, UserCheck, Users, UserPlus, Edit, ShieldAlert, ShieldCheck, Network, Lock, Unlock } from 'lucide-react';
+import { Zap, Sliders, AlertCircle, Eye, Calendar, UserCheck, Users, UserPlus, Edit, ShieldAlert, ShieldCheck, Network, Lock, Unlock, RotateCcw, Building2, Trash2 } from 'lucide-react';
 import { BackupButton } from './BackupButton';
 import { PageHeader } from './PageHeader';
 import { GroupBuilderTab } from './GroupBuilderTab';
@@ -36,6 +36,10 @@ interface SystemSettingsProps {
   onUpdateInstitutionKPI: (phaseId: string, percentage: number) => void;
   onResetLocations: () => void;
   onResetOperationalData: () => void;
+  onResetDepartments: () => void;
+  onResetUsers: () => void;
+  onResetPhases: () => void;
+  onResetKPI: () => void;
   isSystemLocked: boolean;
   onBulkAddLocs: (locs: Omit<Location, 'id'>[]) => void;
   onBulkAddDepts: (depts: Omit<Department, 'id'>[]) => void;
@@ -90,6 +94,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onUpdateKPITierTarget,
   onResetLocations,
   onResetOperationalData,
+  onResetDepartments,
+  onResetUsers,
+  onResetPhases,
+  onResetKPI,
   isSystemLocked,
   onBulkAddLocs,
   onBulkAddDepts,
@@ -164,26 +172,62 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         />
       )}
 
-      <AuditPhasesSettings
-        phases={phases}
-        isAdmin={isAdmin}
-        onAdd={onAddPhase}
-        onUpdate={onUpdatePhase}
-        onDelete={onDeletePhase}
-      />
+      <div className="relative">
+        <AuditPhasesSettings
+          phases={phases}
+          isAdmin={isAdmin}
+          onAdd={onAddPhase}
+          onUpdate={onUpdatePhase}
+          onDelete={onDeletePhase}
+        />
+        {isAdmin && (
+          <div className="flex justify-end mt-2 pr-2">
+            <button
+              onClick={onResetPhases}
+              disabled={isSystemLocked}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                isSystemLocked
+                  ? 'text-slate-300 cursor-not-allowed'
+                  : 'text-red-400 hover:text-red-600 hover:bg-red-50'
+              }`}
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset Phases
+            </button>
+          </div>
+        )}
+      </div>
 
-      <KPISettings
-        tiers={kpiTiers}
-        phases={phases}
-        tierTargets={kpiTierTargets}
-        institutionKPIs={institutionKPIs}
-        departments={departments}
-        onAddTier={onAddKPITier}
-        onUpdateTier={onUpdateKPITier}
-        onDeleteTier={onDeleteKPITier}
-        onUpdateTarget={onUpdateKPITierTarget}
-        onUpdateInstitutionKPI={onUpdateInstitutionKPI}
-      />
+      <div className="relative">
+        <KPISettings
+          tiers={kpiTiers}
+          phases={phases}
+          tierTargets={kpiTierTargets}
+          institutionKPIs={institutionKPIs}
+          departments={departments}
+          onAddTier={onAddKPITier}
+          onUpdateTier={onUpdateKPITier}
+          onDeleteTier={onDeleteKPITier}
+          onUpdateTarget={onUpdateKPITierTarget}
+          onUpdateInstitutionKPI={onUpdateInstitutionKPI}
+        />
+        {isAdmin && (
+          <div className="flex justify-end mt-2 pr-2">
+            <button
+              onClick={onResetKPI}
+              disabled={isSystemLocked}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                isSystemLocked
+                  ? 'text-slate-300 cursor-not-allowed'
+                  : 'text-red-400 hover:text-red-600 hover:bg-red-50'
+              }`}
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reset KPI Tiers
+            </button>
+          </div>
+        )}
+      </div>
 
       {(phases?.length > 0 && kpiTiers?.length > 0) && (
         <div className="space-y-8">
@@ -302,29 +346,122 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             </div>
           )}
 
-          <div className="flex flex-wrap gap-4 mt-6">
-            <button
-              onClick={onResetLocations}
-              disabled={isSystemLocked}
-              className={`px-6 py-3 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2 ${
-                isSystemLocked
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed grayscale'
-                : 'bg-white border border-red-200 text-red-600 hover:bg-red-600 hover:text-white'
-              }`}
-            >
-              Reset Locations & Audits
-            </button>
-            <button
-              onClick={onResetOperationalData}
-              disabled={isSystemLocked}
-              className={`px-6 py-3 rounded-xl text-sm font-bold shadow-lg transition-all flex items-center gap-2 ${
-                isSystemLocked
-                ? 'bg-slate-200 text-slate-400 cursor-not-allowed grayscale shadow-none'
-                : 'bg-red-600 text-white shadow-red-500/20 hover:bg-red-700'
-              }`}
-            >
-              Reset Operational Data (Depts, Locs, Members)
-            </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+            {/* Reset Departments */}
+            <div className={`rounded-2xl border p-4 transition-all ${
+              isSystemLocked ? 'border-slate-100 bg-slate-50' : 'border-red-100 bg-white hover:border-red-200'
+            }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  isSystemLocked ? 'bg-slate-100 text-slate-300' : 'bg-red-50 text-red-500'
+                }`}>
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${isSystemLocked ? 'text-slate-400' : 'text-slate-900'}`}>Reset Departments</h4>
+                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Clears departments, locations, mappings, schedules &amp; users</p>
+                </div>
+              </div>
+              <button
+                onClick={onResetDepartments}
+                disabled={isSystemLocked}
+                className={`w-full mt-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  isSystemLocked
+                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                    : 'bg-white border border-red-200 text-red-600 hover:bg-red-600 hover:text-white'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Clear Departments
+              </button>
+            </div>
+
+            {/* Reset Users */}
+            <div className={`rounded-2xl border p-4 transition-all ${
+              isSystemLocked ? 'border-slate-100 bg-slate-50' : 'border-red-100 bg-white hover:border-red-200'
+            }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  isSystemLocked ? 'bg-slate-100 text-slate-300' : 'bg-red-50 text-red-500'
+                }`}>
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${isSystemLocked ? 'text-slate-400' : 'text-slate-900'}`}>Reset Users</h4>
+                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Removes all users except you</p>
+                </div>
+              </div>
+              <button
+                onClick={onResetUsers}
+                disabled={isSystemLocked}
+                className={`w-full mt-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  isSystemLocked
+                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                    : 'bg-white border border-red-200 text-red-600 hover:bg-red-600 hover:text-white'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Clear Users
+              </button>
+            </div>
+
+            {/* Reset Locations & Audits */}
+            <div className={`rounded-2xl border p-4 transition-all ${
+              isSystemLocked ? 'border-slate-100 bg-slate-50' : 'border-red-100 bg-white hover:border-red-200'
+            }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  isSystemLocked ? 'bg-slate-100 text-slate-300' : 'bg-red-50 text-red-500'
+                }`}>
+                  <RotateCcw className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${isSystemLocked ? 'text-slate-400' : 'text-slate-900'}`}>Reset Locations & Audits</h4>
+                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Clears locations &amp; audit schedules only</p>
+                </div>
+              </div>
+              <button
+                onClick={onResetLocations}
+                disabled={isSystemLocked}
+                className={`w-full mt-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  isSystemLocked
+                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                    : 'bg-white border border-red-200 text-red-600 hover:bg-red-600 hover:text-white'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Clear Locations
+              </button>
+            </div>
+
+            {/* Full System Reset */}
+            <div className={`rounded-2xl border p-4 transition-all ${
+              isSystemLocked ? 'border-slate-100 bg-slate-50' : 'border-red-200 bg-red-50/50 hover:border-red-300'
+            }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  isSystemLocked ? 'bg-slate-100 text-slate-300' : 'bg-red-100 text-red-600'
+                }`}>
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${isSystemLocked ? 'text-slate-400' : 'text-red-900'}`}>Full System Reset</h4>
+                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-red-400'}`}>Wipes everything &amp; restarts clean</p>
+                </div>
+              </div>
+              <button
+                onClick={onResetOperationalData}
+                disabled={isSystemLocked}
+                className={`w-full mt-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  isSystemLocked
+                    ? 'bg-slate-200 text-slate-300 cursor-not-allowed shadow-none'
+                    : 'bg-red-600 text-white shadow-lg shadow-red-500/20 hover:bg-red-700'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Reset Everything
+              </button>
+            </div>
           </div>
         </div>
       )}

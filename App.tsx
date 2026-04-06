@@ -1550,6 +1550,86 @@ const App: React.FC = () => {
     );
   };
 
+  const handleResetDepartments = async () => {
+    customConfirm(
+      "Reset Departments",
+      "This will delete ALL departments, locations, mappings, schedules, and users (except you). Proceed?",
+      async () => {
+        try {
+          await gateway.clearAllDepartments(currentUser.id);
+          setDepartments([]);
+          setLocations([]);
+          setSchedules([]);
+          setCrossAuditPermissions([]);
+          setDepartmentMappings([]);
+          const updatedUsers = await gateway.getUsers();
+          setUsers(updatedUsers);
+          setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
+          showToast('Departments cleared successfully.');
+        } catch (e) {
+          showError(e, 'Failed to reset departments');
+        }
+      }
+    );
+  };
+
+  const handleResetUsers = async () => {
+    customConfirm(
+      "Reset Users",
+      "This will delete ALL users except you. Their department assignments will also be cleared. Proceed?",
+      async () => {
+        try {
+          await gateway.clearAllUsers(currentUser.id);
+          const updatedUsers = await gateway.getUsers();
+          setUsers(updatedUsers);
+          setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
+          showToast('Users cleared successfully. Only your account remains.');
+        } catch (e) {
+          showError(e, 'Failed to reset users');
+        }
+      }
+    );
+  };
+
+  const handleResetPhases = async () => {
+    customConfirm(
+      "Reset Audit Phases",
+      "This will delete ALL audit phases, schedules, and KPI targets tied to phases. Default phases will be recreated. Proceed?",
+      async () => {
+        try {
+          await gateway.clearAuditPhases();
+          setAuditPhases([]);
+          setSchedules([]);
+          setKpiTierTargets([]);
+          setInstitutionKPIs([]);
+          await loadAllData();
+          showToast('Audit phases reset and defaults recreated.');
+        } catch (e) {
+          showError(e, 'Failed to reset audit phases');
+        }
+      }
+    );
+  };
+
+  const handleResetKPI = async () => {
+    customConfirm(
+      "Reset KPI Tiers",
+      "This will delete ALL KPI tiers and their targets. Defaults will be recreated. Proceed?",
+      async () => {
+        try {
+          await gateway.clearKPI();
+          setKpiTiers([]);
+          setKpiTierTargets([]);
+          setInstitutionKPIs([]);
+          await loadAllData();
+          showToast('KPI tiers reset and defaults recreated.');
+        } catch (e) {
+          showError(e, 'Failed to reset KPI tiers');
+        }
+      }
+    );
+  };
+
   const handleAddDepartmentMapping = async (mapping: Omit<DepartmentMapping, 'id'>) => {
     try {
       await gateway.addDepartmentMapping(mapping);
@@ -2377,6 +2457,10 @@ const App: React.FC = () => {
               onUpdateInstitutionKPI={handleUpdateInstitutionKPI}
               onResetLocations={handleResetLocations}
               onResetOperationalData={handleResetOperationalData}
+              onResetDepartments={handleResetDepartments}
+              onResetUsers={handleResetUsers}
+              onResetPhases={handleResetPhases}
+              onResetKPI={handleResetKPI}
               isSystemLocked={isSystemLocked}
               onBulkAddLocs={handleBulkAddLocs}
               onBulkAddDepts={handleBulkAddDepts}

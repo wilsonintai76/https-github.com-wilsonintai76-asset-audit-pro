@@ -448,7 +448,7 @@ db.post('/users/:id/verify', requireRoles('Admin'), async (c) => {
 });
 
 // Departments
-db.get('/departments', edgeCache(60), async (c) => {
+db.get('/departments', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
     'SELECT id, name, abbr, description, head_of_dept_id, audit_group_id, is_exempted, total_assets, uninspected_asset_count FROM departments',
@@ -541,21 +541,20 @@ db.post('/departments/clear', requireRoles('Admin'), async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const keep_user_id: string | undefined = body?.keep_user_id;
   try {
-    // FK-safe order: deepest children first.
-    // system_activities has FK → users, so it must be deleted before users.
-    // buildings has FK from locations, so delete after locations.
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM audit_schedules'),
-      c.env.DB.prepare('DELETE FROM cross_audit_permissions'),
-      c.env.DB.prepare('DELETE FROM department_mappings'),
-      c.env.DB.prepare('DELETE FROM locations'),
-      c.env.DB.prepare('DELETE FROM buildings'),
-      c.env.DB.prepare('DELETE FROM system_activities'),
-      keep_user_id
-        ? c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id)
-        : c.env.DB.prepare('DELETE FROM users'),
-      c.env.DB.prepare('DELETE FROM departments'),
-    ]);
+    // Sequential individual DELETEs — not batch — so each auto-commits independently.
+    await c.env.DB.prepare('DELETE FROM audit_schedules').run();
+    await c.env.DB.prepare('DELETE FROM cross_audit_permissions').run();
+    await c.env.DB.prepare('DELETE FROM department_mappings').run();
+    await c.env.DB.prepare('DELETE FROM locations').run();
+    await c.env.DB.prepare('DELETE FROM buildings').run();
+    await c.env.DB.prepare('DELETE FROM system_activities').run();
+    if (keep_user_id) {
+      await c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id).run();
+    } else {
+      await c.env.DB.prepare('DELETE FROM users').run();
+    }
+    await c.env.DB.prepare('DELETE FROM departments').run();
+    await c.env.SETTINGS.delete('buildings').catch(() => {});
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -563,7 +562,7 @@ db.post('/departments/clear', requireRoles('Admin'), async (c) => {
 });
 
 // Locations
-db.get('/locations', edgeCache(60), async (c) => {
+db.get('/locations', async (c) => {
   try {
     const { results } = await c.env.DB.prepare(
     'SELECT id, name, abbr, department_id, building_id, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status FROM locations',
@@ -1371,15 +1370,63 @@ db.post('/system/initialize-defaults', requireRoles('Admin'), async (c) => {
   }
 });
 
+// ─── USERS CLEAR ─────────────────────────────────────────────────────────────
+db.post('/users/clear', requireRoles('Admin'), async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const keep_user_id: string | undefined = body?.keep_user_id;
+  try {
+    await c.env.DB.prepare('DELETE FROM system_activities').run();
+    if (keep_user_id) {
+      await c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id).run();
+    } else {
+      await c.env.DB.prepare('DELETE FROM users').run();
+    }
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// ─── AUDIT PHASES CLEAR ─────────────────────────────────────────────────────
+db.post('/audit-phases/clear', requireRoles('Admin'), async (c) => {
+  try {
+    // audit_schedules has FK → audit_phases
+    await c.env.DB.prepare('DELETE FROM audit_schedules').run();
+    // kpi_tier_targets has FK → audit_phases
+    await c.env.DB.prepare('DELETE FROM kpi_tier_targets').run();
+    // institution_kpi_targets has FK → audit_phases (phase_id)
+    await c.env.DB.prepare('DELETE FROM institution_kpi_targets').run();
+    await c.env.DB.prepare('DELETE FROM audit_phases').run();
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// ─── KPI CLEAR ──────────────────────────────────────────────────────────────
+db.post('/kpi/clear', requireRoles('Admin'), async (c) => {
+  try {
+    // kpi_tier_targets has FK → kpi_tiers
+    await c.env.DB.prepare('DELETE FROM kpi_tier_targets').run();
+    await c.env.DB.prepare('DELETE FROM institution_kpi_targets').run();
+    await c.env.DB.prepare('DELETE FROM kpi_tiers').run();
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // ─── FULL SYSTEM RESET ───────────────────────────────────────────────────────
-// Atomically wipes ALL operational data including phases, KPI, groups, and
-// audit schedules. Keeps only the requesting admin user and clears pairing_lock.
+// Wipes ALL operational data including phases, KPI, groups, and audit schedules.
+// Keeps only the requesting admin user.
+// Uses sequential individual DELETEs (not batch) so each table is independently
+// committed. A batch() is atomic — if ANY statement fails the ENTIRE batch rolls
+// back silently, which previously left departments intact.
 db.post('/system/full-reset', requireRoles('Admin'), async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const keep_user_id: string | undefined = body?.keep_user_id;
   try {
-    // Purge edge cache for all GET routes that use edgeCache() before deleting,
-    // so post-reset loadAllData() never receives stale IDs from cache and hits an FK error.
+    // Purge any lingering edge cache entries from older deployments
     try {
       const edgeCacheStore = await caches.open('db');
       const origin = new URL(c.req.url).origin;
@@ -1390,30 +1437,48 @@ db.post('/system/full-reset', requireRoles('Admin'), async (c) => {
       ].map(path => edgeCacheStore.delete(new Request(`${origin}${path}`))));
     } catch { /* cache purge is best-effort */ }
 
-    // FK-safe deletion order — every child table before its parent:
-    //   audit_schedules → locations, departments, audit_phases
-    //   locations       → departments, buildings
-    //   system_activities → users  (CRITICAL: was missing — caused entire batch to FK-fail
-    //                               and roll back, leaving departments intact)
-    //   kpi_tier_targets → kpi_tiers, audit_phases
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM audit_schedules'),
-      c.env.DB.prepare('DELETE FROM cross_audit_permissions'),
-      c.env.DB.prepare('DELETE FROM department_mappings'),
-      c.env.DB.prepare('DELETE FROM locations'),
-      c.env.DB.prepare('DELETE FROM buildings'),
-      c.env.DB.prepare('DELETE FROM system_activities'),
-      keep_user_id
-        ? c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id)
-        : c.env.DB.prepare('DELETE FROM users'),
-      c.env.DB.prepare('DELETE FROM departments'),
-      c.env.DB.prepare('DELETE FROM audit_groups'),
-      c.env.DB.prepare('DELETE FROM kpi_tier_targets'),
-      c.env.DB.prepare('DELETE FROM institution_kpi_targets'),
-      c.env.DB.prepare('DELETE FROM kpi_tiers'),
-      c.env.DB.prepare('DELETE FROM audit_phases'),
-      c.env.DB.prepare('DELETE FROM system_settings'),
-    ]);
+    // FK-safe deletion order — every child table before its parent.
+    // Sequential individual DELETEs so each auto-commits independently.
+    // If one fails, the rest still execute.
+    const deletes: { table: string; sql: string; binds?: any[] }[] = [
+      { table: 'audit_schedules',       sql: 'DELETE FROM audit_schedules' },
+      { table: 'cross_audit_permissions', sql: 'DELETE FROM cross_audit_permissions' },
+      { table: 'department_mappings',    sql: 'DELETE FROM department_mappings' },
+      { table: 'locations',              sql: 'DELETE FROM locations' },
+      { table: 'buildings',              sql: 'DELETE FROM buildings' },
+      { table: 'system_activities',      sql: 'DELETE FROM system_activities' },
+      { table: 'users',
+        sql: keep_user_id ? 'DELETE FROM users WHERE id != ?' : 'DELETE FROM users',
+        binds: keep_user_id ? [keep_user_id] : [] },
+      { table: 'departments',           sql: 'DELETE FROM departments' },
+      { table: 'audit_groups',          sql: 'DELETE FROM audit_groups' },
+      { table: 'kpi_tier_targets',      sql: 'DELETE FROM kpi_tier_targets' },
+      { table: 'institution_kpi_targets', sql: 'DELETE FROM institution_kpi_targets' },
+      { table: 'kpi_tiers',             sql: 'DELETE FROM kpi_tiers' },
+      { table: 'audit_phases',          sql: 'DELETE FROM audit_phases' },
+      { table: 'system_settings',       sql: 'DELETE FROM system_settings' },
+    ];
+
+    const errors: string[] = [];
+    for (const d of deletes) {
+      try {
+        const stmt = c.env.DB.prepare(d.sql);
+        if (d.binds && d.binds.length > 0) {
+          await stmt.bind(...d.binds).run();
+        } else {
+          await stmt.run();
+        }
+      } catch (e: any) {
+        errors.push(`${d.table}: ${e.message}`);
+      }
+    }
+
+    // Also clear KV buildings cache
+    await c.env.SETTINGS.delete('buildings').catch(() => {});
+
+    if (errors.length > 0) {
+      return c.json({ success: true, warnings: errors });
+    }
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
