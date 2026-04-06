@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
@@ -28,6 +28,22 @@ interface OverviewDashboardProps {
   institutionKPIs?: InstitutionKPITarget[];
   buildings?: Building[];
   kpiTierTargets?: KPITierTarget[];
+}
+
+function BarFill({ pct, className }: { pct: number; className: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    ref.current?.style.setProperty('--w', `${pct}%`);
+  }, [pct]);
+  return <div ref={ref} className={`w-(--w) ${className}`} />;
+}
+
+function HeightFill({ pct, className }: { pct: number; className: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    ref.current?.style.setProperty('--h', `${pct}%`);
+  }, [pct]);
+  return <div ref={ref} className={`h-(--h) ${className}`} />;
 }
 
 export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
@@ -262,7 +278,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
       {/* Institutional Progress Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="rounded-[32px] border-slate-200 shadow-sm p-6 bg-gradient-to-br from-indigo-600 to-indigo-700 text-white md:col-span-2">
+          <Card className="rounded-[32px] border-slate-200 shadow-sm p-6 bg-linear-to-br from-indigo-600 to-indigo-700 text-white md:col-span-2">
               <div className="flex justify-between items-start mb-6">
                   <div>
                       <p className="text-indigo-100 text-[10px] font-black uppercase tracking-widest mb-1">Overall Inspection Progress</p>
@@ -274,7 +290,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               </div>
               <div className="space-y-3">
                   <div className="h-2 w-full bg-white/20 rounded-full overflow-hidden">
-                      <div className="h-full bg-white rounded-full" style={{ width: `${overallStats.progress}%` }} />
+                      <BarFill pct={overallStats.progress} className="h-full bg-white rounded-full" />
                   </div>
                   <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-indigo-100">
                       <span>{overallStats.inspected.toLocaleString()} Assets Inspected</span>
@@ -314,7 +330,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               </div>
               <div className="flex flex-wrap gap-2">
                 <Select value={selectedDept} onValueChange={setSelectedDept}>
-                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-[150px]">
+                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-37.5">
                     <SelectValue placeholder="All Departments" />
                   </SelectTrigger>
                   <SelectContent>
@@ -325,7 +341,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                   </SelectContent>
                 </Select>
                 <Select value={selectedBlock} onValueChange={setSelectedBlock}>
-                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-[150px]">
+                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-37.5">
                     <SelectValue placeholder="All Buildings" />
                   </SelectTrigger>
                   <SelectContent>
@@ -338,7 +354,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                   </SelectContent>
                 </Select>
                 <Select value={selectedLevel} onValueChange={setSelectedLevel}>
-                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-[110px]">
+                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-27.5">
                     <SelectValue placeholder="All Levels" />
                   </SelectTrigger>
                   <SelectContent>
@@ -355,8 +371,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               <tr className="bg-slate-50/50">
                 <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
                 <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Total Assets</th>
-                <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center text-emerald-600">Inspected</th>
-                <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center text-rose-500">Uninspected</th>
+                <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-emerald-600">Inspected</th>
+                <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-rose-500">Uninspected</th>
                 <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Progress (%)</th>
               </tr>
             </thead>
@@ -378,11 +394,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                   <td className="py-5 px-8">
                     <div className="flex items-center justify-end gap-3">
                       <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
-                        <div 
+                        <BarFill
+                          pct={stats.progress}
                           className={`h-full rounded-full transition-all duration-1000 ${
                             stats.progress >= 100 ? 'bg-emerald-500' : stats.progress > 50 ? 'bg-indigo-500' : 'bg-rose-400'
                           }`}
-                          style={{ width: `${stats.progress}%` }} 
                         />
                       </div>
                       <span className="text-xs font-black text-slate-900 w-12 text-right">{stats.progress.toFixed(1)}%</span>
@@ -431,11 +447,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               <CardContent className="p-8 pt-0">
                 <div className="h-48 flex items-end gap-3 md:gap-6">
                   {[45, 78, 55, 90, 65, 82, 95].map((height, i) => (
-                    <div key={i} className="flex-grow flex flex-col items-center group">
-                      <div 
+                    <div key={i} className="grow flex flex-col items-center group">
+                    <HeightFill
+                        pct={height}
                         className={`w-full rounded-t-lg transition-all duration-500 ${i === 6 ? 'bg-blue-600' : 'bg-slate-100 group-hover:bg-slate-200'}`}
-                        style={{ height: `${height}%` }}
-                      ></div>
+                      />
                       <span className="text-[10px] font-bold text-slate-400 mt-2 uppercase">Day 0{i+1}</span>
                     </div>
                   ))}
@@ -455,12 +471,12 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                       <span className="text-slate-400">{count} Locations</span>
                     </div>
                     <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div 
+                      <BarFill
+                        pct={(count / (filteredLocations?.length || 1)) * 100}
                         className={`h-full rounded-full transition-all duration-1000 delay-${idx * 100} ${
                           idx % 3 === 0 ? 'bg-blue-500' : idx % 3 === 1 ? 'bg-indigo-500' : 'bg-slate-400'
                         }`}
-                        style={{ width: `${(count / (filteredLocations?.length || 1)) * 100}%` }}
-                      ></div>
+                      />
                     </div>
                   </div>
                 ))}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   CalendarCheck,
   Network,
@@ -31,6 +31,14 @@ interface LandingPageProps {
   topDepartments?: { name: string, compliance: number }[];
 }
 
+function DeptComplianceBar({ compliance }: { compliance: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.style.setProperty('--w', `${compliance}%`);
+  }, [compliance]);
+  return <div ref={ref} className="h-full bg-emerald-500 w-(--w)"></div>;
+}
+
 export const LandingPage: React.FC<LandingPageProps> = ({ 
   onEnter, 
   onShowKnowledgeBase,
@@ -43,19 +51,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 }) => {
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const blob1Ref = useRef<HTMLDivElement>(null);
+  const blob2Ref = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({
-        x: (e.clientX / window.innerWidth - 0.5) * 20,
-        y: (e.clientY / window.innerHeight - 0.5) * 20
-      });
+      const x = (e.clientX / window.innerWidth - 0.5) * 20;
+      const y = (e.clientY / window.innerHeight - 0.5) * 20;
+      blob1Ref.current?.style.setProperty('transform', `translate(${x}px, ${y}px)`);
+      blob2Ref.current?.style.setProperty('transform', `translate(${-x * 1.5}px, ${-y * 1.5}px)`);
     };
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
+
+  useEffect(() => {
+    progressRef.current?.style.setProperty('--w', `${complianceProgress ?? 0}%`);
+  }, [complianceProgress]);
 
   const faqs = [
     {
@@ -115,18 +129,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* Background Decor */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div 
+          ref={blob1Ref}
           className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-blue-400/10 rounded-full blur-[120px] transition-transform duration-700 ease-out"
-          style={{ transform: `translate(${mousePos.x}px, ${mousePos.y}px)` }}
         ></div>
         <div 
+          ref={blob2Ref}
           className="absolute top-[20%] -right-[5%] w-[30%] h-[30%] bg-indigo-400/10 rounded-full blur-[100px] transition-transform duration-1000 ease-out"
-          style={{ transform: `translate(${-mousePos.x * 1.5}px, ${-mousePos.y * 1.5}px)` }}
         ></div>
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#1e293b 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+        <div className="absolute inset-0 opacity-[0.03] bg-dot-pattern"></div>
       </div>
 
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/80 backdrop-blur-md border-b border-slate-200">
+      <nav className="fixed top-0 left-0 right-0 z-100 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div className="h-10 flex items-center justify-center">
                <img 
@@ -184,7 +198,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
             <h1 className="text-5xl md:text-7xl font-black text-slate-900 leading-[1.1] mb-6 tracking-tight">
-              Eliminate <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Bias</span> in Auditing.
+              Eliminate <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-600 to-indigo-600">Bias</span> in Auditing.
             </h1>
             <p className="text-lg text-slate-500 mb-10 leading-relaxed max-w-lg font-medium">
               The central source of truth for Inspect-able operations. Understand how our anti-bias pairing works and how to manage institutional compliance.
@@ -213,7 +227,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="relative animate-in fade-in slide-in-from-right-8 duration-1000 delay-200 hidden lg:block">
             <div className="relative bg-white rounded-[56px] shadow-2xl border border-slate-100 p-4">
-              <div className="bg-slate-900 rounded-[44px] p-8 text-white min-h-[400px]">
+              <div className="bg-slate-900 rounded-[44px] p-8 text-white min-h-100">
                 <div className="flex items-center justify-between mb-8">
                   <div className="flex gap-2">
                     <div className="w-3 h-3 rounded-full bg-rose-500"></div>
@@ -240,7 +254,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             </div>
                             <div className="flex items-center gap-2">
                               <div className="h-1 w-12 bg-white/10 rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-500" style={{ width: `${dept.compliance}%` }}></div>
+                                <DeptComplianceBar compliance={dept.compliance} />
                               </div>
                               <span className="text-[10px] font-mono text-emerald-400">{dept.compliance}%</span>
                             </div>
@@ -259,8 +273,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
                     <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-blue-500 rounded-full transition-all duration-1000" 
-                        style={{ width: `${complianceProgress ?? 0}%` }}
+                        ref={progressRef}
+                        className="h-full bg-blue-500 rounded-full transition-all duration-1000 w-(--w)" 
                       ></div>
                     </div>
                   </div>
@@ -339,12 +353,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* TOUR OVERLAY */}
       {isTourOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-1000 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-xl animate-in fade-in" onClick={() => setIsTourOpen(false)}></div>
           <div className="relative bg-white w-full max-w-2xl rounded-[48px] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
             <div className="p-8 md:p-12 text-center">
               <button
                 onClick={() => setIsTourOpen(false)}
+                title="Close tour"
                 className="absolute top-8 right-8 text-slate-400 hover:text-slate-600"
               >
                 <X className="w-8 h-8" />
@@ -364,6 +379,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <button
                   onClick={() => setTourStep(prev => Math.max(0, prev - 1))}
                   disabled={tourStep === 0}
+                  title="Previous"
                   className="w-12 h-12 rounded-full border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all disabled:opacity-30 flex items-center justify-center"
                 >
                   <ArrowLeft className="w-5 h-5" />
@@ -377,6 +393,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
                 <button
                   onClick={() => tourStep === 4 ? setIsTourOpen(false) : setTourStep(prev => prev + 1)}
+                  title="Next"
                   className="w-12 h-12 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center"
                 >
                   {tourStep === 4 ? <Check className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}

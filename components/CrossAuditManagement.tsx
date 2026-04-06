@@ -1,7 +1,7 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowLeftRight, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown, ShieldOff } from 'lucide-react';
+import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowLeftRight, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown, ShieldOff, Lock, Calendar } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
@@ -35,6 +35,7 @@ interface CrossAuditManagementProps {
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup?: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
+  onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
   onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors?: number) => Promise<void>;
   onBulkAddPermissions?: (perms: Omit<CrossAuditPermission, 'id'>[]) => Promise<void>;
   onBulkRemovePermissions?: (ids: string[]) => Promise<void>;
@@ -43,6 +44,10 @@ interface CrossAuditManagementProps {
   showToast?: (message: string, type?: any) => void;
   onUpdateMaxAssetsPerDay?: (value: number) => void;
   onUpdateMaxLocationsPerDay?: (value: number) => void;
+  pairingLocked?: boolean;
+  pairingLockInfo?: { lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null;
+  onLockPairing?: (pairingCount: number) => Promise<void>;
+  onUnlockPairing?: () => Promise<void>;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -58,6 +63,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onAddAuditGroup,
   onUpdateAuditGroup,
   onDeleteAuditGroup,
+  onBulkDeleteAuditGroups,
   onAutoConsolidate,
   onBulkAddPermissions,
   onBulkRemovePermissions,
@@ -67,7 +73,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   maxLocationsPerDay = 5,
   showToast,
   onUpdateMaxAssetsPerDay,
-  onUpdateMaxLocationsPerDay
+  onUpdateMaxLocationsPerDay,
+  pairingLocked = false,
+  pairingLockInfo = null,
+  onLockPairing,
+  onUnlockPairing
 }) => {
   // --- STATE ---
   const [manualViewMode, setManualViewMode] = useState<ManualViewMode>('grid');
@@ -112,6 +122,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [auditorFilter, setAuditorFilter] = useState('');
   const [targetFilter, setTargetFilter] = useState('');
 
+  // KPI bar ref — used to set CSS custom properties imperatively (no inline style)
+  const kpiBarRef = useRef<HTMLDivElement>(null);
+
   // 0. Compute Institutional Grand Total
   const overallTotalAssets = useMemo(() => {
     if (!departments) return 0;
@@ -132,7 +145,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const groupedDepts: Record<string, Department[]> = {};
     
     activeDepts.forEach(dept => {
-      const key = dept.auditGroupId || 'unassigned_' + dept.id;
+      const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
+      const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
       groupedDepts[key].push(dept);
     });
@@ -145,7 +159,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       
       const name = isUnassigned 
         ? depts[0].name 
-        : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
+        : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
       
       const constitutesGroup = !isUnassigned;
       
@@ -203,9 +217,19 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         await onBulkUpdateDepartments(updates);
       }
 
+      // Delete all audit groups from DB so they don't accumulate across resets
+      if (onBulkDeleteAuditGroups && auditGroups.length > 0) {
+        await onBulkDeleteAuditGroups(auditGroups.map(g => g.id));
+      } else if (onDeleteAuditGroup && auditGroups.length > 0) {
+        for (const group of auditGroups) {
+          await onDeleteAuditGroup(group.id);
+        }
+      }
+
       if (onBulkRemovePermissions && permissions.length > 0) {
         await onBulkRemovePermissions(permissions.map(p => p.id));
       }
+      await onUnlockPairing?.();
 
     } catch (error) {
       console.error("Reset failed:", error);
@@ -369,6 +393,14 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const projectedKPIPercentage = overallTotalAssets > 0 ? (projectedAssetsMet / overallTotalAssets) * 100 : 0;
   const isKPIMet = projectedKPIPercentage >= targetKPIPercentage;
+
+  // Update KPI progress bar CSS custom properties whenever values change
+  useEffect(() => {
+    if (kpiBarRef.current) {
+      kpiBarRef.current.style.setProperty('--kpi-fill', `${Math.min(100, projectedKPIPercentage)}%`);
+      kpiBarRef.current.style.setProperty('--kpi-marker', `${targetKPIPercentage}%`);
+    }
+  }, [projectedKPIPercentage, targetKPIPercentage]);
 
   const handleRunSimulator = () => {
     setIsProcessing(true);
@@ -536,17 +568,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       : [targetEntity.id!];
 
     if (isSimulatorActive) {
-      const newPairs = auditorDeptIds.flatMap(audId =>
-        targetDeptIds.map(tgtId => ({ auditorDeptId: audId, targetDeptId: tgtId, isActive: true, isMutual: overrideIsMutual }))
-      );
-      const updated = [...simulatedPairings, ...newPairs];
+      // Always use entity-level IDs in simulator so handleCommitSimulation can expand them
+      const simPairs = [{ auditorDeptId: auditorEntity.id!, targetDeptId: targetEntity.id!, isActive: true, isMutual: overrideIsMutual }];
       if (overrideIsMutual) {
-        const reverse = targetDeptIds.flatMap(tgtId =>
-          auditorDeptIds.map(audId => ({ auditorDeptId: tgtId, targetDeptId: audId, isActive: true, isMutual: true }))
-        );
-        updated.push(...reverse);
+        simPairs.push({ auditorDeptId: targetEntity.id!, targetDeptId: auditorEntity.id!, isActive: true, isMutual: true });
       }
-      setSimulatedPairings(updated);
+      setSimulatedPairings([...simulatedPairings, ...simPairs]);
     } else {
       if (onAddPermission) {
         setIsProcessing(true);
@@ -580,6 +607,25 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     setSimulatedPairings(updated);
   };
 
+  const handleSyncMutualFlag = async () => {
+    if (!permissions.length || !onBulkRemovePermissions || !onBulkAddPermissions) return;
+    setIsProcessing(true);
+    try {
+      await onBulkRemovePermissions(permissions.map((p: any) => p.id));
+      await onBulkAddPermissions(permissions.map((p: any) => ({
+        auditorDeptId: p.auditorDeptId,
+        targetDeptId: p.targetDeptId,
+        isActive: p.isActive,
+        isMutual: autoPairingMutual,
+      })));
+      showToast?.(`All ${permissions.length} pairings updated — Mutual: ${autoPairingMutual ? 'ON' : 'OFF'}.`);
+    } catch (e) {
+      alert('Failed to update mutual flag.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleCommitSimulation = async () => {
     if (!onBulkAddPermissions || simulatedPairings.length === 0) return;
     setIsProcessing(true);
@@ -587,8 +633,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       const expandedPairings: Omit<CrossAuditPermission, 'id'>[] = [];
       
       for (const pair of simulatedPairings) {
-        const auditorEntity = entities.find(e => e.id === pair.auditorDeptId);
-        const targetEntity = entities.find(e => e.id === pair.targetDeptId);
+        // Support both entity-level IDs (auto-sim) and dept-level IDs (legacy overrides)
+        const auditorEntity = entities.find(e => e.id === pair.auditorDeptId)
+          ?? entities.find(e => e.members?.some((m: any) => m.id === pair.auditorDeptId));
+        const targetEntity = entities.find(e => e.id === pair.targetDeptId)
+          ?? entities.find(e => e.members?.some((m: any) => m.id === pair.targetDeptId));
         
         if (!auditorEntity || !targetEntity) continue;
         
@@ -598,7 +647,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                auditorDeptId: auditorDept.id,
                targetDeptId: targetDept.id,
                isActive: true,
-               isMutual: false
+               isMutual: pair.isMutual
              });
           }
         }
@@ -617,6 +666,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       setIsSimulatorActive(false);
       setSimulatedPairings([]);
       showToast?.(`Successfully committed ${expandedPairings.length} departmental links.`);
+      await onLockPairing?.(expandedPairings.length);
     } catch (e) {
       alert("Failed to commit simulated pairings.");
     } finally {
@@ -694,7 +744,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     <>
       <div className="bg-white rounded-[40px] border-2 border-slate-200 shadow-sm relative overflow-hidden">
         {isSimulatorActive && managementMode === 'auto' && (
-          <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400 animate-pulse" />
+          <div className="absolute top-0 left-0 right-0 h-2 bg-linear-to-r from-amber-400 via-orange-500 to-amber-400 animate-pulse" />
         )}
 
         {/* ── HEADER ── */}
@@ -766,8 +816,45 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         {managementMode === 'auto' && (
           <div className="px-8 md:px-12 pb-8 md:pb-12">
             <div className="flex flex-col lg:flex-row gap-10">
-              {/* Left: Settings Panel */}
+              {/* Left: Settings Panel (or locked banner) */}
               <div className="lg:w-1/3">
+                {pairingLocked ? (
+                  <div className="rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-7 flex flex-col gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                      <Lock className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900 mb-1">Pairings Locked</h3>
+                      <p className="text-sm text-slate-500 leading-relaxed">The audit pairings for this cycle have been committed and locked. No changes can be made until the cycle is reset.</p>
+                    </div>
+                    {pairingLockInfo && (
+                      <div className="bg-white rounded-2xl border border-emerald-100 p-4 space-y-2 text-xs">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Calendar className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span className="font-bold text-slate-700">Locked:</span>
+                          <span>{new Date(pairingLockInfo.lockedAt).toLocaleString()}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Users className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span className="font-bold text-slate-700">By:</span>
+                          <span>{pairingLockInfo.lockedBy}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Link className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span className="font-bold text-slate-700">Pairings:</span>
+                          <span>{pairingLockInfo.pairingCount} departmental links</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Network className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span className="font-bold text-slate-700">Cycle Year:</span>
+                          <span>{pairingLockInfo.cycleYear}</span>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Use Reset to unlock for the next annual cycle.</p>
+                  </div>
+                ) : (
+                  <>
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-colors ${isSimulatorActive ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
                   <Zap className="w-7 h-7" />
                 </div>
@@ -800,7 +887,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                       </div>
                       <div className="relative inline-flex items-center ml-4">
                         <input type="checkbox" className="sr-only peer" checked={t.checked} onChange={t.onChange} />
-                        <div className={`w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${t.color}`}></div>
+                        <div className={`w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${t.color}`}></div>
                       </div>
                     </label>
                   </div>
@@ -838,6 +925,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                     Run Auto-Pairing
                   </button>
                 )}
+                  </>
+                )}
               </div>
 
               {/* Right: KPI + Results */}
@@ -855,9 +944,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                       {isKPIMet ? 'KPI Secured' : 'KPI Missed'}
                     </div>
                   </div>
-                  <div className="h-4 w-full bg-slate-200 rounded-full overflow-hidden relative">
-                    <div className={`h-full transition-all duration-1000 ${isKPIMet ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${Math.min(100, projectedKPIPercentage)}%` }} />
-                    <div className="absolute top-0 bottom-0 w-1 bg-slate-900 z-10" style={{ left: `${targetKPIPercentage}%` }} />
+                  <div ref={kpiBarRef} className="h-4 w-full bg-slate-200 rounded-full overflow-hidden relative">
+                    <div className={`h-full transition-all duration-1000 w-(--kpi-fill) ${isKPIMet ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <div className="absolute top-0 bottom-0 w-1 bg-slate-900 z-10 left-(--kpi-marker)" />
                   </div>
                   <p className="text-[10px] font-bold text-slate-400 mt-2 text-right">{projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Total Movable Assets Inspected</p>
                 </div>
@@ -870,13 +959,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                     </h4>
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-col sm:flex-row gap-3">
-                        <select className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none" value={manualAuditor} onChange={(e) => setManualAuditor(e.target.value)}>
+                        <select title="Inspecting Entity" className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none" value={manualAuditor} onChange={(e) => setManualAuditor(e.target.value)}>
                           <option value="">Select Inspecting Entity</option>
                           {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
                             <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
                           ))}
                         </select>
-                        <select className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none" value={manualTarget} onChange={(e) => setManualTarget(e.target.value)}>
+                        <select title="Target Entity" className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none" value={manualTarget} onChange={(e) => setManualTarget(e.target.value)}>
                           <option value="">Select Target</option>
                           {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
                             <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
@@ -887,9 +976,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         <label className="flex items-center gap-2 cursor-pointer px-2 flex-1">
                           <div className="relative inline-flex items-center">
                             <input type="checkbox" className="sr-only peer" checked={overrideIsMutual} onChange={() => setOverrideIsMutual(!overrideIsMutual)} />
-                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
                           </div>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual</span>
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Vice Versa</span>
                         </label>
                         <button onClick={handleAddOverride} disabled={!manualAuditor || !manualTarget} className="px-6 py-3 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-amber-100 transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap">
                           <Plus className="w-4 h-4" /> Add Override
@@ -906,6 +995,21 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                       {isSimulatorActive ? 'Simulated Assignments (Draft)' : 'Active Database Assignments'}
                     </h4>
                     <div className="flex flex-wrap items-center gap-2">
+                      {!isSimulatorActive && permissions.length > 0 && (
+                        <button
+                          onClick={handleSyncMutualFlag}
+                          disabled={isProcessing}
+                          title={autoPairingMutual ? 'Mark all active pairings as Mutual (⇄)' : 'Mark all active pairings as One-way (→)'}
+                          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                            autoPairingMutual
+                              ? 'bg-violet-50 border border-violet-200 text-violet-600 hover:bg-violet-100'
+                              : 'bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100'
+                          }`}
+                        >
+                          <ArrowRightLeft className="w-3 h-3" />
+                          {autoPairingMutual ? 'Set All ⇄' : 'Set All →'}
+                        </button>
+                      )}
                       <div className="relative">
                         <input type="text" placeholder="Filter inspecting..." className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none w-44" value={auditorFilter} onChange={(e) => setAuditorFilter(e.target.value)} />
                         <Network className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
@@ -915,12 +1019,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                         <Layers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                       </div>
                       {(auditorFilter || targetFilter) && (
-                        <button onClick={() => { setAuditorFilter(''); setTargetFilter(''); }} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-colors"><RotateCcw className="w-3 h-3" /></button>
+                        <button title="Clear filters" onClick={() => { setAuditorFilter(''); setTargetFilter(''); }} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-colors"><RotateCcw className="w-3 h-3" /></button>
                       )}
                     </div>
                   </div>
                   <div className="bg-white border border-slate-200 rounded-[24px] overflow-hidden shadow-sm">
-                    <div className="max-h-[520px] overflow-y-auto">
+                    <div className="max-h-130 overflow-y-auto">
                       <table className="w-full text-left border-collapse">
                         <thead className="bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10 backdrop-blur-md">
                           <tr>
@@ -943,7 +1047,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                     <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">{auditorEntity?.isConsolidated ? <Boxes className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}</div>
                                     <div>
                                       <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || ep.auditorEntityId}</p>
-                                      <div className="flex flex-wrap gap-1 mt-0.5">{auditorEntity?.members?.map((m: any) => (<span key={m.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase">{m.abbr}</span>))}</div>
+                                      <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">{auditorEntity?.assets?.toLocaleString() || 0} Assets</p>
                                     </div>
                                   </div>
                                 </td>
@@ -961,9 +1065,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                                 </td>
                                 <td className="px-5 py-3.5 text-right">
                                   {isSimulatorActive ? (
-                                    <button onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><X className="w-4 h-4" /></button>
+                                    <button title="Remove pairing" onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><X className="w-4 h-4" /></button>
                                   ) : (
-                                    <button onClick={() => onBulkRemovePermissions && ep.rawPermIds?.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                    <button title="Remove pairing" onClick={() => onBulkRemovePermissions && ep.rawPermIds?.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
                                   )}
                                 </td>
                               </tr>
@@ -992,13 +1096,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 mb-3">
-                <select className="flex-1 min-w-0 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-slate-500/20 outline-none" value={manualAuditor} onChange={(e) => setManualAuditor(e.target.value)}>
+                <select title="Inspecting Entity" className="flex-1 min-w-0 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-slate-500/20 outline-none" value={manualAuditor} onChange={(e) => setManualAuditor(e.target.value)}>
                   <option value="">Select Inspecting Entity</option>
                   {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
                     <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
                   ))}
                 </select>
-                <select className="flex-1 min-w-0 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-slate-500/20 outline-none" value={manualTarget} onChange={(e) => setManualTarget(e.target.value)}>
+                <select title="Target Entity" className="flex-1 min-w-0 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-slate-500/20 outline-none" value={manualTarget} onChange={(e) => setManualTarget(e.target.value)}>
                   <option value="">Select Target Entity</option>
                   {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
                     <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
@@ -1009,7 +1113,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 <label className="flex items-center gap-2.5 cursor-pointer flex-1">
                   <div className="relative inline-flex items-center">
                     <input type="checkbox" className="sr-only peer" checked={isMutual} onChange={() => setIsMutual(!isMutual)} />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500"></div>
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500"></div>
                   </div>
                   <ArrowLeftRight className={`w-3.5 h-3.5 transition-colors ${isMutual ? 'text-violet-500' : 'text-slate-400'}`} />
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual (Vice Versa)</span>
@@ -1033,12 +1137,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                   <Layers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
                 </div>
                 {(auditorFilter || targetFilter) && (
-                  <button onClick={() => { setAuditorFilter(''); setTargetFilter(''); }} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-colors"><RotateCcw className="w-3 h-3" /></button>
+                  <button title="Clear filters" onClick={() => { setAuditorFilter(''); setTargetFilter(''); }} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-colors"><RotateCcw className="w-3 h-3" /></button>
                 )}
               </div>
             </div>
             <div className="bg-white border border-slate-200 rounded-[24px] overflow-hidden shadow-sm">
-              <div className="max-h-[600px] overflow-y-auto">
+              <div className="max-h-150 overflow-y-auto">
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10 backdrop-blur-md">
                     <tr>
@@ -1061,7 +1165,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                               <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">{auditorEntity?.isConsolidated ? <Boxes className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}</div>
                               <div>
                                 <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || ep.auditorEntityId}</p>
-                                <div className="flex flex-wrap gap-1 mt-0.5">{auditorEntity?.members?.map((m: any) => (<span key={m.id} className="px-1.5 py-0.5 bg-slate-100 text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase">{m.abbr}</span>))}</div>
+                                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">{auditorEntity?.assets?.toLocaleString() || 0} Assets</p>
                               </div>
                             </div>
                           </td>
@@ -1078,7 +1182,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                             </div>
                           </td>
                           <td className="px-5 py-3.5 text-right">
-                            <button onClick={() => onBulkRemovePermissions && ep.rawPermIds?.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            <button title="Remove pairing" onClick={() => onBulkRemovePermissions && ep.rawPermIds?.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
                           </td>
                         </tr>
                       );

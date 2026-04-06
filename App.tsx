@@ -50,6 +50,8 @@ const App: React.FC = () => {
   const [schedules, setSchedules] = useState<AuditSchedule[]>([]);
   const [maxAssetsPerDay, setMaxAssetsPerDay] = useState<number>(1000);
   const [maxLocationsPerDay, setMaxLocationsPerDay] = useState<number>(5);
+  const [pairingLocked, setPairingLocked] = useState(false);
+  const [pairingLockInfo, setPairingLockInfo] = useState<{ lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [crossAuditPermissions, setCrossAuditPermissions] = useState<CrossAuditPermission[]>([]);
@@ -153,6 +155,12 @@ const App: React.FC = () => {
   }, []);
   const loadAllData = useCallback(async () => {
     try {
+      // If admin, ensure default phases/tiers/targets exist on the server
+      // (single HTTP call, idempotent, uses INSERT OR IGNORE — safe to call every time)
+      if (isAdmin) {
+        try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults failed (non-fatal):', e); }
+      }
+
       const results = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
@@ -191,137 +199,25 @@ const App: React.FC = () => {
           if (constraints.value.maxAssetsPerDay) setMaxAssetsPerDay(constraints.value.maxAssetsPerDay);
           if (constraints.value.maxLocationsPerDay) setMaxLocationsPerDay(constraints.value.maxLocationsPerDay);
         }
+        const pairingLockSetting = settings.find(s => s.id === 'pairing_lock');
+        if (pairingLockSetting?.value?.locked) {
+          setPairingLocked(true);
+          setPairingLockInfo(pairingLockSetting.value);
+        } else {
+          setPairingLocked(false);
+          setPairingLockInfo(null);
+        }
       } catch (e) {
         console.warn("System settings failed to load:", e);
       }
 
-      // KPI targets are optional during schema rollout; don't block the app if missing
-      let kpiTargetsData: KPITierTarget[] = [];
+      // KPI targets
       try {
-        kpiTargetsData = await gateway.getKPITierTargets();
+        const kpiTargetsData = await gateway.getKPITierTargets();
         setKpiTierTargets(kpiTargetsData);
       } catch (targetErr) {
         console.warn("KPI targets failed to load (non-fatal):", targetErr);
       }
-
-      // Ensure 3 phases exist
-      let finalPhases = phasesData;
-      if (phasesData.length < 3) {
-        const existingNames = phasesData.map(p => p.name);
-        const requiredNames = ['Phase 1', 'Phase 2', 'Phase 3'];
-        const today = new Date();
-        for (let i = 0; i < requiredNames.length; i++) {
-          const name = requiredNames[i];
-          if (!existingNames.includes(name)) {
-            const start = new Date(today);
-            start.setDate(today.getDate() + i * 30);
-            const end = new Date(start);
-            end.setDate(start.getDate() + 30);
-            await gateway.addAuditPhase({
-              name,
-              startDate: start.toISOString().split('T')[0],
-              endDate: end.toISOString().split('T')[0]
-            });
-          }
-        }
-        finalPhases = await gateway.getAuditPhases();
-        setAuditPhases(finalPhases);
-      }
-
-      // Ensure 3 institutional targets exist
-      const currentInstKPIs = await gateway.getInstitutionKPIs();
-      let instNeeded = false;
-      for (const phase of finalPhases) {
-        if (!currentInstKPIs.find(k => k.phaseId === phase.id)) {
-          await gateway.updateInstitutionKPI(phase.id, 100);
-          instNeeded = true;
-        }
-      }
-      if (instNeeded) setInstitutionKPIs(await gateway.getInstitutionKPIs());
-
-      // Ensure 3 KPI tiers exist (Small / Medium / Large) using percentage thresholds
-      let finalKpiTiers = kpiTiersData;
-      const requiredTierNames = ['Small', 'Medium', 'Large'];
-      const defaultTierRanges = [
-        { min: 0,   max: 29  },
-        { min: 30,  max: 69  },
-        { min: 70,  max: 100 }
-      ];
-      // Rename legacy 'Tier 1/2/3' entries on first load after upgrade
-      let renamedAny = false;
-      for (const tier of kpiTiersData) {
-        const legacyNameMap: Record<string, string> = { 'Tier 1': 'Small', 'Tier 2': 'Medium', 'Tier 3': 'Large' };
-        if (legacyNameMap[tier.name]) {
-          await gateway.updateKPITier(tier.id, { name: legacyNameMap[tier.name] });
-          renamedAny = true;
-        }
-      }
-      // Re-fetch after renames so we see the correct names before duplicate check
-      if (renamedAny) finalKpiTiers = await gateway.getKPITiers();
-
-      // Deduplicate: if more than one tier shares the same name, delete extras
-      const seenTierNames = new Map<string, string>(); // name -> first id
-      for (const tier of finalKpiTiers) {
-        if (seenTierNames.has(tier.name)) {
-          await gateway.deleteKPITier(tier.id);
-        } else {
-          seenTierNames.set(tier.name, tier.id);
-        }
-      }
-      finalKpiTiers = await gateway.getKPITiers();
-
-      if (finalKpiTiers.length < 3) {
-        const existingNames = finalKpiTiers.map(p => p.name);
-        for (let i = 0; i < requiredTierNames.length; i++) {
-          const name = requiredTierNames[i];
-          if (!existingNames.includes(name)) {
-            await gateway.addKPITier({
-              name,
-              minAssets: defaultTierRanges[i].min
-            });
-          }
-        }
-        finalKpiTiers = await gateway.getKPITiers();
-        setKpiTiers(finalKpiTiers);
-      } else {
-        // Migration: If any tier has minAssets > 100, they are using raw asset counts instead of percentages.
-        const needsMigration = kpiTiersData.some(t => t.minAssets > 100);
-        if (needsMigration) {
-          const sorted = [...kpiTiersData].sort((a,b) => a.minAssets - b.minAssets);
-          if (sorted.length >= 3) {
-            await gateway.updateKPITier(sorted[0].id, { minAssets: 0 });
-            await gateway.updateKPITier(sorted[1].id, { minAssets: 30 });
-            await gateway.updateKPITier(sorted[2].id, { minAssets: 70 });
-            finalKpiTiers = await gateway.getKPITiers();
-            setKpiTiers(finalKpiTiers);
-          }
-        }
-      }
-
-      // Ensure 3 tiers have relational targets for each phase
-      const latestTargets = await gateway.getKPITierTargets();
-      let targetsNeeded = false;
-      for (const tier of finalKpiTiers) {
-        for (const phase of finalPhases) {
-          if (!latestTargets.find(t => t.tierId === tier.id && t.phaseId === phase.id)) {
-            await gateway.setKPITierTarget(tier.id, phase.id, 100);
-            targetsNeeded = true;
-          }
-        }
-      }
-      if (targetsNeeded) setKpiTierTargets(await gateway.getKPITierTargets());
-
-      const finalKpiTargets = await gateway.getKPITierTargets();
-
-      setSchedules(auditsData);
-      setUsers(usersData);
-      setDepartments(deptsData);
-      setLocations(locsData);
-      setCrossAuditPermissions(permsData);
-      setAuditPhases(finalPhases);
-      setKpiTiers(finalKpiTiers);
-      setKpiTierTargets(finalKpiTargets);
-      setDepartmentMappings(departmentMappingsData);
     } catch (e) {
       console.error("Critical: Failed to load application data", e);
       const raw = (e as any)?.message ? String((e as any).message) : String(e);
@@ -330,7 +226,7 @@ const App: React.FC = () => {
         : "Failed to load application data. Please refresh.";
       setConnectionErrorMessage(hint);
     }
-  }, [isAdmin, kpiTiers, auditPhases, kpiTierTargets]);
+  }, [isAdmin]);
 
 
 
@@ -1209,7 +1105,7 @@ const App: React.FC = () => {
       
       setDepartments(await gateway.getDepartments());
       setUsers(await gateway.getUsers());
-      showToast(`Imported ${newDepts.length} departments successfully`);
+      showToast(`${newDepts.length} new department(s) imported successfully`);
     } catch (e) {
       showError(e, 'Bulk Import Failed');
     }
@@ -1325,6 +1221,21 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLockPairing = async (pairingCount: number) => {
+    const info = { locked: true, lockedAt: new Date().toISOString(), lockedBy: currentUser?.name || 'Admin', pairingCount, cycleYear: new Date().getFullYear() };
+    await gateway.updateSystemSetting('pairing_lock', info);
+    setPairingLocked(true);
+    setPairingLockInfo(info);
+    // Auto-generate inspection schedule entries now that pairings are committed
+    await handleRebalanceSchedule();
+  };
+
+  const handleUnlockPairing = async () => {
+    await gateway.updateSystemSetting('pairing_lock', { locked: false });
+    setPairingLocked(false);
+    setPairingLockInfo(null);
+  };
+
   const handleRemovePermission = async (id: string) => {
     try {
       await gateway.deletePermission(id);
@@ -1430,9 +1341,21 @@ const App: React.FC = () => {
 
         // 4. Greedy phase assignment using INCREMENTAL targets and effective weights
         // Assign phases earliest-first: fill Phase 1 incrementalTarget, then Phase 2, etc.
+        // IMPORTANT: Pre-fill phaseHeld with already-locked assets per phase,
+        // so locked Phase 1/2 locations don't cause re-assignable locations to
+        // fill those phases again (which would leave Phase 3 empty).
         const phaseHeld: Record<string, number> = {};
         const phaseAssignments: Record<string, string[]> = {};
-        phaseTargets.forEach(pt => { phaseHeld[pt.phaseId] = 0; phaseAssignments[pt.phaseId] = []; });
+        phaseTargets.forEach(pt => {
+          const alreadyLockedAssets = deptAudits
+            .filter(a => isAuditLocked(a) && a.phaseId === pt.phaseId)
+            .reduce((sum, a) => {
+              const loc = allLocs.find(l => l.id === a.locationId);
+              return sum + (loc ? locWeight(loc) : 0);
+            }, 0);
+          phaseHeld[pt.phaseId] = alreadyLockedAssets;
+          phaseAssignments[pt.phaseId] = [];
+        });
 
         for (const loc of unlockedLocs) {
           // Find the earliest phase that still has room (capacity = incremental targetAssets)
@@ -1467,7 +1390,7 @@ const App: React.FC = () => {
               newAudits.push({
                 departmentId: dept.id,
                 locationId: locId,
-                supervisorId: loc.supervisorId || '',
+                supervisorId: loc.supervisorId || null,
                 phaseId,
                 status: 'Pending',
                 auditor1Id: null,
@@ -1590,36 +1513,41 @@ const App: React.FC = () => {
   };
 
   const handleResetOperationalData = async () => {
-    customConfirm("Reset Operational Data", "This will delete all departments, locations, user accounts (except yours), and audit schedules. System settings like Audit Phases and KPI Tiers will be preserved. Proceed?", async () => {
-      try {
-        await gateway.clearAllDepartments(currentUser.id);
-        await gateway.clearDepartmentMappings();
-        setDepartments([]);
-        setLocations([]);
-        setSchedules([]);
-        setCrossAuditPermissions([]);
-        setDepartmentMappings([]);
+    customConfirm(
+      "Full System Reset",
+      "This will delete ALL data: departments, locations, users (except yours), audit schedules, audit phases, KPI tiers, consolidation groups, and pairing lock. The system will restart with a clean slate. Proceed?",
+      async () => {
+        try {
+          await gateway.fullSystemReset(currentUser.id);
 
-        // Refresh users to only keep the current user
-        const updatedUsers = await gateway.getUsers();
-        setUsers(updatedUsers);
-        
-        // Update current user's department to null in state if it's currently set
-        setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
+          // Reset all client state
+          setDepartments([]);
+          setLocations([]);
+          setSchedules([]);
+          setCrossAuditPermissions([]);
+          setDepartmentMappings([]);
+          setAuditPhases([]);
+          setKpiTiers([]);
+          setKpiTierTargets([]);
+          setInstitutionKPIs([]);
+          setAuditGroups([]);
+          setPairingLocked(false);
+          setPairingLockInfo(null);
 
-        setNotifications(prev => [{
-          id: `reset-ops-${Date.now()}`,
-          title: 'System Reset',
-          message: 'Operational data (Depts, Locs, Members) has been reset.',
-          timestamp: new Date().toISOString(),
-          type: 'success',
-          read: false
-        }, ...prev]);
-        showToast('Operational data reset successfully');
-      } catch (e) {
-        showError(e, 'Failed to reset operational data');
+          // Refresh users (keep only current admin)
+          const updatedUsers = await gateway.getUsers();
+          setUsers(updatedUsers);
+          setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
+
+          // loadAllData will auto-recreate 3 default phases + 3 KPI tiers
+          await loadAllData();
+
+          showToast('System fully reset. Start with Data Management → Departments.');
+        } catch (e) {
+          showError(e, 'Full reset failed');
+        }
       }
-    });
+    );
   };
 
   const handleAddDepartmentMapping = async (mapping: Omit<DepartmentMapping, 'id'>) => {
@@ -1697,16 +1625,25 @@ const App: React.FC = () => {
   const handleDeleteAuditGroup = async (id: string) => {
     if (confirm("Delete this group? Departments will be unassigned.")) {
       try {
-        // The DB-level SET NULL on the audit_group_id FK handles the department unassignment automatically!
-        // We just need to delete the group record.
         await gateway.deleteAuditGroup(id);
-        
         setAuditGroups(await gateway.getAuditGroups());
-        setDepartments(await gateway.getDepartments()); // Refresh depts to see the NULL reset
+        setDepartments(await gateway.getDepartments());
         showToast('Group removed');
       } catch (e) {
         showError(e, 'Delete failed');
       }
+    }
+  };
+
+  const handleBulkDeleteAuditGroups = async (ids: string[]) => {
+    try {
+      for (const id of ids) {
+        await gateway.deleteAuditGroup(id);
+      }
+      setAuditGroups(await gateway.getAuditGroups());
+      setDepartments(await gateway.getDepartments());
+    } catch (e) {
+      showError(e, 'Failed to delete groups');
     }
   };
 
@@ -1788,12 +1725,17 @@ const App: React.FC = () => {
         }
       }
 
-      // Step 5: Final refreshment from source of truth
-      await loadAllData();
-      
-      const refreshedGroups = await gateway.getAuditGroups();
-      setAuditGroups(refreshedGroups); // Explicitly update again for UI reactivity
-      
+      // Step 5: Targeted refresh — only departments and audit groups changed.
+      // Do NOT call loadAllData() here: it reloads locations and triggers
+      // departmentsWithAssets to recompute Math.max(locationSum, dept.totalAssets),
+      // which can show inflated values if location records sum higher than dept totals.
+      const [freshDeptsData, refreshedGroups] = await Promise.all([
+        gateway.getDepartments(),
+        gateway.getAuditGroups()
+      ]);
+      setDepartments(freshDeptsData);
+      setAuditGroups(refreshedGroups);
+
       if (refreshedGroups.length > 0) {
         showToast(`Auto-consolidation complete! ${refreshedGroups.length} groups created.`);
       }
@@ -1835,9 +1777,12 @@ const App: React.FC = () => {
         }
       }
       if (toAdd.length > 0) {
+        // Filter out any locations whose departmentId no longer exists in the DB (stale after reset)
+        const validDeptIds = new Set(departments.map(d => d.id));
+        const safeToAdd = toAdd.filter(loc => validDeptIds.has(loc.departmentId));
         // Supabase insert limit — batch at 200 rows
-        for (let i = 0; i < toAdd.length; i += 200) {
-          await gateway.bulkAddLocations(toAdd.slice(i, i + 200));
+        for (let i = 0; i < safeToAdd.length; i += 200) {
+          await gateway.bulkAddLocations(safeToAdd.slice(i, i + 200));
         }
       }
       for (const u of toUpdate) {
@@ -2158,7 +2103,7 @@ const App: React.FC = () => {
   if (viewState === 'docs') {
     return (
       <div className="h-screen bg-slate-50 overflow-x-hidden overflow-y-auto relative">
-        <nav className="bg-white border-b border-slate-200 sticky top-0 z-[100]">
+        <nav className="bg-white border-b border-slate-200 sticky top-0 z-100">
           <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <button
               onClick={() => setViewState('landing')}
@@ -2173,7 +2118,7 @@ const App: React.FC = () => {
               </div>
               <span className="text-sm font-black text-slate-900 tracking-tight">System Documentation</span>
             </div>
-            <div className="w-[100px] hidden md:block"></div> {/* Spacer to keep title centered */}
+            <div className="w-25 hidden md:block"></div> {/* Spacer to keep title centered */}
           </div>
         </nav>
         <div className="p-8 md:p-12">
@@ -2213,10 +2158,10 @@ const App: React.FC = () => {
         rbacMatrix={rbacMatrix}
       />
 
-      <div className="flex-grow lg:pl-72 flex flex-col h-full min-w-0">
+      <div className="grow lg:pl-72 flex flex-col h-full min-w-0">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+            <button onClick={() => setIsSidebarOpen(true)} title="Open sidebar" className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600">
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
@@ -2252,7 +2197,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className={`flex-grow p-4 md:p-8 w-full flex flex-col min-h-0 overflow-y-auto`}>
+        <main className={`grow p-4 md:p-8 w-full flex flex-col min-h-0 overflow-y-auto`}>
           {connectionErrorMessage && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="w-5 h-5 shrink-0" />
@@ -2417,6 +2362,10 @@ const App: React.FC = () => {
               onBulkUpdateDepartments={handleBulkUpdateDepts}
               onBulkAddPermissions={handleBulkAddPermissions}
               onBulkRemovePermissions={handleBulkRemovePermissions}
+              pairingLocked={pairingLocked}
+              pairingLockInfo={pairingLockInfo}
+              onLockPairing={handleLockPairing}
+              onUnlockPairing={handleUnlockPairing}
               showToast={showToast}
               onAddPhase={handleAddPhase}
               onUpdatePhase={handleUpdatePhase}
@@ -2455,6 +2404,7 @@ const App: React.FC = () => {
               onAddAuditGroup={handleAddAuditGroup}
               onUpdateAuditGroup={handleUpdateAuditGroup}
               onDeleteAuditGroup={handleDeleteAuditGroup}
+              onBulkDeleteAuditGroups={handleBulkDeleteAuditGroups}
               onAutoConsolidate={handleAutoConsolidate}
                auditGroups={auditGroups}
             />

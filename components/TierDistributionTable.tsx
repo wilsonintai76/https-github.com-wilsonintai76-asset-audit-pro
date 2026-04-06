@@ -97,7 +97,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
         </div>
       </div>
       
-      <div className="overflow-x-auto max-h-[600px] overflow-y-auto custom-scrollbar">
+      <div className="overflow-x-auto max-h-150 overflow-y-auto custom-scrollbar">
         <table className="w-full text-left">
           <thead className="bg-slate-50/95 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
             <tr>
@@ -146,7 +146,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                 {row.phaseStatus.map((ps, idx) => (
                   <td key={idx} className="px-4 py-4 text-center">
                     {ps.isRequired ? (
-                      <div className={`inline-flex flex-col items-center justify-center w-14 min-h-[48px] rounded-xl border-2 px-1 py-1 transition-all ${
+                      <div className={`inline-flex flex-col items-center justify-center w-14 min-h-12 rounded-xl border-2 px-1 py-1 transition-all ${
                         ps.isCompleted 
                           ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
                           : ps.hasAudit 

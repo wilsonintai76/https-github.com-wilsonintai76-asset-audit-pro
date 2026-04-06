@@ -457,12 +457,13 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                   Filters
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 flex-grow">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 grow">
                   {/* Department Filter */}
                   <div className="relative">
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Department</label>
                     <div className="relative">
                         <select
+                        title="Department"
                         className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
                         value={selectedDept}
                         onChange={(e) => onDeptChange(e.target.value)}
@@ -480,6 +481,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Block / Building</label>
                     <div className="relative">
                         <select
+                        title="Block / Building"
                         className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
                         value={selectedBlock}
                         onChange={(e) => setSelectedBlock(e.target.value)}
@@ -500,6 +502,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Level</label>
                     <div className="relative">
                         <select
+                        title="Level"
                         className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
                         value={selectedLevel}
                         onChange={(e) => setSelectedLevel(e.target.value)}
@@ -517,6 +520,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                     <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 mb-1 block">Status</label>
                     <div className="relative">
                         <select
+                        title="Status"
                         className="w-full pl-4 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500/20 outline-none transition-all appearance-none cursor-pointer hover:bg-white"
                         value={selectedStatus}
                         onChange={(e) => onStatusChange(e.target.value)}
@@ -554,7 +558,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
 
       <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className="w-full overflow-auto scrollbar-thumb-slate-300 rounded-[40px] flex-1">
-          <table className="w-full text-left min-w-[1000px] border-separate border-spacing-0">
+          <table className="w-full text-left min-w-250 border-separate border-spacing-0">
             <thead className="bg-slate-50/50 border-b border-slate-100 sticky top-0 z-20">
               <tr>
                 <th className="px-8 py-6 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48 sticky left-0 bg-slate-50 z-30 border-r border-slate-100">Date</th>
@@ -592,12 +596,14 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                     <td className="px-8 py-6 align-top sticky left-0 bg-white z-10 border-r border-slate-100">
                       <div className="flex flex-col gap-2">
                         <div className="relative group flex items-center gap-2">
-                          <div className="relative flex-1 min-w-[130px]">
+                          <div className="relative flex-1 min-w-32.5">
                             <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none z-10 ${
                               !audit.date ? 'text-amber-500' : 'text-slate-400'
                             }`} />
                             <input 
-                              type="date" 
+                              type="date"
+                              title="Audit Date"
+                              placeholder="YYYY-MM-DD"
                               value={audit.date || ''}
                               disabled={!hasPhases || isLocked || !canEditDates}
                               onChange={(e) => handleDateChange(audit.id, e.target.value, audit.phaseId)}

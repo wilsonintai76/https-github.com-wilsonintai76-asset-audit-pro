@@ -541,13 +541,16 @@ db.post('/departments/clear', requireRoles('Admin'), async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const keep_user_id: string | undefined = body?.keep_user_id;
   try {
-    // Delete in FK-safe order: child tables first, then departments
+    // FK-safe order: deepest children first.
+    // system_activities has FK → users, so it must be deleted before users.
+    // buildings has FK from locations, so delete after locations.
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM audit_schedules'),
-      c.env.DB.prepare('DELETE FROM locations'),
       c.env.DB.prepare('DELETE FROM cross_audit_permissions'),
       c.env.DB.prepare('DELETE FROM department_mappings'),
-      // Delete all users except the admin who triggered the reset
+      c.env.DB.prepare('DELETE FROM locations'),
+      c.env.DB.prepare('DELETE FROM buildings'),
+      c.env.DB.prepare('DELETE FROM system_activities'),
       keep_user_id
         ? c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id)
         : c.env.DB.prepare('DELETE FROM users'),
@@ -588,21 +591,28 @@ db.get('/locations', edgeCache(60), async (c) => {
 db.post('/locations', requirePermission('manage:locations'), async (c) => {
   const loc = await c.req.json();
   const id = loc.id || crypto.randomUUID();
+  // Validate department_id exists before inserting to give a clear error
+  if (loc.departmentId) {
+    const deptExists = await c.env.DB.prepare('SELECT id FROM departments WHERE id = ? LIMIT 1').bind(loc.departmentId).first();
+    if (!deptExists) {
+      return c.json({ error: `Department '${loc.departmentId}' does not exist` }, 422);
+    }
+  }
   try {
     await c.env.DB.prepare(
-      `INSERT INTO locations 
+      `INSERT OR IGNORE INTO locations 
        (id, name, abbr, department_id, building_id, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
       loc.name,
       loc.abbr,
-      loc.departmentId,
-      loc.buildingId ?? null,
-      loc.level ?? null,
-      loc.description ?? null,
-      loc.supervisorId ?? null,
-      loc.contact ?? null,
+      loc.departmentId || null,
+      loc.buildingId || null,
+      loc.level || null,
+      loc.description || null,
+      loc.supervisorId || null,
+      loc.contact || null,
       loc.totalAssets ?? 0,
       loc.uninspectedAssetCount ?? 0,
       loc.isActive !== undefined ? (loc.isActive ? 1 : 0) : 1,
@@ -679,22 +689,39 @@ db.post('/locations/clear', requireRoles('Admin'), async (c) => {
 db.post('/locations/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
   const locs = await c.req.json();
   try {
-    const statements = locs.map((loc: any) => {
+    // Pre-validate: fetch all existing department IDs from DB so we never hit a FK error
+    const { results: deptRows } = await c.env.DB.prepare('SELECT id FROM departments').all();
+    const validDeptIds = new Set((deptRows || []).map((d: any) => d.id));
+
+    // Filter out locations whose departmentId doesn't exist in DB
+    const validLocs = (locs as any[]).filter(loc => {
+      const deptId = loc.departmentId || '';
+      return deptId && validDeptIds.has(deptId);
+    });
+
+    const skipped = locs.length - validLocs.length;
+
+    if (validLocs.length === 0) {
+      return c.json({ success: true, count: 0, skipped, reason: 'No locations had a valid department_id' });
+    }
+
+    // INSERT OR IGNORE so a single bad row can never abort the entire batch
+    const statements = validLocs.map((loc: any) => {
       const id = loc.id || crypto.randomUUID();
       return c.env.DB.prepare(
-        `INSERT INTO locations 
+        `INSERT OR IGNORE INTO locations 
          (id, name, abbr, department_id, building_id, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         id,
         loc.name,
         loc.abbr,
-        loc.departmentId,
-        loc.buildingId ?? null,
-        loc.level ?? null,
-        loc.description ?? null,
-        loc.supervisorId ?? null,
-        loc.contact ?? null,
+        loc.departmentId || null,
+        loc.buildingId || null,
+        loc.level || null,
+        loc.description || null,
+        loc.supervisorId || null,
+        loc.contact || null,
         loc.totalAssets ?? 0,
         loc.uninspectedAssetCount ?? 0,
         loc.isActive !== undefined ? (loc.isActive ? 1 : 0) : 1,
@@ -703,7 +730,7 @@ db.post('/locations/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
     });
 
     await c.env.DB.batch(statements);
-    return c.json({ success: true, count: locs.length });
+    return c.json({ success: true, count: validLocs.length, skipped });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -840,7 +867,7 @@ db.patch('/permissions/:id', async (c) => {
 });
 
 // Audit Phases
-db.get('/audit-phases', edgeCache(300), async (c) => {
+db.get('/audit-phases', async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM audit_phases').all();
     return c.json((results || []).map((p: any) => ({
@@ -896,7 +923,7 @@ db.delete('/audit-phases/:id', requireRoles('Admin'), async (c) => {
 });
 
 // KPI Tiers
-db.get('/kpi-tiers', edgeCache(300), async (c) => {
+db.get('/kpi-tiers', async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM kpi_tiers').all();
     return c.json((results || []).map((t: any) => ({
@@ -949,7 +976,7 @@ db.delete('/kpi-tiers/:id', requireRoles('Admin'), async (c) => {
 });
 
 // KPI Tier Targets
-db.get('/kpi-tier-targets', edgeCache(300), async (c) => {
+db.get('/kpi-tier-targets', async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM kpi_tier_targets').all();
     return c.json((results || []).map((t: any) => ({
@@ -987,7 +1014,7 @@ db.delete('/kpi-tier-targets/:id', requireRoles('Admin'), async (c) => {
 });
 
 // Audit Groups
-db.get('/audit-groups', edgeCache(300), async (c) => {
+db.get('/audit-groups', async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM audit_groups').all();
     return c.json(results);
@@ -1034,7 +1061,7 @@ db.delete('/audit-groups/:id', requireRoles('Admin'), async (c) => {
 });
 
 // Institution KPI Targets
-db.get('/institution-kpi-targets', edgeCache(300), async (c) => {
+db.get('/institution-kpi-targets', async (c) => {
   try {
     const { results } = await c.env.DB.prepare('SELECT * FROM institution_kpi_targets').all();
     return c.json((results || []).map((k: any) => ({
@@ -1206,6 +1233,188 @@ db.post('/activity', async (c) => {
       JSON.stringify(activity.metadata || {})
     ).run();
     return c.json({ id, ...activity });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// ─── INITIALIZE DEFAULTS ─────────────────────────────────────────────────────
+// Idempotently creates the 3 default audit phases, 3 KPI tiers, 9 tier×phase
+// targets, and 3 institution KPI targets in a single D1 batch.
+// Called once after login (admin) or after a full reset. Uses INSERT OR IGNORE
+// so it is safe to call repeatedly and will never duplicate rows.
+db.post('/system/initialize-defaults', requireRoles('Admin'), async (c) => {
+  try {
+    // 1. Read what already exists
+    const [existingPhases, existingTiers] = await Promise.all([
+      c.env.DB.prepare('SELECT id, name FROM audit_phases').all(),
+      c.env.DB.prepare('SELECT id, name FROM kpi_tiers').all(),
+    ]);
+    const phaseNames = new Set((existingPhases.results || []).map((p: any) => p.name));
+    const tierNames = new Set((existingTiers.results || []).map((t: any) => t.name));
+
+    const statements: any[] = [];
+
+    // 2. Create missing phases
+    const today = new Date();
+    const phaseDefaults = [
+      { name: 'Phase 1', offset: 0 },
+      { name: 'Phase 2', offset: 30 },
+      { name: 'Phase 3', offset: 60 },
+    ];
+    const newPhaseIds: { name: string; id: string }[] = [];
+    for (const pd of phaseDefaults) {
+      if (!phaseNames.has(pd.name)) {
+        const id = crypto.randomUUID();
+        const start = new Date(today);
+        start.setDate(today.getDate() + pd.offset);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 30);
+        statements.push(
+          c.env.DB.prepare(
+            'INSERT OR IGNORE INTO audit_phases (id, name, start_date, end_date, status) VALUES (?, ?, ?, ?, ?)'
+          ).bind(id, pd.name, start.toISOString().split('T')[0], end.toISOString().split('T')[0], 'Active')
+        );
+        newPhaseIds.push({ name: pd.name, id });
+      }
+    }
+
+    // 3. Rename legacy tier names (Tier 1→Small, etc.)
+    const legacyMap: Record<string, string> = { 'Tier 1': 'Small', 'Tier 2': 'Medium', 'Tier 3': 'Large' };
+    for (const t of (existingTiers.results || []) as any[]) {
+      if (legacyMap[t.name]) {
+        statements.push(
+          c.env.DB.prepare('UPDATE kpi_tiers SET name = ? WHERE id = ?').bind(legacyMap[t.name], t.id)
+        );
+        tierNames.delete(t.name);
+        tierNames.add(legacyMap[t.name]);
+      }
+    }
+
+    // 4. Deduplicate tiers — keep first occurrence of each name, delete extras
+    const seenTierIds = new Map<string, string>();
+    for (const t of (existingTiers.results || []) as any[]) {
+      const canonName = legacyMap[t.name] || t.name;
+      if (seenTierIds.has(canonName)) {
+        statements.push(c.env.DB.prepare('DELETE FROM kpi_tier_targets WHERE tier_id = ?').bind(t.id));
+        statements.push(c.env.DB.prepare('DELETE FROM kpi_tiers WHERE id = ?').bind(t.id));
+      } else {
+        seenTierIds.set(canonName, t.id);
+      }
+    }
+
+    // 5. Create missing tiers
+    const tierDefaults = [
+      { name: 'Small',  min: 0  },
+      { name: 'Medium', min: 30 },
+      { name: 'Large',  min: 70 },
+    ];
+    const newTierIds: { name: string; id: string }[] = [];
+    for (const td of tierDefaults) {
+      if (!seenTierIds.has(td.name)) {
+        const id = crypto.randomUUID();
+        statements.push(
+          c.env.DB.prepare(
+            'INSERT OR IGNORE INTO kpi_tiers (id, name, min_assets, description) VALUES (?, ?, ?, ?)'
+          ).bind(id, td.name, td.min, null)
+        );
+        newTierIds.push({ name: td.name, id });
+      }
+    }
+
+    // Execute phase + tier creation first so IDs exist for targets
+    if (statements.length > 0) await c.env.DB.batch(statements);
+
+    // 6. Re-read all phases and tiers (now including newly created ones)
+    const [allPhases, allTiers] = await Promise.all([
+      c.env.DB.prepare('SELECT id, name FROM audit_phases').all(),
+      c.env.DB.prepare('SELECT id, name FROM kpi_tiers').all(),
+    ]);
+
+    // 7. Ensure tier×phase targets and institution KPI targets exist
+    const targetStmts: any[] = [];
+    for (const tier of (allTiers.results || []) as any[]) {
+      for (const phase of (allPhases.results || []) as any[]) {
+        targetStmts.push(
+          c.env.DB.prepare(
+            'INSERT OR IGNORE INTO kpi_tier_targets (id, tier_id, phase_id, target_percentage) VALUES (?, ?, ?, ?)'
+          ).bind(crypto.randomUUID(), tier.id, phase.id, 100)
+        );
+      }
+    }
+    for (const phase of (allPhases.results || []) as any[]) {
+      targetStmts.push(
+        c.env.DB.prepare(
+          'INSERT INTO institution_kpi_targets (phase_id, target_percentage) VALUES (?, ?) ON CONFLICT(phase_id) DO NOTHING'
+        ).bind(phase.id, 100)
+      );
+    }
+    if (targetStmts.length > 0) await c.env.DB.batch(targetStmts);
+
+    // 8. Migrate percentage-based minAssets if any tier has minAssets > 100
+    const freshTiers = (allTiers.results || []) as any[];
+    const needsMigration = freshTiers.some((t: any) => t.min_assets > 100);
+    if (needsMigration) {
+      const sorted = [...freshTiers].sort((a: any, b: any) => a.min_assets - b.min_assets);
+      if (sorted.length >= 3) {
+        await c.env.DB.batch([
+          c.env.DB.prepare('UPDATE kpi_tiers SET min_assets = ? WHERE id = ?').bind(0, sorted[0].id),
+          c.env.DB.prepare('UPDATE kpi_tiers SET min_assets = ? WHERE id = ?').bind(30, sorted[1].id),
+          c.env.DB.prepare('UPDATE kpi_tiers SET min_assets = ? WHERE id = ?').bind(70, sorted[2].id),
+        ]);
+      }
+    }
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// ─── FULL SYSTEM RESET ───────────────────────────────────────────────────────
+// Atomically wipes ALL operational data including phases, KPI, groups, and
+// audit schedules. Keeps only the requesting admin user and clears pairing_lock.
+db.post('/system/full-reset', requireRoles('Admin'), async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const keep_user_id: string | undefined = body?.keep_user_id;
+  try {
+    // Purge edge cache for all GET routes that use edgeCache() before deleting,
+    // so post-reset loadAllData() never receives stale IDs from cache and hits an FK error.
+    try {
+      const edgeCacheStore = await caches.open('db');
+      const origin = new URL(c.req.url).origin;
+      await Promise.allSettled([
+        '/api/db/audit-phases', '/api/db/kpi-tiers', '/api/db/kpi-tier-targets',
+        '/api/db/departments', '/api/db/locations', '/api/db/department-mappings',
+        '/api/db/audit-groups', '/api/db/institution-kpi-targets',
+      ].map(path => edgeCacheStore.delete(new Request(`${origin}${path}`))));
+    } catch { /* cache purge is best-effort */ }
+
+    // FK-safe deletion order — every child table before its parent:
+    //   audit_schedules → locations, departments, audit_phases
+    //   locations       → departments, buildings
+    //   system_activities → users  (CRITICAL: was missing — caused entire batch to FK-fail
+    //                               and roll back, leaving departments intact)
+    //   kpi_tier_targets → kpi_tiers, audit_phases
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM audit_schedules'),
+      c.env.DB.prepare('DELETE FROM cross_audit_permissions'),
+      c.env.DB.prepare('DELETE FROM department_mappings'),
+      c.env.DB.prepare('DELETE FROM locations'),
+      c.env.DB.prepare('DELETE FROM buildings'),
+      c.env.DB.prepare('DELETE FROM system_activities'),
+      keep_user_id
+        ? c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id)
+        : c.env.DB.prepare('DELETE FROM users'),
+      c.env.DB.prepare('DELETE FROM departments'),
+      c.env.DB.prepare('DELETE FROM audit_groups'),
+      c.env.DB.prepare('DELETE FROM kpi_tier_targets'),
+      c.env.DB.prepare('DELETE FROM institution_kpi_targets'),
+      c.env.DB.prepare('DELETE FROM kpi_tiers'),
+      c.env.DB.prepare('DELETE FROM audit_phases'),
+      c.env.DB.prepare('DELETE FROM system_settings'),
+    ]);
+    return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }

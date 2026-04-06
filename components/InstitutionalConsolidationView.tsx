@@ -79,7 +79,7 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
           key={group.id} 
           className={`group flex flex-col border-2 border-slate-900 rounded-[28px] overflow-hidden ${
             isDark ? 'bg-slate-800' : 'bg-white'
-          } shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] transition-all duration-300`}
+          } shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] transition-all duration-300`}
         >
           {/* Card Header: Group Identity */}
           <div className="p-6 border-b-2 border-slate-900 bg-yellow-400 flex justify-between items-center">

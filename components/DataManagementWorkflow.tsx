@@ -99,18 +99,31 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           if (deptFileInputRef.current) deptFileInputRef.current.value = '';
           return;
         }
-        const newDepts: Omit<Department, 'id'>[] = [];
+        const parsedDepts: Omit<Department, 'id'>[] = [];
         results.data.forEach((row: any) => {
           const name = (row['DEPARTMENT'] || row['Department'] || row['department'] || row['JABATAN'] || row['Jabatan'] || row['NAME'] || row['Name'] || '').trim();
           const abbr = (row['ABBR'] || row['Abbr'] || row['abbr'] || row['ABBREVIATION'] || '').trim();
           if (name) {
-            newDepts.push({ name, abbr: abbr || name.substring(0, 4).toUpperCase(), headOfDeptId: null, description: '', auditGroupId: null });
+            parsedDepts.push({ name, abbr: abbr || name.substring(0, 4).toUpperCase(), headOfDeptId: null, description: '', auditGroupId: null });
           }
         });
-        if (newDepts.length > 0) {
-          onBulkAddDepts(newDepts);
-        } else {
+        if (parsedDepts.length === 0) {
           alert('No valid departments found. Ensure CSV has a DEPARTMENT (or JABATAN) column.');
+          return;
+        }
+        // Skip departments whose name already exists in the system
+        const existingNames = new Set(departments.map(d => d.name.toUpperCase().trim()));
+        const toAdd = parsedDepts.filter(d => !existingNames.has(d.name.toUpperCase().trim()));
+        const skipped = parsedDepts.length - toAdd.length;
+        if (toAdd.length > 0) {
+          onBulkAddDepts(toAdd);
+        } else {
+          alert(`All ${parsedDepts.length} department(s) already exist — nothing to import.`);
+          if (deptFileInputRef.current) deptFileInputRef.current.value = '';
+        }
+        if (skipped > 0 && toAdd.length > 0) {
+          // Brief info — the App toast will confirm the final count
+          console.info(`[Departments] Skipped ${skipped} already-existing, adding ${toAdd.length} new.`);
         }
       },
       error: () => alert('Failed to parse CSV.'),
@@ -148,11 +161,29 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           }
         }
         if (newMappings.length > 0) {
-          for (const m of newMappings) await onAddDepartmentMapping(m);
+          // Skip mappings that already exist with the same sourceName → targetDepartmentId
+          const existingMappingKeys = new Set(
+            departmentMappings.map(m => `${m.sourceName.toLowerCase().trim()}|${m.targetDepartmentId}`)
+          );
+          const toAdd = newMappings.filter(
+            m => !existingMappingKeys.has(`${m.sourceName.toLowerCase().trim()}|${m.targetDepartmentId}`)
+          );
+          const skipped = newMappings.length - toAdd.length;
+          if (toAdd.length > 0) {
+            for (const m of toAdd) await onAddDepartmentMapping(m);
+          }
+          // Always apply authoritative 'total aset' totals from the mapping CSV,
+          // even on re-upload when no new mapping rows were added.
+          // Multiple CO sub-units under the same SPPA dept are summed into one total.
           if (Object.keys(deptAssetAccumulator).length > 0) {
             await onSetDeptTotalsFromMapping(deptAssetAccumulator);
           }
-          alert(`Successfully imported ${newMappings.length} mapping rules and updated asset totals for ${Object.keys(deptAssetAccumulator).length} departments.`);
+          const skipNote = skipped > 0 ? ` Skipped ${skipped} already-existing.` : '';
+          if (toAdd.length > 0) {
+            alert(`Successfully imported ${toAdd.length} mapping rule(s) and updated asset totals for ${Object.keys(deptAssetAccumulator).length} department(s).${skipNote}`);
+          } else {
+            alert(`All ${newMappings.length} mapping(s) already exist. Asset totals updated for ${Object.keys(deptAssetAccumulator).length} department(s).${skipNote}`);
+          }
         } else {
           alert('No valid mappings found. Check the CSV format (columns: DEPARTMENT, LOCATION).');
         }
@@ -212,7 +243,8 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
         const resolveBahagian = (bahagian: string): string | undefined => {
           const bLow = bahagian.toLowerCase().trim();
           const dbMap = departmentMappings.find(m => m.sourceName.trim().toLowerCase() === bLow);
-          if (dbMap) return dbMap.targetDepartmentId;
+          // Validate mapping still points to an existing department (guards against stale IDs after a reset)
+          if (dbMap && departments.find(d => d.id === dbMap.targetDepartmentId)) return dbMap.targetDepartmentId;
           if (deptByNorm[bLow]) return deptByNorm[bLow];
           const staticMatch = ASSET_BUILTIN_MAP[bLow];
           if (staticMatch && deptByNorm[staticMatch.toLowerCase()]) return deptByNorm[staticMatch.toLowerCase()];
@@ -234,25 +266,39 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
         if (Object.keys(deptTotals).length === 0) throw new Error('No departments could be matched. Check your mapping rules.');
 
         const locationObjects: Omit<Location, 'id'>[] = [];
+        // Merge locations by resolved (name + SPPA deptId) — multiple CO sub-units can map to the
+        // same SPPA dept and share the same physical location; their asset counts must be summed.
+        const locMerged = new Map<string, Omit<Location, 'id'>>();
         for (const [locKey, count] of Object.entries(locationCounts)) {
-          const [lokasiName, bahagian] = locKey.split('|||');
+          // Use lastIndexOf so location names containing '|||' (edge case) still work
+          const sepIdx = locKey.lastIndexOf('|||');
+          const lokasiName = sepIdx !== -1 ? locKey.slice(0, sepIdx) : locKey;
+          const bahagian   = sepIdx !== -1 ? locKey.slice(sepIdx + 3) : '';
           const deptId = resolveBahagian(bahagian);
           if (!deptId) continue;
-          locationObjects.push({
-            name: lokasiName,
-            abbr: lokasiName.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 10),
-            departmentId: deptId, building: '', description: '', supervisorId: '', contact: '',
-            totalAssets: count,
-          });
+          const mergeKey = `${lokasiName.toUpperCase()}|${deptId}`;
+          if (locMerged.has(mergeKey)) {
+            locMerged.get(mergeKey)!.totalAssets! += count;
+          } else {
+            locMerged.set(mergeKey, {
+              name: lokasiName,
+              abbr: lokasiName.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 10),
+              departmentId: deptId, building: '', description: '', supervisorId: null, contact: '',
+              totalAssets: count,
+            });
+          }
         }
+        locMerged.forEach(loc => locationObjects.push(loc));
+
         if (locationObjects.length > 0) await onUpsertLocations(locationObjects);
 
+        const unmatchedList = Array.from(unmatchedDepts);
         setAssetSyncStatus({
           type: unmatchedDepts.size > 0 ? 'warn' : 'success',
-          message: `Successfully synced ${totalMatchedAssets.toLocaleString()} assets across ${Object.keys(deptTotals).length} departments.`,
+          message: `Successfully synced ${totalMatchedAssets.toLocaleString()} assets across ${Object.keys(deptTotals).length} department(s), ${locationObjects.length} location(s).`,
           detail: unmatchedDepts.size > 0
-            ? `${unmatchedDepts.size} units unmatched: ${Array.from(unmatchedDepts).slice(0, 3).join(', ')}...`
-            : `${locationObjects.length} locations updated/created.`,
+            ? `${unmatchedDepts.size} CO unit(s) unmatched (add mapping rules): ${unmatchedList.slice(0, 5).join('; ')}${unmatchedList.length > 5 ? ` …+${unmatchedList.length - 5} more` : ''}`
+            : undefined,
         });
       } catch (err: any) {
         setAssetSyncStatus({ type: 'error', message: err.message || 'Sync failed' });
@@ -325,7 +371,8 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
         const resolveDept = (bahagian: string): string | undefined => {
           const bLow = bahagian.toLowerCase().trim();
           const dbMap = departmentMappings.find(m => m.sourceName.trim().toLowerCase() === bLow);
-          if (dbMap) return dbMap.targetDepartmentId;
+          // Validate mapping still points to an existing department (guards against stale IDs after a reset)
+          if (dbMap && departments.find(d => d.id === dbMap.targetDepartmentId)) return dbMap.targetDepartmentId;
           if (deptByNorm[bLow]) return deptByNorm[bLow];
           const staticMatch = ASSET_BUILTIN_MAP[bLow];
           if (staticMatch && deptByNorm[staticMatch.toLowerCase()]) return deptByNorm[staticMatch.toLowerCase()];

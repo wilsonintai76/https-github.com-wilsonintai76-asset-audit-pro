@@ -63,6 +63,11 @@
   .glass-card {
     @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl;
   }
+
+  .bg-dot-pattern {
+    background-image: radial-gradient(#1e293b 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
 }
 
 @theme inline {

@@ -62,7 +62,7 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
                   }`}>
                     <Icon className="w-5 h-5" />
                   </div>
-                  <div className="flex-grow">
+                  <div className="grow">
                     <p className="text-sm font-bold text-slate-900">{widget.label}</p>
                     <p className="text-[10px] text-slate-500 font-medium">{widget.desc}</p>
                   </div>
@@ -79,13 +79,13 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
             <Button 
               variant="outline"
               onClick={onClose}
-              className="flex-grow py-6 border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-100 transition-all text-sm"
+              className="grow py-6 border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-100 transition-all text-sm"
             >
               Discard Changes
             </Button>
             <Button 
               onClick={() => onSave(tempConfig)}
-              className="flex-[2] py-6 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 text-sm border-none"
+              className="flex-2 py-6 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 text-sm border-none"
             >
               Save Configuration
             </Button>

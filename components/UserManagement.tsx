@@ -285,8 +285,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({
           </div>
           
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="relative min-w-[160px]">
+            <div className="relative min-w-40">
               <select
+                title="Status Filter"
                 className="w-full pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold shadow-sm appearance-none outline-none hover:border-blue-300 transition-colors cursor-pointer"
                 value={selectedStatusFilter}
                 onChange={(e) => setSelectedStatusFilter(e.target.value)}
@@ -300,8 +301,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 w-3 h-3 pointer-events-none" />
             </div>
 
-            <div className="relative min-w-[220px]">
+            <div className="relative min-w-55">
               <select
+                title="Department Filter"
                 className="w-full pl-4 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold shadow-sm appearance-none outline-none hover:border-blue-300 transition-colors cursor-pointer"
                 value={selectedDeptFilter}
                 onChange={(e) => setSelectedDeptFilter(e.target.value)}
@@ -384,8 +386,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                 </div>
               </div>
               <button 
-                onClick={resetForm}
-                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 transition-all active:scale-95 text-white"
+                onClick={resetForm}                  title="Close form"                className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white/10 hover:bg-white/20 transition-all active:scale-95 text-white"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -396,22 +397,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Full Name</label>
-                    <input required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                    <input required title="Full Name" placeholder="Enter full name" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Email</label>
-                    <input required type="email" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+                    <input required type="email" title="Email" placeholder="Enter institutional email" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Department</label>
-                    <select required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.departmentId} onChange={e => setFormData({ ...formData, departmentId: e.target.value })}>
+                    <select required title="Department" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.departmentId} onChange={e => setFormData({ ...formData, departmentId: e.target.value })}>
                       <option value="">Select Dept</option>
                       {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Designation</label>
-                    <select required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.designation} onChange={e => setFormData({ ...formData, designation: e.target.value })}>
+                    <select required title="Designation" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.designation} onChange={e => setFormData({ ...formData, designation: e.target.value })}>
                       <option value="">Select Designation</option>
                       <option value="Head Of Department">Head Of Department</option>
                       <option value="Coordinator">Coordinator</option>
@@ -442,7 +443,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Contact</label>
-                    <input className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
+                    <input title="Contact Number" placeholder="Enter contact number" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
                   </div>
                 </div>
               </form>
@@ -470,7 +471,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[900px]">
+          <table className="w-full text-left min-w-225">
             <thead className="bg-slate-50/50 border-b border-slate-100">
               <tr>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Team Member</th>
@@ -531,12 +532,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           <>
                             <button 
                               onClick={() => startEdit(user)}
+                              title="Edit member"
                               className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-blue-600 rounded-xl transition-all"
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
                             <button 
                               onClick={() => onDeleteMember(user.id)}
+                              title="Delete member"
                               className="w-9 h-9 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-red-600 rounded-xl transition-all"
                             >
                               <Trash2 className="w-4 h-4" />

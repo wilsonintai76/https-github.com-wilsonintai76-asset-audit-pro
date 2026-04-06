@@ -155,6 +155,14 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db.departments.clear.$post({ json: { keep_user_id: currentUserId } }, { headers: h }));
   }
 
+  async fullSystemReset(adminUserId?: string) {
+    await this.rpc<unknown>(h => (api as any).db.system['full-reset'].$post({ json: { keep_user_id: adminUserId } }, { headers: h }));
+  }
+
+  async initializeDefaults() {
+    await this.rpc<unknown>(h => (api as any).db.system['initialize-defaults'].$post({ json: {} }, { headers: h }));
+  }
+
   // --- DEPARTMENT MAPPINGS ---
   async getDepartmentMappings(): Promise<DepartmentMapping[]> {
     return this.rpcOrNull<DepartmentMapping[]>(h => (api as any).db['department-mappings'].$get({}, { headers: h })) as Promise<DepartmentMapping[]>;

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Department, AuditGroup } from '../types';
-import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users, RotateCcw } from 'lucide-react';
+import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users, RotateCcw, Lock, AlertTriangle } from 'lucide-react';
 
 const THRESHOLD_STORAGE_KEY = 'group_builder_threshold';
 const STANDALONE_CUTOFF_KEY = 'group_builder_standalone_cutoff';
@@ -31,6 +31,8 @@ interface GroupBuilderTabProps {
   setStrictAuditorRule: (val: boolean) => void;
   maxAssetsPerDay?: number;
   maxLocationsPerDay?: number;
+  isSystemLocked?: boolean;
+  pairingLocked?: boolean;
 }
 
 export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
@@ -44,12 +46,29 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   strictAuditorRule,
   setStrictAuditorRule,
   maxAssetsPerDay = 1000,
-  maxLocationsPerDay = 5
+  maxLocationsPerDay = 5,
+  isSystemLocked = false,
+  pairingLocked = false,
 }) => {
   const [builderTab, setBuilderTab] = useState<1 | 2>(1);
   const [threshold, setThreshold] = useState<number>(() => loadThreshold());
   const [standaloneCutoff, setStandaloneCutoff] = useState<number>(() => loadStandaloneCutoff());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+
+  // Determine if consolidation is locked due to active audit activity
+  const { initLocked, initLockReason } = useMemo(() => {
+    // Pairing is committed — audit is actively running
+    if (pairingLocked) {
+      return { initLocked: true, initLockReason: 'Audit pairing has been committed and is locked. Reset the configuration first before re-initializing groups.' };
+    }
+
+    // Schedules are actively running (in-progress/completed)
+    if (isSystemLocked) {
+      return { initLocked: true, initLockReason: 'System is locked due to active audit assignments.' };
+    }
+
+    return { initLocked: false, initLockReason: '' };
+  }, [pairingLocked, isSystemLocked]);
 
   // Derive which departments are currently locked into the editing group
   const editingGroupDepts = useMemo(() => {
@@ -107,7 +126,8 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     // Show all non-exempted departments in groups
     // Standalone-exempt (small) departments appear as their own solo entity
     departments.filter(d => !d.isExempted).forEach(dept => {
-      const key = dept.auditGroupId || 'unassigned_' + dept.id;
+      const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
+      const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
       groupedDepts[key].push(dept);
     });
@@ -118,7 +138,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       const name = isUnassigned
         ? depts[0].name
-        : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
+        : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
       const isStandaloneExempt = isUnassigned && totalAssets >= standaloneCutoff;
 
       return {
@@ -263,12 +283,29 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
                <button 
                  onClick={handleRunAutoConsolidate}
-                 disabled={isProcessing || !onAutoConsolidate}
-                 className="mx-2 w-[calc(100%-1rem)] py-5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-[24px] text-xs font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all shadow-2xl shadow-slate-900/10 active:scale-95 group"
+                 disabled={isProcessing || !onAutoConsolidate || initLocked}
+                 title={initLocked ? initLockReason : undefined}
+                 className={`mx-2 w-[calc(100%-1rem)] py-5 rounded-[24px] text-xs font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all shadow-2xl active:scale-95 group ${
+                   initLocked
+                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                     : 'bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white shadow-slate-900/10'
+                 }`}
                >
-                 {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 text-indigo-400 group-hover:scale-125 transition-transform" />}
-                 Initialize Consolidation
+                 {isProcessing ? (
+                   <Loader2 className="w-5 h-5 animate-spin" />
+                 ) : initLocked ? (
+                   <Lock className="w-5 h-5" />
+                 ) : (
+                   <Sparkles className="w-5 h-5 text-indigo-400 group-hover:scale-125 transition-transform" />
+                 )}
+                 {initLocked ? 'Locked — Audit In Progress' : 'Initialize Consolidation'}
                </button>
+               {initLocked && (
+                 <div className="mx-2 mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+                   <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                   <p className="text-[11px] text-amber-700 font-medium leading-relaxed">{initLockReason}</p>
+                 </div>
+               )}
              </div>
            )}
 

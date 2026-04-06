@@ -69,7 +69,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <AlertDialogFooter className="flex flex-col space-y-3 mt-8 sm:space-x-0">
+          <AlertDialogFooter className="flex flex-col gap-3 mt-8 bg-transparent border-0 p-0 m-0 rounded-none sm:flex-col sm:space-x-0">
             <AlertDialogAction 
               onClick={onConfirm}
               className={`w-full py-6 text-white font-bold rounded-2xl transition-all shadow-lg border-none ${variantClasses[variant]}`}

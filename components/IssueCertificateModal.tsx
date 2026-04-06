@@ -27,7 +27,7 @@ export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ us
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-200 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={onClose}></div>
       <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in duration-200">
         <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
@@ -52,6 +52,8 @@ export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ us
                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 transition-colors group-focus-within:text-blue-500" />
                 <input 
                    type="date"
+                   title="Issue Date"
+                   placeholder="YYYY-MM-DD"
                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
                    value={issueDate}
                    onChange={(e) => setIssueDate(e.target.value)}

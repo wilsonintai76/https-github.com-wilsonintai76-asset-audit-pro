@@ -51,15 +51,21 @@ interface SystemSettingsProps {
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
+  onSetDeptTotalsFromMapping: (totals: Record<string, number>) => Promise<void>;
   onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[], deptExtras?: Record<string, number>) => Promise<void>;
   locations: Location[];
   auditGroups: AuditGroup[];
   onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup: (id: string) => Promise<void>;
+  onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
   onAutoConsolidate: (threshold: number, excludedIds: string[]) => Promise<void>;
   onBulkAddPermissions: (auditorDept: string, targetDept: string, isMutual: boolean) => Promise<void>;
   onBulkRemovePermissions: (ids: string[]) => Promise<void>;
+  pairingLocked?: boolean;
+  pairingLockInfo?: { lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null;
+  onLockPairing?: (pairingCount: number) => Promise<void>;
+  onUnlockPairing?: () => Promise<void>;
   showToast?: (message: string, type?: any) => void;
 }
 
@@ -99,14 +105,20 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onDeleteDepartmentMapping,
   onSyncLocationMappings,
   onUpsertLocations,
+  onSetDeptTotalsFromMapping,
   onUpdateUninspectedAssets,
   auditGroups,
   onAddAuditGroup,
   onUpdateAuditGroup,
   onDeleteAuditGroup,
+  onBulkDeleteAuditGroups,
   onAutoConsolidate,
   onBulkAddPermissions,
   onBulkRemovePermissions,
+  pairingLocked,
+  pairingLockInfo,
+  onLockPairing,
+  onUnlockPairing,
   kpiTierTargets,
   institutionKPIs,
   onUpdateInstitutionKPI,
@@ -147,6 +159,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           onDeleteDepartmentMapping={onDeleteDepartmentMapping}
           onSyncLocationMappings={onSyncLocationMappings}
           onUpsertLocations={onUpsertLocations}
+          onSetDeptTotalsFromMapping={onSetDeptTotalsFromMapping}
           onUpdateUninspectedAssets={onUpdateUninspectedAssets}
         />
       )}
@@ -214,6 +227,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         setStrictAuditorRule={setStrictAuditorRule}
         maxAssetsPerDay={maxAssetsPerDay}
         maxLocationsPerDay={maxLocationsPerDay}
+        isSystemLocked={isSystemLocked}
+        pairingLocked={pairingLocked}
       />
 
       <CrossAuditManagement
@@ -229,9 +244,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onAddAuditGroup={onAddAuditGroup}
         onUpdateAuditGroup={onUpdateAuditGroup}
         onDeleteAuditGroup={onDeleteAuditGroup}
+        onBulkDeleteAuditGroups={onBulkDeleteAuditGroups}
         onAutoConsolidate={onAutoConsolidate}
         onBulkAddPermissions={onBulkAddPermissions}
         onBulkRemovePermissions={onBulkRemovePermissions}
+        pairingLocked={pairingLocked}
+        pairingLockInfo={pairingLockInfo}
+        onLockPairing={onLockPairing}
+        onUnlockPairing={onUnlockPairing}
         phases={phases}
         institutionKPIs={institutionKPIs}
         maxAssetsPerDay={maxAssetsPerDay}

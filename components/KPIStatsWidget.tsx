@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { AuditPhase, KPITier, KPITierTarget, Department, Location, AuditSchedule, InstitutionKPITarget } from '../types';
 import { ChevronDown, Building2, TrendingUp, AlertCircle, CheckCircle2, Trophy } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -14,6 +14,29 @@ interface KPIStatsWidgetProps {
   locations: Location[];
   schedules: AuditSchedule[];
   institutionKPIs: InstitutionKPITarget[];
+}
+
+function TierProgressBar({ actual, target, color }: { actual: number; target: number; color: string }) {
+  const fillRef = React.useRef<HTMLDivElement>(null);
+  const markerRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    fillRef.current?.style.setProperty('--w', `${Math.min(100, actual)}%`);
+    markerRef.current?.style.setProperty('--mark', `${Math.min(100, target)}%`);
+  }, [actual, target]);
+  return (
+    <div className="h-3 w-full bg-slate-200 rounded-full relative overflow-hidden mb-2">
+      <div ref={markerRef} className="absolute top-0 bottom-0 w-0.5 bg-slate-900 z-10 opacity-30 left-(--mark)" title={`Target: ${target}%`} />
+      <div ref={fillRef} className={`h-full rounded-full transition-all duration-1000 ${color} relative w-(--w)`} />
+    </div>
+  );
+}
+
+function DeptProgressBar({ percentage, color }: { percentage: number; color: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    ref.current?.style.setProperty('--w', `${percentage}%`);
+  }, [percentage]);
+  return <div ref={ref} className={`h-full rounded-full ${color} w-(--w)`} />;
 }
 
 export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers, kpiTierTargets, departments, locations, schedules, institutionKPIs }) => {
@@ -113,6 +136,9 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
     };
   }, [schedules, locations, departments, institutionKPIs, activePhase]);
 
+  const globalFillRef = useRef<HTMLDivElement>(null);
+  const globalTargetRef = useRef<HTMLDivElement>(null);
+
   const toggleExpand = (id: string) => {
     setExpandedTierId(prev => prev === id ? null : id);
   };
@@ -147,7 +173,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
            <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/5 blur-[60px] rounded-full -ml-20 -mb-20"></div>
            
            <div className="relative flex flex-col md:flex-row md:items-center gap-8">
-              <div className="flex-grow">
+              <div className="grow">
                  <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 bg-white/10 text-blue-400 rounded-xl flex items-center justify-center border border-white/10">
                        <Building2 className="w-5 h-5" />
@@ -192,12 +218,12 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
 
            <div className="h-2 w-full bg-white/10 rounded-full mt-8 relative overflow-hidden">
               <div 
-                 className="absolute top-0 bottom-0 w-1 bg-white z-10" 
-                 style={{ left: `${globalStats.targetPercentage}%` }}
+                 ref={globalTargetRef}
+                 className="absolute top-0 bottom-0 w-1 bg-white z-10 left-(--mark)" 
               ></div>
               <div 
-                 className={`h-full rounded-full transition-all duration-1000 ${globalStats.isOnTrack ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                 style={{ width: `${globalStats.actualPercentage}%` }}
+                 ref={globalFillRef}
+                 className={`h-full rounded-full transition-all duration-1000 ${globalStats.isOnTrack ? 'bg-emerald-400' : 'bg-amber-400'} w-(--w)`}
               ></div>
            </div>
         </div>
@@ -236,18 +262,7 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                  </div>
                </div>
                
-               {/* Main Tier Progress Bar */}
-               <div className="h-3 w-full bg-slate-200 rounded-full relative overflow-hidden mb-2">
-                 <div 
-                    className="absolute top-0 bottom-0 w-0.5 bg-slate-900 z-10 opacity-30" 
-                    style={{ left: targetMarker }}
-                    title={`Target: ${stat.targetPercentage}%`}
-                 ></div>
-                 <div 
-                    className={`h-full rounded-full transition-all duration-1000 ${progressColor} relative`}
-                    style={{ width }}
-                 ></div>
-               </div>
+               <TierProgressBar actual={stat.actualPercentage} target={stat.targetPercentage} color={progressColor} />
 
                {/* Expanded Department List */}
                {isExpanded && (
@@ -260,21 +275,18 @@ export const KPIStatsWidget: React.FC<KPIStatsWidgetProps> = ({ phases, kpiTiers
                         <div className="space-y-3">
                             {stat.departments.map(dept => (
                                 <div key={dept.id} className="flex items-center gap-3">
-                                    <div className="flex-grow min-w-0">
+                                    <div className="grow min-w-0">
                                         <div className="flex justify-between mb-1">
                                             <span className="text-xs font-bold text-slate-700 truncate">{dept.name}</span>
                                             <span className={`text-[10px] font-bold ${dept.percentage >= stat.targetPercentage ? 'text-emerald-600' : 'text-amber-600'}`}>
                                                 {dept.percentage}%
                                             </span>
                                         </div>
-                                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                            <div 
-                                                className={`h-full rounded-full ${dept.percentage >= stat.targetPercentage ? 'bg-emerald-400' : 'bg-amber-400'}`}
-                                                style={{ width: `${dept.percentage}%` }}
-                                            ></div>
+                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                            <DeptProgressBar percentage={dept.percentage} color={dept.percentage >= stat.targetPercentage ? 'bg-emerald-400' : 'bg-amber-400'} />
                                         </div>
                                     </div>
-                                    <div className="text-right shrink-0 min-w-[60px]">
+                                    <div className="text-right shrink-0 min-w-15">
                                         <div className="text-[9px] text-slate-400 font-mono">
                                             {dept.inspectedAssets.toLocaleString()}/{dept.assets.toLocaleString()} aset
                                         </div>

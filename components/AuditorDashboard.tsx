@@ -1,5 +1,13 @@
 
 import React, { useMemo } from 'react';
+
+function GoalBar({ value, color }: { value: number; color: string }) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    ref.current?.style.setProperty('--w', `${value}%`);
+  }, [value]);
+  return <div ref={ref} className={`h-full ${color} w-(--w)`} />;
+}
 import { AuditSchedule, User, AuditPhase, KPITier, Department, Location, InstitutionKPITarget } from '../types';
 import { 
   Calendar, 
@@ -216,7 +224,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                     }`}>
                       {audit.status}
                     </div>
-                    <button className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center">
+                    <button title="View details" className="w-10 h-10 rounded-xl bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center">
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
@@ -239,9 +247,9 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
           {/* Certification Widget */}
           {certInfo && (
             <div className={`rounded-3xl p-6 text-white shadow-xl relative overflow-hidden transition-colors duration-500 ${
-                certInfo.status === 'safe' ? 'bg-gradient-to-br from-indigo-600 to-blue-700 shadow-blue-500/20' :
-                certInfo.status === 'warning' ? 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20' :
-                'bg-gradient-to-br from-rose-600 to-red-700 shadow-rose-500/20'
+                certInfo.status === 'safe' ? 'bg-linear-to-br from-indigo-600 to-blue-700 shadow-blue-500/20' :
+                certInfo.status === 'warning' ? 'bg-linear-to-br from-amber-500 to-orange-600 shadow-amber-500/20' :
+                'bg-linear-to-br from-rose-600 to-red-700 shadow-rose-500/20'
             }`}>
               <GraduationCap className="absolute -right-4 -bottom-4 text-white/10 w-24 h-24" />
               <div className="relative z-10">
@@ -279,7 +287,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
 
           {/* Phase Targets & Goals */}
           <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-[40px] rounded-full -mr-10 -mt-10"></div>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-2xl rounded-full -mr-10 -mt-10"></div>
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2 relative z-10">
               <Trophy className="w-5 h-5 text-amber-400" />
               Phase Targets
@@ -315,7 +323,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                        <span className="text-lg font-black">{instTarget}%</span>
                     </div>
                     <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                       <div className="h-full bg-blue-500" style={{ width: `${instTarget}%` }}></div>
+                       <GoalBar value={instTarget} color="bg-blue-500" />
                     </div>
                   </div>
 
@@ -325,7 +333,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                        <span className="text-lg font-black">{deptTarget}%</span>
                     </div>
                     <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                       <div className="h-full bg-emerald-500" style={{ width: `${deptTarget}%` }}></div>
+                       <GoalBar value={deptTarget} color="bg-emerald-500" />
                     </div>
                     <p className="text-[9px] text-white/30 mt-2 font-medium">Based on {myTier?.name || 'Standard'} Tier</p>
                   </div>
@@ -347,7 +355,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                   <span className="text-xs font-black text-slate-900">98.2%</span>
                 </div>
                 <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full" style={{ width: '98.2%' }}></div>
+                  <div className="h-full bg-blue-500 rounded-full w-[98.2%]"></div>
                 </div>
               </div>
               
@@ -357,7 +365,7 @@ export const AuditorDashboard: React.FC<AuditorDashboardProps> = ({
                   <span className="text-xs font-black text-slate-900">94.5%</span>
                 </div>
                 <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '94.5%' }}></div>
+                  <div className="h-full bg-emerald-500 rounded-full w-[94.5%]"></div>
                 </div>
               </div>
 

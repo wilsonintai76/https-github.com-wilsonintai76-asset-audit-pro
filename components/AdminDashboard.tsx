@@ -271,7 +271,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <h3 className="text-lg font-bold text-slate-900">Incomplete User Onboarding</h3>
                 </div>
              </div>
-             <div className="max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
+             <div className="max-h-100 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200">
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-50/50 sticky top-0 z-10 border-b border-slate-100">
                         <tr>
@@ -351,7 +351,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </section>
 
           {/* ACTIVITY LOG */}
-          <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col h-[600px]">
+          <section className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col h-150">
              <div className="flex items-center justify-between mb-6 shrink-0">
                <h3 className="font-bold text-slate-900 flex items-center gap-2">
                  <History className="w-4 h-4 text-blue-500" />
@@ -360,10 +360,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Trail</span>
              </div>
 
-             <div className="flex-grow overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-100 space-y-4">
+             <div className="grow overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-100 space-y-4">
                 {activities.slice().reverse().map(activity => (
                   <div key={activity.id} className="relative pl-6 pb-4 border-l border-slate-100 last:pb-0">
-                    <div className={`absolute left-[-5px] top-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
+                    <div className={`absolute -left-1.25 top-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${
                         activity.type.includes('DELETE') ? 'bg-rose-500' :
                         activity.type.includes('CREATE') ? 'bg-emerald-500' :
                         activity.type.includes('UPDATE') ? 'bg-blue-500' :
@@ -428,7 +428,7 @@ const DataGapCard: React.FC<{ title: string, icon: any, items: AuditSchedule[], 
                     {items.length} Gaps
                 </span>
             </div>
-            <div className="max-h-[240px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-100 divide-y divide-slate-50">
+            <div className="max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-100 divide-y divide-slate-50">
                 {items.map(audit => {
                     const loc = locations.find(l => l.id === audit.locationId);
                     const dept = departments.find(d => d.id === audit.departmentId);

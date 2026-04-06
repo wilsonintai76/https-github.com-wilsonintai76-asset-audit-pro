@@ -106,13 +106,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <button 
               onClick={onClose}
+              title="Close sidebar"
               className="ml-auto lg:hidden text-slate-400 hover:text-slate-600"
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
-          <nav className="flex-grow space-y-2">
+          <nav className="grow space-y-2">
             <div className="px-2 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('ui.main_menu')}</div>
             {showMainDashboard && (
               <NavItem 
