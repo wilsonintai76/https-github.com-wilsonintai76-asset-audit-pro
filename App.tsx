@@ -27,10 +27,11 @@ import { bulkManagement } from './services/bulkManagement';
 import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X } from 'lucide-react';
 
 const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
-  showStats: true,
-  showTrends: true,
+  showStats: false,
+  showTrends: false,
   showUpcoming: true,
-  showDeptDistribution: true
+  showDeptDistribution: false,
+  showKPI: true,
 };
 
 type ViewState = 'landing' | 'app' | 'docs';
@@ -2003,6 +2004,14 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateDashboardConfig = (newConfig: DashboardConfig) => {
+    if (!currentUser) return;
+    const updated = { ...currentUser, dashboardConfig: newConfig };
+    setCurrentUser(updated);
+    localStorage.setItem('audit_pro_session', JSON.stringify(updated));
+    showToast('Dashboard preferences saved');
+  };
+
   const handleDeleteMember = async (id: string) => {
     if (confirm("Remove user?")) {
       try {
@@ -2254,7 +2263,7 @@ const App: React.FC = () => {
             <OverviewDashboard
               schedules={filteredSchedules}
               config={currentUser.dashboardConfig || DEFAULT_DASHBOARD_CONFIG}
-              onUpdateConfig={() => { }}
+              onUpdateConfig={handleUpdateDashboardConfig}
               phases={auditPhases}
               kpiTiers={kpiTiers}
               departments={departmentsWithAssets}

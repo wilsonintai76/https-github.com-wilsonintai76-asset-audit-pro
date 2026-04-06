@@ -296,73 +296,59 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
           </Card>
       </div>
 
-      <Card className="rounded-[32px] border-slate-200 shadow-sm overflow-hidden">
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest mb-2 lg:mb-0 lg:mr-4">
-                  <Filter className="w-4 h-4" />
-                  Filters
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-grow">
-                  <div className="space-y-1.5">
-                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Department</Label>
-                    <Select value={selectedDept} onValueChange={setSelectedDept}>
-                      <SelectTrigger className="w-full bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-10 px-4">
-                        <SelectValue placeholder="All Departments" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="All">All Departments</SelectItem>
-                        {departments.map(d => (
-                            <SelectItem key={d.id} value={d.name}>{d.name} ({d.abbr})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Block / Building</Label>
-                    <Select value={selectedBlock} onValueChange={setSelectedBlock}>
-                      <SelectTrigger className="w-full bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-10 px-4">
-                        <SelectValue placeholder="All Building/Block" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueBlocks.map(b => {
-                            if (b === 'All') return <SelectItem key={b} value={b}>All Building/Block</SelectItem>;
-                            const fullBuilding = buildings.find(building => building.abbr === b);
-                            const displayName = fullBuilding ? `${b} | ${fullBuilding.name}` : b;
-                            return <SelectItem key={b} value={b}>{displayName}</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1 block">Level</Label>
-                    <Select value={selectedLevel} onValueChange={setSelectedLevel}>
-                      <SelectTrigger className="w-full bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-10 px-4">
-                        <SelectValue placeholder="All Levels" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {uniqueLevels.map(l => (
-                            <SelectItem key={l} value={l}>{l === 'All' ? 'All Levels' : l}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-              </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* LEFT MAIN COLUMN */}
+        <div className="lg:col-span-2 space-y-6">
 
-      {/* New Inspection Status Table */}
-      <Card className="rounded-[40px] border-slate-200 shadow-xl overflow-hidden bg-white">
-        <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-black text-slate-900 tracking-tight">Institutional Inspection Status</h3>
-            <p className="text-xs text-slate-500 font-medium">Detailed tracking of assets inspected vs target per department.</p>
-          </div>
-          <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center">
-            <LayoutDashboard className="w-6 h-6 text-indigo-600" />
-          </div>
-        </div>
+          {/* Inspection Status Table — filters live in its header */}
+          <Card className="rounded-[28px] border-slate-200 shadow-sm overflow-hidden bg-white">
+            <div className="px-6 pt-5 pb-4 border-b border-slate-100">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight">Institutional Inspection Status</h3>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">Live tracking of assets inspected vs target per department.</p>
+                </div>
+                <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
+                  <LayoutDashboard className="w-4 h-4 text-indigo-600" />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Select value={selectedDept} onValueChange={setSelectedDept}>
+                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-[150px]">
+                    <SelectValue placeholder="All Departments" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Departments</SelectItem>
+                    {departments.map(d => (
+                      <SelectItem key={d.id} value={d.name}>{d.name} ({d.abbr})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedBlock} onValueChange={setSelectedBlock}>
+                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-[150px]">
+                    <SelectValue placeholder="All Buildings" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueBlocks.map(b => {
+                      if (b === 'All') return <SelectItem key={b} value={b}>All Buildings</SelectItem>;
+                      const fullBuilding = buildings.find(building => building.abbr === b);
+                      const displayName = fullBuilding ? `${b} — ${fullBuilding.name}` : b;
+                      return <SelectItem key={b} value={b}>{displayName}</SelectItem>;
+                    })}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedLevel} onValueChange={setSelectedLevel}>
+                  <SelectTrigger className="bg-slate-50 border-slate-200 rounded-xl text-xs font-bold h-9 px-3 min-w-[110px]">
+                    <SelectValue placeholder="All Levels" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {uniqueLevels.map(l => (
+                      <SelectItem key={l} value={l}>{l === 'All' ? 'All Levels' : l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -409,11 +395,9 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
       </Card>
 
-      {config.showStats && <StatsCards schedules={filteredSchedules} />}
+          {config.showStats && <StatsCards schedules={filteredSchedules} />}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {phases?.length > 0 && kpiTiers?.length > 0 && (
+          {(config.showKPI ?? true) && phases?.length > 0 && kpiTiers?.length > 0 && (
             <KPIStatsWidget 
                 phases={phases}
                 kpiTiers={kpiTiers}
@@ -425,7 +409,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
             />
           )}
 
-          {phases?.length > 0 && kpiTiers?.length > 0 && (
+          {(config.showKPI ?? true) && phases?.length > 0 && kpiTiers?.length > 0 && (
             <TierDistributionTable 
               departments={departments}
               kpiTiers={kpiTiers}

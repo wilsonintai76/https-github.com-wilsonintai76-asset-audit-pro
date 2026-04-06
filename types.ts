@@ -88,6 +88,7 @@ export interface DashboardConfig {
   showTrends: boolean;
   showUpcoming: boolean;
   showDeptDistribution: boolean;
+  showKPI: boolean;
   showCertification?: boolean;
 }
 

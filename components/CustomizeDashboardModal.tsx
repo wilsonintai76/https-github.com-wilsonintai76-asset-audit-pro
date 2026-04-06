@@ -24,10 +24,11 @@ export const CustomizeDashboardModal: React.FC<CustomizeDashboardModalProps> = (
   };
 
   const widgetDefinitions = [
-    { key: 'showStats', label: 'Quick Stats Summary', icon: BarChart3, desc: 'Display total audits, pending tasks, and open slots.' },
-    { key: 'showTrends', label: 'Compliance Trends', icon: LineChart, desc: 'Visualize audit progress and weekly goal adherence.' },
-    { key: 'showUpcoming', label: 'Upcoming Audits', icon: CalendarDays, desc: 'List of next 3 scheduled audit locations.' },
-    { key: 'showDeptDistribution', label: 'Departmental Distribution', icon: Network, desc: 'Breakdown of audit workload across institutional departments.' },
+    { key: 'showStats', label: 'Quick Stats Summary', icon: BarChart3, desc: 'Total audits, pending tasks, and open slots at a glance.' },
+    { key: 'showKPI', label: 'KPI & Tier Analytics', icon: Award, desc: 'Phase KPI compliance targets and department tier distribution.' },
+    { key: 'showUpcoming', label: 'Upcoming Inspections', icon: CalendarDays, desc: 'Next 3 scheduled audit locations in the sidebar.' },
+    { key: 'showTrends', label: 'Compliance Trends', icon: LineChart, desc: 'Weekly audit progress and goal adherence chart.' },
+    { key: 'showDeptDistribution', label: 'Departmental Distribution', icon: Network, desc: 'Breakdown of audit workload across all departments.' },
   ] as const;
 
   return (
