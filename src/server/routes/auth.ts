@@ -50,7 +50,15 @@ auth.post(
     email: z.string().email(),
     password: z.string().min(8),
     name: z.string().min(2),
-  })),
+  }), (result, c) => {
+    if (!result.success) {
+      const error = (result as any).error;
+      return c.json({ 
+        success: false, 
+        message: 'Validation failed: ' + error.issues.map((i: any) => `${i.path.join('.')}: ${i.message}`).join(', ') 
+      }, 400);
+    }
+  }),
   async (c) => {
     const { email, password, name } = c.req.valid('json');
     const normalizedEmail = email.toLowerCase();

@@ -80,4 +80,9 @@ export function awaitSessionRegistered(): Promise<void> {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const api = hc<AppType>(getBaseUrl());
+export const api = hc<AppType>(getBaseUrl(), {
+  headers: () => {
+    const token = getAuthToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+});

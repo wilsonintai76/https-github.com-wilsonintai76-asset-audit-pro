@@ -65,6 +65,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
 
   const blob1Ref = useRef<HTMLDivElement>(null);
@@ -89,7 +90,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
-    setAuthError(null);
+    if (authMode === 'register' && password !== confirmPassword) {
+      setAuthError('Passwords do not match.');
+      setAuthLoading(false);
+      return;
+    }
 
     try {
       if (authMode === 'login') {
@@ -100,6 +105,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       setIsAuthModalOpen(false);
       onEnter();
     } catch (err: any) {
+      // Use the specific error message from the server if available
       setAuthError(err.message || 'Authentication failed. Please check your credentials.');
     } finally {
       setAuthLoading(false);
@@ -446,7 +452,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">Access Password</label>
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">
+                    {authMode === 'login' ? 'Access Password' : 'Create Password'}
+                  </label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input 
@@ -459,6 +467,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     />
                   </div>
                 </div>
+
+                {authMode === 'register' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">Confirm Password</label>
+                    <div className="relative">
+                      <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        type="password" 
+                        required
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <button 
                   type="submit" 
