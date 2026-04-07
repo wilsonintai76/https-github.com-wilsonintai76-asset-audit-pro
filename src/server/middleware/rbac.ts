@@ -3,23 +3,30 @@ import { Bindings, Variables } from '../types';
 
 // ─── Default RBAC Matrix ─────────────────────────────────────────────────────
 // Mirrors DEFAULT_RBAC_MATRIX in contexts/RBACContext.tsx (client-side).
-// This is the server-side source-of-truth fallback when KV is unavailable.
+// Source of truth: RBAC_ROLE_MATRIX.md
+// This is the server-side fallback when KV is unavailable.
 // KV key: "rbac_matrix" in SETTINGS namespace overrides these defaults at runtime.
 const DEFAULT_MATRIX: Record<string, string[]> = {
+  // Institutional Overview
   'view:overview':               ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
-  'view:schedule:all':           ['Admin', 'Coordinator'],
+  // Inspection Schedule
+  'view:schedule:all':           ['Admin'],                                              // View All Dept Schedules — Admin only
   'view:schedule:own':           ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
-  'view:schedule:matrix':        ['Admin', 'Coordinator', 'Auditor'],
+  'view:schedule:matrix':        ['Admin', 'Coordinator', 'Supervisor', 'Auditor'],      // Cross-Audit + Audit Matrix
   'edit:audit:date':             ['Admin', 'Coordinator', 'Supervisor'],
-  'edit:audit:assign':           ['Admin', 'Coordinator', 'Supervisor', 'Auditor'],
-  'edit:audit:assign:others':    ['Admin', 'Coordinator'],
-  'edit:audit:auto_assign':      ['Admin', 'Coordinator'],
-  'view:audit:assigned':         ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
-  'view:team:all':               ['Admin', 'Coordinator'],
-  'view:team:own':               ['Admin', 'Coordinator', 'Supervisor'],
+  'edit:audit:assign':           ['Admin', 'Supervisor', 'Auditor'],                     // Self-Assign — Coordinator ✗
+  'edit:audit:assign:others':    ['Admin'],                                              // Assign Others — Admin only
+  'edit:audit:auto_assign':      ['Admin'],                                              // Auto-Assign — Admin only
+  // Officer Hub
+  'view:audit:assigned':         ['Admin', 'Supervisor', 'Auditor'],                     // Officer Hub — Coordinator & Staff ✗
+  // User Management
+  'view:team:all':               ['Admin'],                                              // View All Members — Admin only
+  'view:team:own':               ['Admin', 'Coordinator', 'Supervisor'],                 // View Dept Members
   'edit:team':                   ['Admin', 'Coordinator'],
+  // Data Registries
   'manage:departments':          ['Admin', 'Coordinator'],
-  'manage:locations':            ['Admin', 'Coordinator'],
+  'manage:locations':            ['Admin', 'Coordinator', 'Supervisor'],
+  // System
   'manage:system':               ['Admin'],
   'view:admin:dashboard':        ['Admin'],
 };

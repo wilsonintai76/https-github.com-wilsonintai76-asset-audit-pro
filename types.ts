@@ -9,6 +9,7 @@ export interface AuditSchedule {
   date: string | null;
   status: 'Pending' | 'In Progress' | 'Completed';
   phaseId: string;
+  isLocked?: boolean;
 }
 
 export type Designation = 'Head Of Department' | 'Coordinator' | 'Supervisor' | 'Staff';

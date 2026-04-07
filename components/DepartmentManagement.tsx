@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Department, Location, User, AuditGroup, UserRole } from '../types';
-import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, ShieldCheck, UserPlus } from 'lucide-react';
+import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, ShieldCheck, UserPlus, Printer } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '../types';
 import { useRBAC } from '../contexts/RBACContext';
@@ -63,6 +63,99 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     setIsModalOpen(true);
   };
 
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) return;
+
+    const rows = departments.map(dept => {
+      const headUser = users.find(u => u.id === dept.headOfDeptId);
+      const groupName = auditGroups.find(g => g.id === dept.auditGroupId)?.name || '—';
+      return `
+        <tr>
+          <td><strong>${dept.abbr}</strong><br/><span class="sub">${dept.name}</span></td>
+          <td>${headUser ? `${headUser.name}<br/><span class="sub">${headUser.id}</span>` : '<span class="na">Not Assigned</span>'}</td>
+          <td class="center">${dept.auditorCount || 0}</td>
+          <td class="center">${(dept.totalAssets || 0).toLocaleString()}</td>
+          <td class="center">${(dept.uninspectedAssetCount || 0) > 0 ? `<span class="badge-red">${(dept.uninspectedAssetCount || 0).toLocaleString()}</span>` : '—'}</td>
+          <td>${groupName !== '—' ? `<span class="badge-blue">${groupName}</span>` : '—'}</td>
+          <td class="center">${dept.isExempted ? '<span class="badge-red">Exempted</span>' : '<span class="badge-green">Included</span>'}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Department Registry — Inspect-able</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #1e293b; background: #fff; padding: 32px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 2px solid #e2e8f0; }
+    .header-left h1 { font-size: 22px; font-weight: 900; color: #1e293b; letter-spacing: -0.5px; }
+    .header-left p { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .header-right { text-align: right; font-size: 10px; color: #94a3b8; }
+    .header-right .brand { font-size: 13px; font-weight: 900; color: #2563eb; letter-spacing: -0.3px; }
+    .meta { display: flex; gap: 24px; margin-bottom: 20px; }
+    .meta-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 16px; }
+    .meta-card .val { font-size: 20px; font-weight: 900; color: #1e293b; }
+    .meta-card .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; font-weight: 700; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #1e293b; color: #fff; }
+    thead th { padding: 10px 12px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; }
+    thead th.center { text-align: center; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    tbody tr:hover { background: #eff6ff; }
+    td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    td.center { text-align: center; }
+    .sub { font-size: 10px; color: #94a3b8; }
+    .na { font-style: italic; color: #cbd5e1; }
+    .badge-red { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
+    .badge-green { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
+    .badge-blue { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
+    .footer { margin-top: 24px; font-size: 9px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+    @media print { body { padding: 16px; } .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>Department Registry</h1>
+      <p>Institutional structure, departments and unit configuration</p>
+    </div>
+    <div class="header-right">
+      <div class="brand">Inspect-able</div>
+      <div>Printed: ${new Date().toLocaleString('en-MY', { dateStyle: 'long', timeStyle: 'short' })}</div>
+    </div>
+  </div>
+  <div class="meta">
+    <div class="meta-card"><div class="val">${departments.length}</div><div class="lbl">Total Departments</div></div>
+    <div class="meta-card"><div class="val">${departments.filter(d => !d.isExempted).length}</div><div class="lbl">Active (Included)</div></div>
+    <div class="meta-card"><div class="val">${departments.filter(d => d.isExempted).length}</div><div class="lbl">Exempted</div></div>
+    <div class="meta-card"><div class="val">${departments.reduce((s, d) => s + (d.totalAssets || 0), 0).toLocaleString()}</div><div class="lbl">Total Assets</div></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Department</th>
+        <th>Head of Department</th>
+        <th class="center">Auditors</th>
+        <th class="center">Total Assets</th>
+        <th class="center">Uninspected</th>
+        <th>Audit Group</th>
+        <th class="center">Cross-Audit</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">Inspect-able — Institutional Asset Audit Platform &nbsp;|&nbsp; Confidential — Internal Use Only</div>
+  <script>window.onload = () => { window.print(); };<\/script>
+</body>
+</html>`;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
   const getColorIndex = (str: string) => {
     let hash = 0;
     for (let i = 0; i < (str?.length || 0); i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
@@ -106,6 +199,18 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
             New Dept
           </button>
         )}
+        <button
+          onClick={handlePrint}
+          title="Print Department Registry"
+          className={`px-4 py-2.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 active:scale-95 border ${
+            activePhase
+              ? 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+              : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 shadow-sm'
+          }`}
+        >
+          <Printer className="w-4 h-4" />
+          Print
+        </button>
       </PageHeader>
 
       <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">

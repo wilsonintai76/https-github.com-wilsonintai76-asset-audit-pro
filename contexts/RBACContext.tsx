@@ -2,23 +2,30 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { RBACMatrix, UserRole } from '../types';
 import { gateway } from '../services/dataGateway';
 
+// Source of truth: RBAC_ROLE_MATRIX.md
 export const DEFAULT_RBAC_MATRIX: RBACMatrix = {
-  'view:overview': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
-  'view:schedule:all': ['Admin', 'Coordinator'],
-  'view:schedule:own': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
-  'view:schedule:matrix': ['Admin', 'Coordinator', 'Auditor'],
-  'edit:audit:date': ['Admin', 'Coordinator', 'Supervisor'],
-  'edit:audit:assign': ['Admin', 'Coordinator', 'Supervisor', 'Auditor'],
-  'edit:audit:assign:others': ['Admin', 'Coordinator'],
-  'edit:audit:auto_assign': ['Admin', 'Coordinator'],
-  'view:audit:assigned': ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
-  'view:team:all': ['Admin', 'Coordinator'],
-  'view:team:own': ['Admin', 'Coordinator', 'Supervisor'],
-  'edit:team': ['Admin', 'Coordinator'],
-  'manage:departments': ['Admin', 'Coordinator'],
-  'manage:locations': ['Admin', 'Coordinator'],
-  'manage:system': ['Admin'],
-  'view:admin:dashboard': ['Admin']
+  // Institutional Overview
+  'view:overview':            ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
+  // Inspection Schedule
+  'view:schedule:all':        ['Admin'],                                          // View All Dept Schedules — Admin only
+  'view:schedule:own':        ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'],
+  'view:schedule:matrix':     ['Admin', 'Coordinator', 'Supervisor', 'Auditor'], // Cross-Audit schedules + Audit Matrix
+  'edit:audit:date':          ['Admin', 'Coordinator', 'Supervisor'],
+  'edit:audit:assign':        ['Admin', 'Supervisor', 'Auditor'],                 // Self-Assign — Coordinator ✗
+  'edit:audit:assign:others': ['Admin'],                                          // Assign Others — Admin only
+  'edit:audit:auto_assign':   ['Admin'],                                          // Auto-Assign — Admin only
+  // Officer Hub
+  'view:audit:assigned':      ['Admin', 'Supervisor', 'Auditor'],                 // Officer Hub — Coordinator & Staff ✗
+  // User Management
+  'view:team:all':            ['Admin'],                                          // View All Members — Admin only
+  'view:team:own':            ['Admin', 'Coordinator', 'Supervisor'],             // View Dept Members
+  'edit:team':                ['Admin', 'Coordinator'],
+  // Data Registries
+  'manage:departments':       ['Admin', 'Coordinator'],                           // Department Registry
+  'manage:locations':         ['Admin', 'Coordinator', 'Supervisor'],             // Location Registry
+  // System
+  'manage:system':            ['Admin'],
+  'view:admin:dashboard':     ['Admin'],
 };
 
 interface RBACContextType {
@@ -38,6 +45,10 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshRBAC = useCallback(async () => {
     try {
       setIsLoading(true);
+      // Wait for session to avoid rogue 401s
+      const { data: { session } } = await import('../services/supabase').then(m => m.supabase?.auth.getSession() || { data: { session: null } });
+      if (!session) return;
+
       const settings = await gateway.getSystemSettings();
       const rbacSetting = settings.find(s => s.id === 'rbac_matrix');
       if (rbacSetting?.value) {

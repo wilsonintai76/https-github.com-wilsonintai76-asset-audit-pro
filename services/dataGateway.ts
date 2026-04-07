@@ -18,8 +18,10 @@ class DataGateway {
     const headers = await getAuthHeaders();
     const res = await fn(headers);
     if (!res.ok) {
-      const body = await res.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error ?? `HTTP ${res.status}`);
+      const body = await res.json().catch(() => ({})) as { error?: string, message?: string, code?: string };
+      console.error("[DataGateway] API Request Failed:", res.status, res.url);
+      console.error("[DataGateway] API Payload:", body);
+      throw new Error(body.error ?? body.message ?? `HTTP ${res.status}`);
     }
     return res.json() as Promise<T>;
   }

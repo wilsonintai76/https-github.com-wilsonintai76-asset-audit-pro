@@ -13,6 +13,8 @@ import {
   UserCheck, 
   Phone, 
   Lock, 
+  Unlock,
+  AlertTriangle,
   RotateCcw, 
   FileText, 
   Search,
@@ -43,6 +45,7 @@ interface AuditTableProps {
   onUpdateDate: (id: string, newDate: string) => void;
   onUpdateAudit: (id: string, updates: Partial<AuditSchedule>) => void;
   onToggleStatus: (id: string) => void;
+  onToggleLock: (id: string) => void;
   allDepartments: Department[];
   allLocations: Location[];
   crossAuditPermissions: CrossAuditPermission[];
@@ -53,7 +56,7 @@ interface AuditTableProps {
 
 export const AuditTable: React.FC<AuditTableProps> = ({ 
   schedules, users, currentUserName, userRoles, departments, selectedDept, onDeptChange, selectedStatus, onStatusChange,
-  selectedPhaseId, onPhaseChange, onAssign, onUnassign, onUpdateDate, onUpdateAudit, onToggleStatus,
+  selectedPhaseId, onPhaseChange, onAssign, onUnassign, onUpdateDate, onUpdateAudit, onToggleStatus, onToggleLock,
   allDepartments, allLocations, crossAuditPermissions, auditPhases,
   maxAssetsPerDay,
   buildings = []
@@ -389,7 +392,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   }, [schedules, selectedBlock, selectedLevel, allLocations, canViewAllSchedule, canViewOwnSchedule, canViewMatrixSchedule, currentUser, canAuditDepartment]);
 
   const isAuditLocked = (audit: AuditSchedule) => {
-    return !!(audit.date && (audit.auditor1Id || audit.auditor2Id));
+    return !!(audit.isLocked || (audit.date && (audit.auditor1Id || audit.auditor2Id)));
   };
 
   const activePhase = useMemo(() => {
@@ -645,6 +648,20 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                               Pick
                             </button>
                           )}
+
+                          {canEditDates && (
+                            <button
+                              onClick={() => onToggleLock(audit.id)}
+                              className={`shrink-0 w-10 h-10 flex items-center justify-center rounded-xl transition-all border ${
+                                audit.isLocked 
+                                  ? 'bg-slate-800 border-slate-700 text-amber-400 shadow-lg' 
+                                  : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                              title={audit.isLocked ? "Unlock Phase Assignment" : "Manually Lock Phase Assignment"}
+                            >
+                              {audit.isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                            </button>
+                          )}
                         </div>
                         {isDateValid === false && audit.date && (
                           <div className="text-[9px] font-bold text-red-500 whitespace-nowrap bg-red-50 px-2 py-1 rounded-lg border border-red-100 w-fit">
@@ -672,10 +689,15 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                           {allDepartments.find(d => d.id === audit.departmentId)?.name || audit.departmentId}
                         </span>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          {(loc?.totalAssets || 0) > 0 && (
+                          {(loc?.totalAssets || 0) > 0 ? (
                             <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[9px] text-slate-500 font-bold border border-slate-200 flex items-center gap-1">
                               <Package className="w-2.5 h-2.5" /> {(loc!.totalAssets || 0).toLocaleString()}
                             </span>
+                          ) : (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-lg animate-pulse" title="Warning: This location has 0 documented assets. Rebalancing will use equal-distribution fallback.">
+                              <AlertTriangle className="w-3 h-3 text-amber-500" />
+                              <span className="text-[9px] font-black uppercase tracking-tight">Zero Assets Recorded</span>
+                            </div>
                           )}
                           {(loc?.uninspectedAssetCount || 0) > 0 && (
                             <span className="px-2 py-0.5 rounded-md bg-rose-50 text-[9px] text-rose-600 font-bold border border-rose-100 flex items-center gap-1">
@@ -684,6 +706,29 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             </span>
                           )}
                         </div>
+                        
+                        {(() => {
+                           const dept = allDepartments.find(d => d.id === audit.departmentId);
+                           const deptOfficers = users.filter(u => u.departmentId === dept?.id && u.certificationExpiry && new Date(u.certificationExpiry) > new Date());
+                           const officerCapacity = deptOfficers.length * maxAssetsPerDay;
+                           const totalAssets = dept?.totalAssets || 0;
+                           const isAtRisk = totalAssets > officerCapacity && deptOfficers.length > 0;
+                           
+                           if (isAtRisk) {
+                             return (
+                               <div className="mt-2 p-2 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-2 max-w-xs shadow-sm">
+                                 <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                                 <div>
+                                   <div className="text-[9px] font-black text-rose-700 uppercase tracking-widest leading-none mb-1">Capacity Deficit</div>
+                                   <div className="text-[9px] text-rose-600 font-medium leading-tight">
+                                     {totalAssets.toLocaleString()} assets exceeds department capacity ({officerCapacity.toLocaleString()} max/day). Assignments may bottleneck.
+                                   </div>
+                                 </div>
+                               </div>
+                             );
+                           }
+                           return null;
+                        })()}
                       </div>
                     </td>
 

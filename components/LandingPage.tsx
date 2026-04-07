@@ -213,6 +213,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Institutional Google ID
                   <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                 </button>
+                <p className="text-xs text-slate-400 text-center">
+                  Use your <span className="font-bold text-slate-500">@poliku.edu.my</span> account only
+                </p>
 
               </div>
               <button

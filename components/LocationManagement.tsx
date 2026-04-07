@@ -16,12 +16,11 @@ interface LocationManagementProps {
   onDelete: (id: string) => void;
   phases?: AuditPhase[];
   buildings: Building[];
-  onAddBuilding: (building: Partial<Building>) => Promise<Building>;
   schedules: AuditSchedule[];
 }
 
 export const LocationManagement: React.FC<LocationManagementProps> = ({ 
-  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [], buildings, onAddBuilding, schedules
+  locations, departments, users, userRoles, userDeptId, onAdd, onUpdate, onDelete, phases = [], buildings, schedules
 }) => {
   const { rbacMatrix } = useRBAC();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -389,7 +388,6 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
         isSupervisor={isSupervisor && !isAdmin && !isCoordinator && canManage}
         userDeptId={userDeptId}
         buildings={buildings}
-        onAddBuilding={onAddBuilding}
       />
     </div>
   );

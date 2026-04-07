@@ -1,4 +1,4 @@
-﻿
+
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useRBAC } from './contexts/RBACContext';
 import { gateway } from './services/dataGateway';
@@ -74,6 +74,16 @@ const App: React.FC = () => {
   const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
+  const popAuthDomainError = (): string | null => {
+    try {
+      const raw = localStorage.getItem('auth_domain_error');
+      if (!raw) return null;
+      localStorage.removeItem('auth_domain_error');
+      const { email, domain } = JSON.parse(raw);
+      return `Access denied: "${email}" is not an @${domain} institutional account.`;
+    } catch { return null; }
+  };
+
   // Public landing page stats — fetched without auth so the landing page
   // renders real data immediately for all visitors.
   const [publicStats, setPublicStats] = useState<{
@@ -115,9 +125,9 @@ const App: React.FC = () => {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [connectionErrorMessage, setConnectionErrorMessage] = useState<string | null>(null);
 
-  const showToast = useCallback((message: string, type: ToastType = 'success') => {
+  const showToast = useCallback((message: string, type: ToastType = 'success', duration?: number) => {
     const id = crypto.randomUUID ? crypto.randomUUID() : `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    setToasts(prev => [...prev, { id, type, message }]);
+    setToasts(prev => [...prev, { id, type, message, duration }]);
   }, []);
 
   const closeToast = useCallback((id: string) => {
@@ -503,6 +513,8 @@ const App: React.FC = () => {
             }
           } else {
             console.warn("getCurrentUser returned null despite having a session. Falling back to local storage.");
+            const domainErr = popAuthDomainError();
+            if (domainErr) showToast(domainErr, 'error', 10000);
             fallbackToLocalSession();
           }
         } catch (err) {
@@ -561,6 +573,8 @@ const App: React.FC = () => {
               loadAllData();
             }
           } else {
+            const domainErr = popAuthDomainError();
+            if (domainErr) showToast(domainErr, 'error', 10000);
             fallbackToLocalSession();
           }
         } catch (err) {
@@ -660,7 +674,20 @@ const App: React.FC = () => {
   }, [departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets]);
 
   const isAuditLocked = (audit: AuditSchedule) => {
-    return !!(audit.date && (audit.auditor1Id || audit.auditor2Id));
+    return !!(audit.isLocked || (audit.date && (audit.auditor1Id || audit.auditor2Id)));
+  };
+
+  const handleToggleLock = async (id: string) => {
+    const audit = schedules.find(a => a.id === id);
+    if (!audit) return;
+    try {
+      const newLocked = !audit.isLocked;
+      await gateway.updateAudit(id, { isLocked: newLocked });
+      setSchedules(prev => prev.map(s => s.id === id ? { ...s, isLocked: newLocked } : s));
+      showToast(newLocked ? 'Audit phase locked' : 'Audit phase unlocked');
+    } catch (e) {
+      showError(e, 'Failed to update lock state');
+    }
   };
 
   const isSystemLocked = useMemo(() => schedules.some(isAuditLocked), [schedules]);
@@ -2167,6 +2194,7 @@ const App: React.FC = () => {
       'settings': 'manage:system',
       'departments': 'manage:departments',
       'locations': 'manage:locations',
+      'buildings': 'manage:locations',
       'auditor-dashboard': 'view:audit:assigned'
     };
 
@@ -2393,6 +2421,7 @@ const App: React.FC = () => {
                 onUpdateDate={handleUpdateAuditDate}
                 onUpdateAudit={handleUpdateAudit}
                 onToggleStatus={handleToggleStatus}
+                onToggleLock={handleToggleLock}
                 allDepartments={departmentsWithAssets}
                 allLocations={locations}
                 crossAuditPermissions={crossAuditPermissions}
@@ -2457,7 +2486,6 @@ const App: React.FC = () => {
               onDelete={handleDeleteLoc}
               phases={auditPhases}
               buildings={buildings}
-              onAddBuilding={handleUpdateBuilding}
               schedules={schedules}
             />
            )}

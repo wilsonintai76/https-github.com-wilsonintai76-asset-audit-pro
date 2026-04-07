@@ -4,10 +4,23 @@ import { cache } from 'hono/cache';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { Bindings, Variables } from '../types';
-import { requirePermission } from '../middleware/rbac';
+import { rbacGuard } from '../middleware/rbacGuard';
 import { auditAssignmentGuard } from '../middleware/conflictOfInterest';
+import { verifySupabaseJwt } from '../middleware/auth';
 
 const db = new Hono<{ Bindings: Bindings, Variables: Variables }>();
+
+db.get('/test-auth', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return c.json({ error: 'No token' });
+  const token = authHeader.slice(7);
+  try {
+    const payload = await verifySupabaseJwt(token, c.env.SUPABASE_JWT_SECRET, c.env.SUPABASE_URL);
+    return c.json({ success: true, payload });
+  } catch (e: any) {
+    return c.json({ success: false, error: e.message, name: e.name });
+  }
+});
 
 // ─── Edge Cache Helper ────────────────────────────────────────────────────────
 // Wraps Hono's cache() for Cloudflare Workers Cache Storage API.
@@ -17,18 +30,7 @@ const edgeCache = (seconds: number) =>
   cache({ cacheName: 'db', cacheControl: `public, max-age=${seconds}, s-maxage=${seconds}` });
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─── RBAC Helper ────────────────────────────────────────────────────────────
-// Returns a Hono middleware that enforces minimum required roles.
-// Reads real roles from the user context (already fetched from D1 by authMiddleware).
-const requireRoles = (...allowed: string[]) =>
-  async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
-    const user = c.get('user');
-    const userRoles: string[] = user?.roles || (user?.role ? [user.role] : []);
-    if (!userRoles.some(r => allowed.includes(r))) {
-      return c.json({ error: 'Forbidden: insufficient role' }, 403);
-    }
-    await next();
-  };
+
 
 // ─── Audit Lock Guard ────────────────────────────────────────────────────────
 // Blocks structural PATCH changes (phaseId, departmentId, locationId) on a
@@ -197,7 +199,7 @@ db.get('/audits', async (c) => {
   }
 });
 
-db.post('/audits', zValidator('json', auditSchema), requirePermission('edit:audit:assign'), zeroAssetGuard, auditAssignmentGuard, async (c) => {
+db.post('/audits', zValidator('json', auditSchema), rbacGuard('assign:others'), zeroAssetGuard, auditAssignmentGuard, async (c) => {
   const audit = c.req.valid('json');
   const id = audit.id || crypto.randomUUID();
   
@@ -227,7 +229,7 @@ db.post('/audits', zValidator('json', auditSchema), requirePermission('edit:audi
   }
 });
 
-db.patch('/audits/:id', zValidator('json', patchAuditSchema), requirePermission('edit:audit:assign'), auditLockGuard, statusTransitionGuard, auditAssignmentGuard, async (c) => {
+db.patch('/audits/:id', zValidator('json', patchAuditSchema), rbacGuard('assign:others'), auditLockGuard, statusTransitionGuard, auditAssignmentGuard, async (c) => {
   const id = c.req.param('id');
   const updates = c.req.valid('json');
 
@@ -255,7 +257,7 @@ db.patch('/audits/:id', zValidator('json', patchAuditSchema), requirePermission(
   }
 });
 
-db.delete('/audits/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.delete('/audits/:id', rbacGuard('assign:others'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM audit_schedules WHERE id = ?').bind(id).run();
@@ -265,7 +267,7 @@ db.delete('/audits/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
   }
 });
 
-db.post('/audits/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.post('/audits/bulk', rbacGuard('assign:others'), async (c) => {
   const audits = await c.req.json();
   try {
     const statements = audits.map((a: any) => {
@@ -322,7 +324,7 @@ db.get('/users', async (c) => {
   }
 });
 
-db.post('/users', requireRoles('Admin', 'Coordinator'), zValidator('json', userSchema), async (c) => {
+db.post('/users', rbacGuard('assign:others'), zValidator('json', userSchema), async (c) => {
   const user = c.req.valid('json');
   const id = user.id || crypto.randomUUID();
   
@@ -403,7 +405,7 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
   }
 });
 
-db.delete('/users/:id', requireRoles('Admin'), async (c) => {
+db.delete('/users/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
@@ -418,7 +420,7 @@ db.delete('/users/:id', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.post('/users/:id/verify', requireRoles('Admin'), async (c) => {
+db.post('/users/:id/verify', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('UPDATE users SET is_verified = 1, status = \'Active\' WHERE id = ?').bind(id).run();
@@ -469,7 +471,7 @@ db.get('/departments', async (c) => {
   }
 });
 
-db.post('/departments', requirePermission('manage:departments'), async (c) => {
+db.post('/departments', rbacGuard('manage:departments'), async (c) => {
   const dept = await c.req.json();
   const id = dept.id || crypto.randomUUID();
   try {
@@ -490,7 +492,7 @@ db.post('/departments', requirePermission('manage:departments'), async (c) => {
   }
 });
 
-db.patch('/departments/:id', requirePermission('manage:departments'), async (c) => {
+db.patch('/departments/:id', rbacGuard('manage:departments'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields: string[] = [];
@@ -515,7 +517,7 @@ db.patch('/departments/:id', requirePermission('manage:departments'), async (c) 
   }
 });
 
-db.delete('/departments/:id', requirePermission('manage:departments'), async (c) => {
+db.delete('/departments/:id', rbacGuard('manage:departments'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM departments WHERE id = ?').bind(id).run();
@@ -525,7 +527,7 @@ db.delete('/departments/:id', requirePermission('manage:departments'), async (c)
   }
 });
 
-db.delete('/departments/:id/force', requireRoles('Admin'), async (c) => {
+db.delete('/departments/:id/force', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     // In D1, we might need a stored procedure-like logic or multi-statement
@@ -537,7 +539,7 @@ db.delete('/departments/:id/force', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.post('/departments/clear', requireRoles('Admin'), async (c) => {
+db.post('/departments/clear', rbacGuard('admin:hub'), async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const keep_user_id: string | undefined = body?.keep_user_id;
   try {
@@ -587,7 +589,7 @@ db.get('/locations', async (c) => {
   }
 });
 
-db.post('/locations', requirePermission('manage:locations'), async (c) => {
+db.post('/locations', rbacGuard('manage:locations'), async (c) => {
   const loc = await c.req.json();
   const id = loc.id || crypto.randomUUID();
   // Validate department_id exists before inserting to give a clear error
@@ -623,7 +625,7 @@ db.post('/locations', requirePermission('manage:locations'), async (c) => {
   }
 });
 
-db.patch('/locations/:id', requirePermission('manage:locations'), async (c) => {
+db.patch('/locations/:id', rbacGuard('manage:locations'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields: string[] = [];
@@ -652,7 +654,7 @@ db.patch('/locations/:id', requirePermission('manage:locations'), async (c) => {
   }
 });
 
-db.delete('/locations/:id', requirePermission('manage:locations'), async (c) => {
+db.delete('/locations/:id', rbacGuard('manage:locations'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM locations WHERE id = ?').bind(id).run();
@@ -662,7 +664,7 @@ db.delete('/locations/:id', requirePermission('manage:locations'), async (c) => 
   }
 });
 
-db.delete('/locations/:id/force', requireRoles('Admin'), async (c) => {
+db.delete('/locations/:id/force', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM locations WHERE id = ?').bind(id).run();
@@ -672,7 +674,7 @@ db.delete('/locations/:id/force', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.post('/locations/clear', requireRoles('Admin'), async (c) => {
+db.post('/locations/clear', rbacGuard('admin:hub'), async (c) => {
   try {
     // Delete audit_schedules first (they FK-reference locations)
     await c.env.DB.batch([
@@ -685,7 +687,7 @@ db.post('/locations/clear', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.post('/locations/bulk', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.post('/locations/bulk', rbacGuard('manage:locations'), async (c) => {
   const locs = await c.req.json();
   try {
     // Pre-validate: fetch all existing department IDs from DB so we never hit a FK error
@@ -749,7 +751,7 @@ db.get('/department-mappings', async (c) => {
   }
 });
 
-db.post('/department-mappings', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.post('/department-mappings', rbacGuard('manage:departments'), async (c) => {
   const mapping = await c.req.json();
   const id = mapping.id || crypto.randomUUID();
   try {
@@ -762,7 +764,7 @@ db.post('/department-mappings', requireRoles('Admin', 'Coordinator'), async (c) 
   }
 });
 
-db.post('/department-mappings/clear', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.post('/department-mappings/clear', rbacGuard('manage:departments'), async (c) => {
   try {
     await c.env.DB.prepare('DELETE FROM department_mappings').run();
     return c.json({ success: true });
@@ -771,7 +773,7 @@ db.post('/department-mappings/clear', requireRoles('Admin', 'Coordinator'), asyn
   }
 });
 
-db.delete('/department-mappings/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.delete('/department-mappings/:id', rbacGuard('manage:departments'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM department_mappings WHERE id = ?').bind(id).run();
@@ -879,7 +881,7 @@ db.get('/audit-phases', async (c) => {
   }
 });
 
-db.post('/audit-phases', requireRoles('Admin'), async (c) => {
+db.post('/audit-phases', rbacGuard('admin:hub'), async (c) => {
   const phase = await c.req.json();
   const id = phase.id || crypto.randomUUID();
   try {
@@ -892,7 +894,7 @@ db.post('/audit-phases', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.patch('/audit-phases/:id', requireRoles('Admin'), async (c) => {
+db.patch('/audit-phases/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields = [];
@@ -911,7 +913,7 @@ db.patch('/audit-phases/:id', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.delete('/audit-phases/:id', requireRoles('Admin'), async (c) => {
+db.delete('/audit-phases/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM audit_phases WHERE id = ?').bind(id).run();
@@ -934,7 +936,7 @@ db.get('/kpi-tiers', async (c) => {
   }
 });
 
-db.post('/kpi-tiers', requireRoles('Admin'), async (c) => {
+db.post('/kpi-tiers', rbacGuard('admin:hub'), async (c) => {
   const tier = await c.req.json();
   const id = tier.id || crypto.randomUUID();
   try {
@@ -947,7 +949,7 @@ db.post('/kpi-tiers', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.patch('/kpi-tiers/:id', requireRoles('Admin'), async (c) => {
+db.patch('/kpi-tiers/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields = [];
@@ -964,7 +966,7 @@ db.patch('/kpi-tiers/:id', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.delete('/kpi-tiers/:id', requireRoles('Admin'), async (c) => {
+db.delete('/kpi-tiers/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM kpi_tiers WHERE id = ?').bind(id).run();
@@ -989,7 +991,7 @@ db.get('/kpi-tier-targets', async (c) => {
   }
 });
 
-db.post('/kpi-tier-targets', requireRoles('Admin'), async (c) => {
+db.post('/kpi-tier-targets', rbacGuard('admin:hub'), async (c) => {
   const target = await c.req.json();
   const id = target.id || crypto.randomUUID();
   try {
@@ -1002,7 +1004,7 @@ db.post('/kpi-tier-targets', requireRoles('Admin'), async (c) => {
   }
 });
 
-db.delete('/kpi-tier-targets/:id', requireRoles('Admin'), async (c) => {
+db.delete('/kpi-tier-targets/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM kpi_tier_targets WHERE id = ?').bind(id).run();
@@ -1022,7 +1024,7 @@ db.get('/audit-groups', async (c) => {
   }
 });
 
-db.post('/audit-groups', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.post('/audit-groups', rbacGuard('edit:team'), async (c) => {
   const group = await c.req.json();
   const id = group.id || crypto.randomUUID();
   try {
@@ -1033,7 +1035,7 @@ db.post('/audit-groups', requireRoles('Admin', 'Coordinator'), async (c) => {
   }
 });
 
-db.patch('/audit-groups/:id', requireRoles('Admin', 'Coordinator'), async (c) => {
+db.patch('/audit-groups/:id', rbacGuard('edit:team'), async (c) => {
   const id = c.req.param('id');
   const updates = await c.req.json();
   const fields = [];
@@ -1049,7 +1051,7 @@ db.patch('/audit-groups/:id', requireRoles('Admin', 'Coordinator'), async (c) =>
   }
 });
 
-db.delete('/audit-groups/:id', requireRoles('Admin'), async (c) => {
+db.delete('/audit-groups/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM audit_groups WHERE id = ?').bind(id).run();
@@ -1073,7 +1075,7 @@ db.get('/institution-kpi-targets', async (c) => {
   }
 });
 
-db.post('/institution-kpi-targets', requireRoles('Admin'), async (c) => {
+db.post('/institution-kpi-targets', rbacGuard('admin:hub'), async (c) => {
   const target = await c.req.json();
   try {
     await c.env.DB.prepare(
@@ -1120,7 +1122,7 @@ db.get('/buildings', async (c) => {
   }
 });
 
-db.post('/buildings', requireRoles('Admin', 'Coordinator'), zValidator('json', z.object({
+db.post('/buildings', rbacGuard('edit:team'), zValidator('json', z.object({
   id:          z.string().optional(),
   name:        z.string().min(1),
   abbr:        z.string().min(1),
@@ -1143,7 +1145,7 @@ db.post('/buildings', requireRoles('Admin', 'Coordinator'), zValidator('json', z
   }
 });
 
-db.patch('/buildings/:id', requireRoles('Admin', 'Coordinator'), zValidator('json', z.object({
+db.patch('/buildings/:id', rbacGuard('edit:team'), zValidator('json', z.object({
   name:        z.string().min(1).optional(),
   abbr:        z.string().min(1).optional(),
   description: z.string().nullable().optional(),
@@ -1166,7 +1168,7 @@ db.patch('/buildings/:id', requireRoles('Admin', 'Coordinator'), zValidator('jso
   }
 });
 
-db.delete('/buildings/:id', requireRoles('Admin'), async (c) => {
+db.delete('/buildings/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM buildings WHERE id = ?').bind(id).run();
@@ -1191,7 +1193,7 @@ db.get('/system-settings', async (c) => {
   }
 });
 
-db.post('/system-settings/:id', requireRoles('Admin'), async (c) => {
+db.post('/system-settings/:id', rbacGuard('system:settings'), async (c) => {
   const id = c.req.param('id');
   const { value } = await c.req.json();
   try {
@@ -1242,7 +1244,7 @@ db.post('/activity', async (c) => {
 // targets, and 3 institution KPI targets in a single D1 batch.
 // Called once after login (admin) or after a full reset. Uses INSERT OR IGNORE
 // so it is safe to call repeatedly and will never duplicate rows.
-db.post('/system/initialize-defaults', requireRoles('Admin'), async (c) => {
+db.post('/system/initialize-defaults', rbacGuard('admin:hub'), async (c) => {
   try {
     // 1. Read what already exists
     const [existingPhases, existingTiers] = await Promise.all([
@@ -1371,7 +1373,7 @@ db.post('/system/initialize-defaults', requireRoles('Admin'), async (c) => {
 });
 
 // ─── USERS CLEAR ─────────────────────────────────────────────────────────────
-db.post('/users/clear', requireRoles('Admin'), async (c) => {
+db.post('/users/clear', rbacGuard('admin:hub'), async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const keep_user_id: string | undefined = body?.keep_user_id;
   try {
@@ -1388,7 +1390,7 @@ db.post('/users/clear', requireRoles('Admin'), async (c) => {
 });
 
 // ─── AUDIT PHASES CLEAR ─────────────────────────────────────────────────────
-db.post('/audit-phases/clear', requireRoles('Admin'), async (c) => {
+db.post('/audit-phases/clear', rbacGuard('admin:hub'), async (c) => {
   try {
     // audit_schedules has FK → audit_phases
     await c.env.DB.prepare('DELETE FROM audit_schedules').run();
@@ -1404,7 +1406,7 @@ db.post('/audit-phases/clear', requireRoles('Admin'), async (c) => {
 });
 
 // ─── KPI CLEAR ──────────────────────────────────────────────────────────────
-db.post('/kpi/clear', requireRoles('Admin'), async (c) => {
+db.post('/kpi/clear', rbacGuard('admin:hub'), async (c) => {
   try {
     // kpi_tier_targets has FK → kpi_tiers
     await c.env.DB.prepare('DELETE FROM kpi_tier_targets').run();
@@ -1422,7 +1424,7 @@ db.post('/kpi/clear', requireRoles('Admin'), async (c) => {
 // Uses sequential individual DELETEs (not batch) so each table is independently
 // committed. A batch() is atomic — if ANY statement fails the ENTIRE batch rolls
 // back silently, which previously left departments intact.
-db.post('/system/full-reset', requireRoles('Admin'), async (c) => {
+db.post('/system/full-reset', rbacGuard('admin:hub'), async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const keep_user_id: string | undefined = body?.keep_user_id;
   try {

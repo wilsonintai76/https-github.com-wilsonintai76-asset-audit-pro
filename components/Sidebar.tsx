@@ -15,7 +15,7 @@ import {
   Server, 
   Database, 
   LogOut,
-  Building,
+  Building2,
   LayoutDashboard,
   Languages,
   ShieldAlert
@@ -179,6 +179,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 label={t('nav.asset_locations')} 
                 active={activeView === 'locations'} 
                 onClick={() => { onViewChange('locations'); onClose(); }} 
+              />
+            )}
+
+            {canAccessLocations && (
+              <NavItem 
+                icon={Building2} 
+                label="Building Registry" 
+                active={activeView === 'buildings'} 
+                onClick={() => { onViewChange('buildings'); onClose(); }} 
               />
             )}
 

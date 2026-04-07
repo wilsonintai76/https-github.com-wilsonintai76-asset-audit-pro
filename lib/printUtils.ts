@@ -45,6 +45,16 @@ const PRINT_CSS = `
   .subrow { background: #f8fafc !important; }
   .subrow td { font-size: 8.5pt; color: #475569; padding-left: 20pt !important; }
   .divider { border: none; border-top: 1pt solid #e2e8f0; margin: 10pt 0; }
+  .phase-cell { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 42pt; min-height: 32pt; border-radius: 6pt; border: 1pt solid; padding: 2pt; margin: 1pt; }
+  .phase-done { background: #10b981; border-color: #10b981; color: white; }
+  .phase-sched { background: #eff6ff; border-color: #bfdbfe; color: #2563eb; }
+  .phase-req { background: #fff1f2; border-color: #fecdd3; color: #e11d48; border-style: dashed; }
+  .phase-pct { font-size: 8pt; font-weight: 900; }
+  .phase-assets { font-size: 6.5pt; opacity: 0.8; font-weight: 600; }
+  .status-ready { color: #059669; font-weight: 800; text-transform: uppercase; font-size: 7.5pt; display: flex; align-items: center; gap: 3pt; justify-content: flex-end; }
+  .status-incomplete { color: #d97706; font-weight: 800; text-transform: uppercase; font-size: 7.5pt; display: flex; align-items: center; gap: 3pt; justify-content: flex-end; }
+  .status-none { color: #94a3b8; font-weight: 800; text-transform: uppercase; font-size: 7.5pt; display: flex; align-items: center; gap: 3pt; justify-content: flex-end; }
+  @media print { body { padding: 0; } .no-print { display: none; } }
   @page { margin: 1.5cm; size: A4; }
   @page :right { @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #888; } }
 `;
@@ -240,50 +250,96 @@ interface TableRow {
 export function printKPIPhasePlan(
   tableData: TableRow[],
   sortedPhases: Phase[],
+  maxAssetsPerDay: number = 1000,
+  maxLocationsPerDay: number = 5
 ): void {
   const phaseHeaders = sortedPhases.map(p =>
-    `<th class="center">${p.name}<br><span style="font-weight:400;font-size:7pt;">${p.startDate}</span></th>`
+    `<th class="center">${p.name}<br><span style="font-weight:400;font-size:7pt;color:#64748b;text-transform:none;">${p.startDate}</span></th>`
   ).join('');
 
   const bodyRows = tableData.map(row => {
     const phaseCells = row.phaseStatus.map(ps => {
-      if (!ps.isRequired) return `<td class="center"><span style="color:#cbd5e1;">—</span></td>`;
-      if (ps.isCompleted) return `<td class="center"><span class="badge badge-green">Done</span></td>`;
-      if (ps.hasAudit) return `<td class="center"><span class="badge badge-blue">Sched.</span></td>`;
-      return `<td class="center"><span class="badge badge-amber">${pct(ps.targetPct)}</span></td>`;
+      if (!ps.isRequired) return `<td class="center"><div style="width:20pt;height:20pt;background:#f1f5f9;border-radius:4pt;margin:auto;opacity:0.3;"></div></td>`;
+      
+      let cellType = 'phase-req';
+      let icon = '⊡'; // Box icon
+      if (ps.isCompleted) {
+        cellType = 'phase-done';
+        icon = '✓';
+      } else if (ps.hasAudit) {
+        cellType = 'phase-sched';
+        icon = '☷'; // Layers icon
+      }
+
+      return `<td class="center">
+        <div class="phase-cell ${cellType}">
+          <span style="font-size:7pt;">${icon}</span>
+          <div class="phase-pct">${ps.targetPct}%</div>
+          <div class="phase-assets">${fmt(ps.targetAssets)} aset</div>
+        </div>
+      </td>`;
     }).join('');
 
-    const status = row.hasNoAssets
-      ? `<span class="badge badge-slate">No Assets</span>`
-      : row.isFullyScheduled
-      ? `<span class="badge badge-green">Scheduled</span>`
-      : `<span class="badge badge-amber">Incomplete</span>`;
+    const recommended = Math.max(2, Math.ceil((row.totalAssets || 0) / maxAssetsPerDay), Math.ceil(1 / maxLocationsPerDay));
 
-    return `<tr>
-      <td>${row.name}<br><span style="font-size:8pt;color:#94a3b8;">${row.abbr || ''}</span></td>
-      <td class="center">${fmt(row.totalAssets || 0)}</td>
-      <td class="center">${row.auditorCount || 0}</td>
-      <td>${row.tierName}</td>
+    const status = row.hasNoAssets
+      ? `<div class="status-none">○ Not Required</div>`
+      : row.isFullyScheduled
+      ? `<div class="status-ready">● Ready</div>`
+      : `<div class="status-incomplete">● Incomplete</div>`;
+
+    return `<tr style="vertical-align: middle;">
+      <td style="padding: 10pt 8pt;">
+        <div style="font-weight:800;font-size:10pt;">${row.name}</div>
+        <div style="font-size:8pt;color:#94a3b8;font-weight:600;">${row.abbr || ''}</div>
+      </td>
+      <td class="center" style="font-weight:700;">${row.auditorCount || 0}</td>
+      <td class="center" style="font-weight:900;color:#4f46e5;">${recommended}</td>
+      <td>
+        <div style="font-weight:700;">${fmt(row.totalAssets || 0)}</div>
+        <div style="font-size:7pt;color:#2563eb;font-weight:900;text-transform:uppercase;background:#eff6ff;padding:1pt 4pt;border-radius:3pt;display:inline-block;margin-top:2pt;">${row.tierName}</div>
+      </td>
       ${phaseCells}
-      <td class="center">${status}</td>
+      <td class="right">${status}</td>
     </tr>`;
   }).join('');
 
   const html = `
 <div class="header">
-  <h1>KPI Phase Inspection Plan</h1>
-  <p class="subtitle">Required inspection phases per department based on their KPI tier assignment.</p>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+    <div>
+      <h1>KPI Phase Inspection Plan</h1>
+      <p class="subtitle">Required inspection phases per department based on their KPI tier assignment.</p>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:12pt;font-weight:900;color:#2563eb;">Inspect-able</div>
+      <div style="font-size:8pt;color:#94a3b8;margin-top:2pt;">Asset Audit Platform</div>
+    </div>
+  </div>
+</div>
+
+<div class="stat-row" style="margin-bottom:8pt;">
+  <div class="flex items-center gap-4" style="display:flex;gap:12pt;margin-bottom:10pt;">
+     <div style="display:flex;align-items:center;gap:4pt;">
+        <div style="width:7pt;height:7pt;border-radius:50%;background:#10b981;"></div>
+        <span style="font-size:8pt;font-weight:700;color:#64748b;text-transform:uppercase;">Inspection Scheduled</span>
+     </div>
+     <div style="display:flex;align-items:center;gap:4pt;">
+        <div style="width:7pt;height:7pt;border-radius:50%;background:#f1f5f9;border:1pt solid #cbd5e1;"></div>
+        <span style="font-size:8pt;font-weight:700;color:#64748b;text-transform:uppercase;">Not Required</span>
+     </div>
+  </div>
 </div>
 
 <table>
   <thead>
     <tr>
       <th>Department</th>
-      <th class="center">Assets</th>
-      <th class="center">Officers</th>
-      <th>KPI Tier</th>
+      <th class="center" style="width:60pt;">Inspecting Officers</th>
+      <th class="center" style="width:60pt;">Recommended</th>
+      <th style="width:80pt;">Assets / Tier</th>
       ${phaseHeaders}
-      <th class="center">Status</th>
+      <th class="right" style="width:80pt;">Status</th>
     </tr>
   </thead>
   <tbody>
@@ -291,13 +347,8 @@ export function printKPIPhasePlan(
   </tbody>
 </table>
 
-<div class="section" style="margin-top:12pt;">
-  <p style="font-size:8pt;"><strong>Legend:</strong>&nbsp;
-    <span class="badge badge-green">Done</span> Completed &nbsp;
-    <span class="badge badge-blue">Sched.</span> Scheduled &nbsp;
-    <span class="badge badge-amber">XX%</span> Required (target%) but not scheduled &nbsp;
-    <span style="color:#cbd5e1;font-weight:700;">—</span> Not required
-  </p>
+<div class="footer" style="margin-top:18pt;text-align:center;font-size:8pt;color:#94a3b8;border-top:1pt solid #e2e8f0;padding-top:8pt;">
+  Inspect-able &copy; ${new Date().getFullYear()} &nbsp;|&nbsp; Internal Regulatory Document &nbsp;|&nbsp; Page 1 of 1
 </div>`;
 
   openPrint('KPI Phase Inspection Plan', html, true);

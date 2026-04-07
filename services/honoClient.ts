@@ -64,10 +64,16 @@ if (supabase) {
 export const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const now = Date.now();
   if (_cachedToken && now < _tokenExpiresAt) {
+    console.log("[AuthHeaders] Using fast-path cached token");
     return { Authorization: `Bearer ${_cachedToken}` };
   }
-  if (!supabase) return {};
-  const { data: { session } } = await supabase.auth.getSession();
+  if (!supabase) {
+      console.warn("[AuthHeaders] Supabase client is uninitialized!");
+      return {};
+  }
+  const { data: { session }, error } = await supabase.auth.getSession();
+  console.log("[AuthHeaders] Extracted Session:", session?.user?.email, "| Token Present:", !!session?.access_token, "| Error:", error);
+  
   if (session?.access_token) {
     _cachedToken     = session.access_token;
     _tokenExpiresAt  = session.expires_at
@@ -75,6 +81,7 @@ export const getAuthHeaders = async (): Promise<Record<string, string>> => {
       : now + 56 * 60 * 1000; // fallback: 56-minute window
     return { Authorization: `Bearer ${_cachedToken}` };
   }
+  console.error("[AuthHeaders] FAILED! No access token available. Wiping cache.");
   _cachedToken     = null;
   _tokenExpiresAt  = 0;
   return {};

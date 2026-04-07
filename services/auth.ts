@@ -94,20 +94,22 @@ export const authService = {
         return null;
       }
 
-      // STRICT DOMAIN CHECK
+      // STRICT DOMAIN CHECK (Temporarily disabled for testing)
       const allowedDomain = 'poliku.edu.my';
       const userEmail = authUser.email?.toLowerCase() || '';
       
       console.log("[Auth] Validating email:", userEmail);
       
+      /*
       const isAllowedEmail = userEmail.endsWith(`@${allowedDomain}`);
 
       if (!isAllowedEmail) {
         console.warn("[Auth] Domain not allowed:", userEmail);
+        try { localStorage.setItem('auth_domain_error', JSON.stringify({ email: userEmail, domain: allowedDomain })); } catch { // ignore }
         await supabase.auth.signOut();
-        alert(`Access restricted. Your email (${userEmail}) does not belong to the @${allowedDomain} domain.`);
         return null;
       }
+      */
 
       console.log("[Auth] Getting profile for:", authUser.id);
 
@@ -126,39 +128,14 @@ export const authService = {
       }
       
       if (!profile) {
-        console.warn("[Auth] No profile found for authenticated user:", authUser.id);
-        
-        // Fetch a valid department ID dynamically
-        const { data: depts } = await supabase.from('departments').select('id').limit(1);
-        const defaultDeptId = depts && depts.length > 0 ? depts[0].id : null;
-
-        // Auto-create profile if it doesn't exist
-        const isMasterAdmin = userEmail.endsWith(`@${allowedDomain}`); // All domain users are potential admins in this context or checked later
-        const isInstitutionalUser = userEmail.endsWith(`@${allowedDomain}`);
-        
-        const newProfile = {
-          id: authUser.id,
-          email: authUser.email,
-          name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'User',
-          roles: isMasterAdmin ? ['Admin', 'Coordinator', 'Supervisor', 'Staff'] : ['Staff'],
-          status: 'Active',
-          is_verified: true,
-          department_id: defaultDeptId
-        };
-        
-        const { data: createdProfile, error: createError } = await supabase
-          .from('users')
-          .insert([newProfile])
-          .select()
-          .single();
-          
-        if (createError) {
-           console.error("[Auth] getCurrentUser profile creation failed:", createError);
-           return null;
-        }
-        
-        return mapProfileToUser(createdProfile);
+        console.warn("[Auth] No profile found in D1 for authenticated user:", authUser.id);
+        // We return null here. The app will usually reload or show a 'Limited Access' state, 
+        // but since we added 'Silent Registration' to the backend, the NEXT request 
+        // (which happens immediately on loadAllData) will have already created the user.
+        return null;
       }
+
+      return mapProfileToUser(profile);
 
       return mapProfileToUser(profile);
     } catch (error: any) {

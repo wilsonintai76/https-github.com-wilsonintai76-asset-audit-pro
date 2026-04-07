@@ -93,11 +93,11 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
       <div className="p-6 border-b border-slate-100 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold text-slate-900">KPI Phase Inspection Plan</h3>
-          <p className="text-xs text-slate-500 mt-1">Required inspection phases per department based on their KPI tier. Click <strong>Rebalance</strong> to auto-assign.</p>
+          <p className="text-xs text-slate-500 mt-1">Required inspection phases per department based on their KPI tier. Click <strong>Rebalance</strong> to auto-assign (Locked audits will be skipped).</p>
         </div>
         <div className="flex items-center gap-4">
           <PrintButton
-            onClick={() => printKPIPhasePlan(tableData, sortedPhases)}
+            onClick={() => printKPIPhasePlan(tableData, sortedPhases, maxAssetsPerDay, maxLocationsPerDay)}
             label="Print"
             title="Print KPI Phase Inspection Plan"
           />
