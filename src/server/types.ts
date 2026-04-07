@@ -6,10 +6,8 @@ export type Bindings = {
   MEDIA: R2Bucket;
   SETTINGS: KVNamespace;
   AI: any;
-  SUPABASE_URL: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
-  SUPABASE_JWT_SECRET: string;
-  ALLOWED_DOMAIN: string; // e.g. "poliku.edu.my" — set in wrangler.toml [vars]
+  JWT_SECRET: string;
+  ALLOWED_DOMAIN: string;
 };
 
 export type Variables = {

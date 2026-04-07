@@ -3,7 +3,6 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useRBAC } from './contexts/RBACContext';
 import { gateway } from './services/dataGateway';
 import { awaitSessionRegistered } from './services/honoClient';
-import { supabase } from './services/supabase';
 import { authService } from './services/auth';
 import { AuditSchedule, AppNotification, User, UserRole, DashboardConfig, AppView, CrossAuditPermission, Department, Location, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, RBACMatrix } from './types';
 import { AuditTable } from './components/AuditTable';
@@ -460,74 +459,45 @@ const App: React.FC = () => {
     };
 
     const initSession = async () => {
-      // 1. Check for errors in URL (e.g. from Auth Hooks or Domain Blocking)
-      const hash = window.location.hash;
-      if (hash && (hash.includes('error=') || hash.includes('error_description='))) {
-        const params = new URLSearchParams(hash.replace('#', '?'));
-        const errorMsg = params.get('error_description') || params.get('error') || 'Authentication failed';
-        
-        // Clean the URL to avoid repeated alerts on refresh
-        window.history.replaceState(null, '', window.location.pathname);
-        
-        customAlert(decodeURIComponent(errorMsg.replace(/\+/g, ' ')));
-        setIsInitialLoading(false);
-        return;
-      }
-
-      if (!supabase) {
-        setIsInitialLoading(false);
-        return;
-      }
-
-      // Check for Supabase session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        try {
-          const user = await authService.getCurrentUser();
-          if (user) {
-            setCurrentUser(user);
-            setViewState('app');
-            
-            if (user.status === 'Pending') {
+      try {
+        const user = await authService.getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          setViewState('app');
+          
+          if (user.status === 'Pending') {
+            setActiveView('profile');
+          } else {
+            const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
+            const isAdmin = (user.roles || []).includes('Admin');
+            if (!isAdmin && isCertified) {
+              setActiveView('auditor-dashboard');
+            } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor', 'Auditor'].includes(r))) {
               setActiveView('profile');
             } else {
-              const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
-              const isAdmin = (user.roles || []).includes('Admin');
-              if (!isAdmin && isCertified) {
-                setActiveView('auditor-dashboard');
-              } else if (!isAdmin && !(user.roles || []).some((r: string) => ['Admin', 'Coordinator', 'Supervisor', 'Auditor'].includes(r))) {
-                setActiveView('profile');
-              } else {
-                setActiveView('overview');
-              }
+              setActiveView('overview');
             }
-            // Load data for page-refresh sessions (INITIAL_SESSION event — no SIGNED_IN fires)
-            if (!dataLoadedRef.current) {
-              dataLoadedRef.current = true;
-              // Ensure default phases/tiers exist — use fresh user.roles to avoid stale isAdmin closure
-              if ((user.roles || []).includes('Admin')) {
-                try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults failed (non-fatal):', e); }
-              }
-              loadAllData();
-            }
-          } else {
-            console.warn("getCurrentUser returned null despite having a session. Falling back to local storage.");
-            const domainErr = popAuthDomainError();
-            if (domainErr) showToast(domainErr, 'error', 10000);
-            fallbackToLocalSession();
           }
-        } catch (err) {
-          console.error("Failed to load user profile:", err);
+          
+          if (!dataLoadedRef.current) {
+            dataLoadedRef.current = true;
+            if ((user.roles || []).includes('Admin')) {
+              try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults failed:', e); }
+            }
+            // Await session registration in KV before loading data
+            await awaitSessionRegistered();
+            loadAllData();
+          }
+        } else {
           fallbackToLocalSession();
         }
-      } else {
+      } catch (err) {
+        console.error("Failed to load user profile:", err);
         fallbackToLocalSession();
       }
     };
 
     const initialize = async () => {
-      // Fetch public landing stats (no auth) and check session in parallel.
       await Promise.allSettled([
         initSession(),
         loadPublicStats(),
@@ -537,62 +507,6 @@ const App: React.FC = () => {
     };
 
     initialize();
-
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase?.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        try {
-          const user = await authService.getCurrentUser();
-          if (user) {
-            setCurrentUser(user);
-            setViewState('app');
-            // Route to the correct view based on user state
-            if (user.status === 'Pending') {
-              setActiveView('profile');
-            } else {
-              const isCertified = user.certificationExpiry && new Date(user.certificationExpiry) > new Date();
-              const isAdmin = user.roles.includes('Admin');
-              if (!isAdmin && isCertified) {
-                setActiveView('auditor-dashboard');
-              } else if (!isAdmin && !user.roles.some((r: string) => ['Admin', 'Coordinator', 'Supervisor', 'Auditor'].includes(r))) {
-                setActiveView('profile');
-              } else {
-                setActiveView('overview');
-              }
-            }
-            // Await session registration in KV before loading data — prevents
-            // SESSION_DISPLACED 401s caused by loadAllData racing the KV write.
-            if (!dataLoadedRef.current) {
-              dataLoadedRef.current = true;
-              // Ensure default phases/tiers exist — use fresh user.roles to avoid stale isAdmin closure
-              if ((user.roles || []).includes('Admin')) {
-                try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults failed (non-fatal):', e); }
-              }
-              await awaitSessionRegistered();
-              loadAllData();
-            }
-          } else {
-            const domainErr = popAuthDomainError();
-            if (domainErr) showToast(domainErr, 'error', 10000);
-            fallbackToLocalSession();
-          }
-        } catch (err) {
-          console.error('[Auth] SIGNED_IN handler failed:', err);
-          fallbackToLocalSession();
-        }
-      } else if (event === 'SIGNED_OUT') {
-        dataLoadedRef.current = false;
-        setCurrentUser(null);
-        setViewState('landing');
-        // Refresh public stats so the landing page shows up-to-date data
-        loadPublicStats();
-      }
-    }) || { data: { subscription: null } };
-
-    return () => {
-      subscription?.unsubscribe();
-    };
   }, []);
 
   // Idle Timer for auto-logout (30 minutes)
@@ -2249,10 +2163,9 @@ const App: React.FC = () => {
     return (
       <LandingPage
         onEnter={async () => {
-          if (currentUser) {
-            setViewState('app');
-          } else {
-            await authService.loginWithGoogle();
+          const user = await authService.getCurrentUser();
+          if (user) {
+            handleLoginSuccess(user);
           }
         }}
         onShowKnowledgeBase={() => setViewState('docs')}

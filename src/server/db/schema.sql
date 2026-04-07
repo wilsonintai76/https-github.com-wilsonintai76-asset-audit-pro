@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY, -- UID from Supabase Auth
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
+  password_hash TEXT, -- Native password hash
   roles TEXT NOT NULL, -- JSON array of UserRole
   designation TEXT,
   picture TEXT,

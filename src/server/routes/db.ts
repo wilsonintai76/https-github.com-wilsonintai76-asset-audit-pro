@@ -6,7 +6,7 @@ import { zValidator } from '@hono/zod-validator';
 import { Bindings, Variables } from '../types';
 import { rbacGuard } from '../middleware/rbacGuard';
 import { auditAssignmentGuard } from '../middleware/conflictOfInterest';
-import { verifySupabaseJwt } from '../middleware/auth';
+import { verifyNativeJwt } from '../middleware/auth';
 
 const db = new Hono<{ Bindings: Bindings, Variables: Variables }>();
 
@@ -15,7 +15,7 @@ db.get('/test-auth', async (c) => {
   if (!authHeader?.startsWith('Bearer ')) return c.json({ error: 'No token' });
   const token = authHeader.slice(7);
   try {
-    const payload = await verifySupabaseJwt(token, c.env.SUPABASE_JWT_SECRET, c.env.SUPABASE_URL);
+    const payload = await verifyNativeJwt(token, c.env.JWT_SECRET);
     return c.json({ success: true, payload });
   } catch (e: any) {
     return c.json({ success: false, error: e.message, name: e.name });

@@ -46,8 +46,9 @@ export const RBACProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setIsLoading(true);
       // Wait for session to avoid rogue 401s
-      const { data: { session } } = await import('../services/supabase').then(m => m.supabase?.auth.getSession() || { data: { session: null } });
-      if (!session) return;
+      const { authService } = await import('../services/auth');
+      const user = await authService.getCurrentUser();
+      if (!user) return;
 
       const settings = await gateway.getSystemSettings();
       const rbacSetting = settings.find(s => s.id === 'rbac_matrix');

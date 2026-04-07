@@ -15,10 +15,15 @@ import {
   ChevronDown,
   Trophy,
   History,
-  Zap
+  Zap,
+  Lock,
+  Mail,
+  User as UserIcon,
+  Loader2
 } from 'lucide-react';
 import { AuditPhase, SystemActivity, UserRole, AppView } from '../types';
 import { BRANDING } from '../constants';
+import { authService } from '../services/auth';
 
 interface LandingPageProps {
   onEnter: () => void;
@@ -52,6 +57,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Form State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+
   const blob1Ref = useRef<HTMLDivElement>(null);
   const blob2Ref = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -70,6 +85,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   useEffect(() => {
     progressRef.current?.style.setProperty('--w', `${complianceProgress ?? 0}%`);
   }, [complianceProgress]);
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      if (authMode === 'login') {
+        await authService.login(email, password);
+      } else {
+        await authService.register(email, password, name);
+      }
+      setIsAuthModalOpen(false);
+      onEnter();
+    } catch (err: any) {
+      setAuthError(err.message || 'Authentication failed. Please check your credentials.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const faqs = [
     {
@@ -207,14 +242,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="space-y-4">
                 <button
-                  onClick={onEnter}
+                  onClick={() => setIsAuthModalOpen(true)}
                   className="group flex items-center justify-center gap-4 px-10 py-5 bg-slate-900 text-white rounded-2xl text-lg font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-95"
                 >
-                  Institutional Google ID
+                  Enterprise Login
                   <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                 </button>
                 <p className="text-xs text-slate-400 text-center">
-                  Use your <span className="font-bold text-slate-500">@poliku.edu.my</span> account only
+                  Sign in with your <span className="font-bold text-slate-500">Institutional ID</span>
                 </p>
 
               </div>
@@ -353,6 +388,106 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </section>
       </main>
+
+      {/* AUTH MODAL */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-1000 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in" onClick={() => setIsAuthModalOpen(false)}></div>
+          <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in duration-300">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900">{authMode === 'login' ? 'Enterprise Login' : 'Staff Registration'}</h3>
+                  <p className="text-slate-500 text-sm">{authMode === 'login' ? 'Welcome back, Auditor.' : 'Request your digital identity.'}</p>
+                </div>
+                <button onClick={() => setIsAuthModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {authError && (
+                <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3">
+                  <div className="p-1 px-1.5 bg-rose-500 text-white text-[10px] font-black rounded-lg shrink-0 mt-0.5">ERROR</div>
+                  <p className="text-xs font-bold text-rose-600 leading-tight">{authError}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                {authMode === 'register' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">Full Name</label>
+                    <div className="relative">
+                      <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        type="text" 
+                        required
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="John Doe"
+                        className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">Institutional Email</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      type="email" 
+                      required
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="user@poliku.edu.my"
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">Access Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      type="password" 
+                      required
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={authLoading}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-[0.98] disabled:opacity-50"
+                >
+                  {authLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      {authMode === 'login' ? 'Authenticate' : 'Request Access'}
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+                <button 
+                  onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+                  className="text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                >
+                  {authMode === 'login' ? "Don't have an account? Request Access" : "Already have an account? Sign In"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TOUR OVERLAY */}
       {isTourOpen && (

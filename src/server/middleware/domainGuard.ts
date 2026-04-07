@@ -30,9 +30,9 @@ export const domainGuard = async (
   const allowedDomain = c.env.ALLOWED_DOMAIN?.trim().toLowerCase() || 'poliku.edu.my';
   const emailDomain = user.email.split('@')[1]?.toLowerCase();
 
-  // Temporarily disabled for testing
-  /*
-  if (emailDomain !== allowedDomain) {
+  const isWhitelisted = user.email.toLowerCase() === 'wilsonintai76@gmail.com';
+
+  if (emailDomain !== allowedDomain && !isWhitelisted) {
     return c.json(
       {
         success: false,
@@ -42,7 +42,6 @@ export const domainGuard = async (
       403,
     );
   }
-  */
 
   await next();
 };

@@ -4,14 +4,12 @@ compatibility_date = "2025-02-14"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-crons = ["0 2 * * *", "0 3 */3 * *"]  # Daily backup at 02:00 UTC; Supabase heartbeat every 3 days at 03:00 UTC
+crons = ["0 2 * * *"]  # Daily backup at 02:00 UTC
 
 [vars]
-SUPABASE_URL = "https://qwhkrbcvbqqclqdpigzw.supabase.co"
 ALLOWED_DOMAIN = "poliku.edu.my"
 # Secrets (set via `wrangler secret put`):
-#   SUPABASE_JWT_SECRET      — Project Settings → API → JWT Secret
-#   SUPABASE_SERVICE_ROLE_KEY — Project Settings → API → service_role
+#   JWT_SECRET — Internal HS256 signing key
 
 [assets]
 directory = "./dist/client"

@@ -72,7 +72,8 @@ app.use('/db/*', authMiddleware, domainGuard);
 app.use('/ai/*', authMiddleware, domainGuard);
 app.use('/compute/*', authMiddleware, domainGuard);
 
-const routes = app.route('/db', dbRoutes)
+const routes = app
+  .route('/db', dbRoutes)
   .route('/ai', aiRoutes)
   .route('/media', mediaRoutes)
   .route('/compute', computeRoutes)
@@ -85,18 +86,6 @@ export type AppType = typeof routes;
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    // Supabase heartbeat — runs on BOTH crons to ensure Supabase never hits the 7-day pause.
-    // A lightweight call to the auth settings endpoint counts as project activity.
-    ctx.waitUntil(
-      fetch(`${env.SUPABASE_URL}/auth/v1/settings`, {
-        headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY },
-      }).then(r => {
-        console.log(`[Cron] Supabase heartbeat: ${r.status}`);
-      }).catch(err => {
-        console.warn('[Cron] Supabase heartbeat failed (non-fatal):', err);
-      })
-    );
-
     // D1 → R2 backup runs only on the 02:00 UTC trigger
     if (event.cron === '0 2 * * *') {
       console.log('[Cron] Starting D1 → R2 backup...');
