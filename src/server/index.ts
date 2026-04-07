@@ -81,20 +81,35 @@ const routes = app.route('/db', dbRoutes)
 
 export type AppType = typeof routes;
 
-// Scheduled cron: Daily backup D1 → R2 at 02:00 UTC
+// Scheduled cron: Daily backup D1 → R2 at 02:00 UTC + Supabase heartbeat every 3 days at 03:00 UTC
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    console.log('[Cron] Starting D1 → R2 backup...');
+    // Supabase heartbeat — runs on BOTH crons to ensure Supabase never hits the 7-day pause.
+    // A lightweight call to the auth settings endpoint counts as project activity.
     ctx.waitUntil(
-      backupD1ToR2({ db: env.DB, bucket: env.BACKUP }).then((result) => {
-        console.log(`[Cron] Backup complete: ${result.tablesSync} tables, ${result.rowsSync} rows → R2 key: ${result.key}`);
-        if (result.errors.length > 0) {
-          console.error('[Cron] Backup errors:', result.errors.join('; '));
-        }
-      }).catch((err) => {
-        console.error('[Cron] Backup failed:', err);
+      fetch(`${env.SUPABASE_URL}/auth/v1/settings`, {
+        headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY },
+      }).then(r => {
+        console.log(`[Cron] Supabase heartbeat: ${r.status}`);
+      }).catch(err => {
+        console.warn('[Cron] Supabase heartbeat failed (non-fatal):', err);
       })
     );
+
+    // D1 → R2 backup runs only on the 02:00 UTC trigger
+    if (event.cron === '0 2 * * *') {
+      console.log('[Cron] Starting D1 → R2 backup...');
+      ctx.waitUntil(
+        backupD1ToR2({ db: env.DB, bucket: env.BACKUP }).then((result) => {
+          console.log(`[Cron] Backup complete: ${result.tablesSync} tables, ${result.rowsSync} rows → R2 key: ${result.key}`);
+          if (result.errors.length > 0) {
+            console.error('[Cron] Backup errors:', result.errors.join('; '));
+          }
+        }).catch((err) => {
+          console.error('[Cron] Backup failed:', err);
+        })
+      );
+    }
   },
 };

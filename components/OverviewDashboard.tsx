@@ -432,6 +432,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               kpiTierTargets={kpiTierTargets}
               phases={phases}
               schedules={schedules}
+              locations={locations}
             />
           )}
 

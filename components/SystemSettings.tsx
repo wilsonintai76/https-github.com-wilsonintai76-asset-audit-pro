@@ -34,6 +34,7 @@ interface SystemSettingsProps {
   onDeleteKPITier: (id: string) => void;
   onUpdateKPITierTarget: (tierId: string, phaseId: string, percentage: number) => void;
   onUpdateInstitutionKPI: (phaseId: string, percentage: number) => void;
+  onAutoCalculateTierTargets?: () => Promise<void>;
   onResetLocations: () => void;
   onResetOperationalData: () => void;
   onResetDepartments: () => void;
@@ -48,6 +49,10 @@ interface SystemSettingsProps {
   onUpdateMaxAssetsPerDay: (val: number) => void;
   maxLocationsPerDay: number;
   onUpdateMaxLocationsPerDay: (val: number) => void;
+  minAuditorsPerLocation: number;
+  onUpdateMinAuditorsPerLocation: (val: number) => void;
+  dailyInspectionCapacity: number;
+  onUpdateDailyInspectionCapacity: (val: number) => void;
   onRebalanceSchedule: () => Promise<void>;
   schedules: AuditSchedule[];
   departmentMappings: DepartmentMapping[];
@@ -106,6 +111,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onUpdateMaxAssetsPerDay,
   maxLocationsPerDay,
   onUpdateMaxLocationsPerDay,
+  minAuditorsPerLocation,
+  onUpdateMinAuditorsPerLocation,
+  dailyInspectionCapacity,
+  onUpdateDailyInspectionCapacity,
   onRebalanceSchedule,
   schedules,
   departmentMappings,
@@ -130,6 +139,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   kpiTierTargets,
   institutionKPIs,
   onUpdateInstitutionKPI,
+  onAutoCalculateTierTargets,
   showToast,
   locations
 }) => {
@@ -210,6 +220,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           onDeleteTier={onDeleteKPITier}
           onUpdateTarget={onUpdateKPITierTarget}
           onUpdateInstitutionKPI={onUpdateInstitutionKPI}
+          onAutoCalculateTierTargets={onAutoCalculateTierTargets}
         />
         {isAdmin && (
           <div className="flex justify-end mt-2 pr-2">
@@ -237,6 +248,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             kpiTierTargets={kpiTierTargets}
             phases={phases}
             schedules={schedules}
+            locations={locations}
             maxAssetsPerDay={maxAssetsPerDay}
             maxLocationsPerDay={maxLocationsPerDay}
           />
@@ -247,7 +259,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 onClick={onRebalanceSchedule}
                 className="group relative px-8 py-4 bg-slate-900 text-white rounded-[24px] text-sm font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all overflow-hidden"
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="absolute inset-0 bg-linear-to-r from-blue-600/20 to-emerald-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="relative flex items-center gap-3">
                   <Zap className="w-5 h-5 text-emerald-400" />
                   Rebalance Inspection Schedule
@@ -300,8 +312,12 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         institutionKPIs={institutionKPIs}
         maxAssetsPerDay={maxAssetsPerDay}
         maxLocationsPerDay={maxLocationsPerDay}
+        minAuditorsPerLocation={minAuditorsPerLocation}
+        dailyInspectionCapacity={dailyInspectionCapacity}
         onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
         onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
+        onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation}
+        onUpdateDailyInspectionCapacity={onUpdateDailyInspectionCapacity}
         showToast={showToast}
       />
 

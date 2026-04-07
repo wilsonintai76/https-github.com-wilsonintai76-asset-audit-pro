@@ -1183,7 +1183,7 @@ db.get('/system-settings', async (c) => {
     const { results } = await c.env.DB.prepare('SELECT * FROM system_settings').all();
     return c.json((results || []).map((s: any) => ({
       id: s.id,
-      value: s.value,
+      value: (() => { try { return JSON.parse(s.value); } catch { return s.value; } })(),
       updatedAt: s.updated_at
     })));
   } catch (err: any) {

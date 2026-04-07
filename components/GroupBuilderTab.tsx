@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Department, AuditGroup } from '../types';
 import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users, RotateCcw, Lock, AlertTriangle } from 'lucide-react';
+import { PrintButton } from './PrintButton';
+import { printUnitConsolidation } from '../lib/printUtils';
 
 const THRESHOLD_STORAGE_KEY = 'group_builder_threshold';
 const STANDALONE_CUTOFF_KEY = 'group_builder_standalone_cutoff';
@@ -50,10 +52,21 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   isSystemLocked = false,
   pairingLocked = false,
 }) => {
-  const [builderTab, setBuilderTab] = useState<1 | 2>(1);
+  // Start on tab 2 if groups already exist; tabs are derived from data not just local state
+  const [builderTab, setBuilderTab] = useState<1 | 2>(() => auditGroups.length > 0 ? 2 : 1);
   const [threshold, setThreshold] = useState<number>(() => loadThreshold());
   const [standaloneCutoff, setStandaloneCutoff] = useState<number>(() => loadStandaloneCutoff());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+
+  // Auto-switch to Unit Inventory whenever groups become non-empty (e.g. after initialisation)
+  useEffect(() => {
+    if (auditGroups.length > 0 && builderTab === 1 && !editingGroupId) {
+      setBuilderTab(2);
+    }
+  }, [auditGroups.length]);
+
+  // Groups exist and no higher-level lock → strategy design is locked until reset
+  const groupsInitialized = auditGroups.length > 0;
 
   // Determine if consolidation is locked due to active audit activity
   const { initLocked, initLockReason } = useMemo(() => {
@@ -162,6 +175,24 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     return entities.reduce((sum, e) => sum + e.assets, 0);
   }, [entities]);
 
+  const consolidationPrintData = useMemo(() => {
+    let total = 0;
+    const groups = auditGroups.map(group => {
+      const groupDepts = departments.filter(d => d.auditGroupId === group.id || d.auditGroup === group.name);
+      const subTotal = groupDepts.reduce((sum, d) => {
+        const val = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
+        total += val;
+        return sum + val;
+      }, 0);
+      return { ...group, departments: groupDepts, subTotal };
+    });
+    const unassignedDepts = departments.filter(d => !d.auditGroupId && !d.auditGroup);
+    unassignedDepts.forEach(d => {
+      total += typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
+    });
+    return { groupedData: { groups, unassignedDepts }, overallTotal: total };
+  }, [departments, auditGroups]);
+
   return (
     <div className="bg-slate-50/50 rounded-[40px] border-2 border-slate-100 p-8 md:p-12 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden">
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-14">
@@ -172,21 +203,39 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
               <Boxes className="w-8 h-8" />
             </div>
             <h3 className="text-2xl font-black text-slate-900 tracking-tight leading-none mb-4">Unit Consolidation</h3>
-            <p className="text-slate-500 text-xs font-medium leading-relaxed mb-8">
+            <p className="text-slate-500 text-xs font-medium leading-relaxed mb-6">
               Manage the institutional audit landscape by grouping departments or reviewing standalone entities.
             </p>
+            <PrintButton
+              onClick={() => printUnitConsolidation(consolidationPrintData.groupedData, consolidationPrintData.overallTotal)}
+              label="Print"
+              title="Print Unit Consolidation"
+            />
           </div>
 
           <div className="flex flex-col gap-3">
             <button 
-              onClick={() => { setBuilderTab(1); setEditingGroupId(null); }}
-              className={`group flex items-center justify-between w-full px-5 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${builderTab === 1 && !editingGroupId ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10' : 'bg-white text-slate-500 border border-slate-100 hover:border-indigo-100'}`}
+              onClick={() => { if (!groupsInitialized && !initLocked) { setBuilderTab(1); setEditingGroupId(null); } }}
+              disabled={groupsInitialized || initLocked}
+              title={groupsInitialized ? 'Groups already configured — reset to modify strategy' : initLocked ? initLockReason : undefined}
+              className={`group flex items-center justify-between w-full px-5 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
+                builderTab === 1 && !editingGroupId
+                  ? 'bg-slate-900 text-white shadow-2xl shadow-slate-900/10'
+                  : groupsInitialized || initLocked
+                    ? 'bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed'
+                    : 'bg-white text-slate-500 border border-slate-100 hover:border-indigo-100'
+              }`}
             >
               <div className="flex items-center gap-4">
-                <span className={`w-7 h-7 rounded-lg ${builderTab === 1 ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-400'} flex items-center justify-center text-[10px] transition-colors`}>1</span>
+                <span className={`w-7 h-7 rounded-lg ${
+                  builderTab === 1 ? 'bg-indigo-500 text-white' : groupsInitialized || initLocked ? 'bg-slate-100 text-slate-300' : 'bg-slate-100 text-slate-400'
+                } flex items-center justify-center text-[10px] transition-colors`}>1</span>
                 <span>Strategy Design</span>
               </div>
-              <Sparkles className={`w-3.5 h-3.5 transition-all ${builderTab === 1 ? 'text-indigo-400 scale-110' : 'text-slate-200 group-hover:text-indigo-300'}`} />
+              {groupsInitialized || initLocked
+                ? <Lock className="w-3 h-3 text-slate-300" />
+                : <Sparkles className={`w-3.5 h-3.5 transition-all ${builderTab === 1 ? 'text-indigo-400 scale-110' : 'text-slate-200 group-hover:text-indigo-300'}`} />
+              }
             </button>
             
             <button 
@@ -225,10 +274,19 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
         </div>
 
         {/* Right Column - Containerized with scrolling */}
-        <div className="lg:w-3/4 xl:w-4/5 bg-white rounded-[44px] p-8 md:p-10 border border-slate-100 shadow-sm relative overflow-hidden flex flex-col h-[700px] max-h-[85vh]">
+        <div className="lg:w-3/4 xl:w-4/5 bg-white rounded-[44px] p-8 md:p-10 border border-slate-100 shadow-sm relative overflow-hidden flex flex-col h-175 max-h-[85vh]">
            
            {builderTab === 1 && !editingGroupId && (
              <div className="animate-in slide-in-from-right-8 duration-300">
+               {groupsInitialized && (
+                 <div className="mb-6 mx-2 flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4">
+                   <Lock className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                   <div>
+                     <p className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-0.5">Groups Configured</p>
+                     <p className="text-[10px] text-emerald-700 leading-relaxed">{auditGroups.length} group{auditGroups.length !== 1 ? 's' : ''} active. Strategy Design is locked. Reset the configuration to modify grouping strategy.</p>
+                   </div>
+                 </div>
+               )}
                <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight mb-2 px-2">Auto-Generate Groups</h4>
                <p className="text-xs font-medium text-slate-500 mb-8 max-w-lg px-2">
                  Set an asset threshold. The system will bundle standalone departments together until they exceed this threshold.
@@ -246,7 +304,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                            checked={strictAuditorRule}
                            onChange={() => setStrictAuditorRule(!strictAuditorRule)}
                          />
-                         <div className="w-8 h-4 bg-slate-100 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-full relative"></div>
+                         <div className="w-8 h-4 bg-slate-100 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-full relative"></div>
                        </label>
                      </div>
                      <div className="flex items-center gap-4 bg-slate-50 p-6 border border-slate-100 rounded-[28px] focus-within:border-indigo-300 transition-all">
@@ -255,6 +313,8 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                          type="number"
                          min={100}
                          step={100}
+                         title="Asset threshold"
+                         placeholder="1000"
                          className="w-full text-3xl font-black text-slate-800 outline-none bg-transparent tabular-nums"
                          value={threshold}
                          onChange={e => handleThresholdChange(parseInt(e.target.value) || 1000)}
@@ -273,6 +333,8 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                          type="number"
                          min={0}
                          step={100}
+                         title="Large department exemption cutoff"
+                         placeholder="300"
                          className="w-full text-3xl font-black text-slate-800 outline-none bg-transparent tabular-nums"
                          value={standaloneCutoff}
                          onChange={e => handleStandaloneCutoffChange(parseInt(e.target.value) || 0)}
@@ -311,7 +373,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
            {builderTab === 2 && !editingGroupId && (
              <div className="animate-in slide-in-from-right-8 duration-300 flex flex-col flex-1 h-full min-h-0">
-               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 pb-8 border-b border-slate-100 flex-shrink-0">
+               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 pb-8 border-b border-slate-100 shrink-0">
                   <div className="space-y-2">
                     <h4 className="text-3xl font-black text-slate-900 tracking-tighter leading-[0.9]">
                       Active Entities<br/>
@@ -327,13 +389,14 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                   </div>
                   
                   <div className="flex items-center gap-3">
-                    <div className="bg-slate-900 px-8 py-5 rounded-[28px] shadow-2xl flex flex-col items-center min-w-[180px] relative overflow-hidden border border-slate-700">
+                    <div className="bg-slate-900 px-8 py-5 rounded-[28px] shadow-2xl flex flex-col items-center min-w-45 relative overflow-hidden border border-slate-700">
                        <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-1">Institutional Total</span>
                        <span className="text-3xl font-mono font-black text-white px-2 italic tracking-tighter">{grandTotalAssets.toLocaleString()}</span>
                     </div>
                     
                     <button 
                       onClick={() => window.location.reload()} 
+                      title="Refresh"
                       className="w-12 h-12 bg-white border-2 border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100 hover:bg-slate-50 rounded-xl transition-all shadow-sm flex items-center justify-center active:scale-90"
                     >
                       <RotateCcw className="w-5 h-5" />
@@ -360,14 +423,16 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                          return (
                            <button 
                              key={e.id} 
-                             className="bg-white p-8 rounded-[36px] border-2 border-slate-100 shadow-sm flex flex-col min-w-[300px] w-[300px] transition-all hover:border-indigo-200 hover:shadow-2xl hover:bg-slate-50/50 snap-center group relative shrink-0 text-left overflow-hidden h-fit mb-4"
+                             title={`Edit ${e.name}`}
+                             className="bg-white p-8 rounded-[36px] border-2 border-slate-100 shadow-sm flex flex-col min-w-75 w-75 transition-all hover:border-indigo-200 hover:shadow-2xl hover:bg-slate-50/50 snap-center group relative shrink-0 text-left overflow-hidden h-fit mb-4"
                              onClick={() => setEditingGroupId(e.id || null)}
                            >
                              {/* Asset Power Meter (Vertical) */}
                              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-slate-50 overflow-hidden">
                                 <div 
                                   className="absolute bottom-0 left-0 right-0 bg-indigo-500/20 group-hover:bg-indigo-500 transition-all duration-700"
-                                  style={{ height: `${Math.min(100, (e.assets / (grandTotalAssets / entities.length || 1)) * 50)}%` }}
+                                  data-pct={Math.min(100, (e.assets / (grandTotalAssets / entities.length || 1)) * 50)}
+                                  ref={el => { if (el) el.style.height = `${Math.min(100, (e.assets / (grandTotalAssets / entities.length || 1)) * 50)}%`; }}
                                 ></div>
                              </div>
 
@@ -394,10 +459,9 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                                   <button 
                                      onClick={(e_stop) => {
                                        e_stop.stopPropagation();
-                                       if (confirm(`Dissolve entity "${e.name}"?`) && onDeleteAuditGroup && e.id) {
-                                         onDeleteAuditGroup(e.id);
-                                       }
+                                       if (e.id) onDeleteAuditGroup(e.id);
                                      }}
+                                     title={`Dissolve ${e.name}`}
                                      className="absolute top-8 right-8 w-9 h-9 rounded-xl bg-white text-slate-200 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all opacity-0 group-hover:opacity-100 shadow-sm border border-slate-100 scale-90"
                                    >
                                      <Trash2 className="w-4 h-4" />
@@ -407,7 +471,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
                              <h5 className="font-black text-lg text-slate-900 mb-6 tracking-tight shrink-0 h-11 line-clamp-2 pr-4">{e.name}</h5>
                              
-                             <div className="flex flex-wrap gap-2 mb-8 grow content-start min-h-[4rem]">
+                             <div className="flex flex-wrap gap-2 mb-8 grow content-start min-h-16">
                                 {e.members.map(m => (
                                   <span key={m.id} className="px-3 py-1 bg-slate-50 text-slate-500 border border-slate-200/50 rounded-xl text-[8px] font-bold uppercase tracking-wider transition-all group-hover:bg-white group-hover:border-indigo-100">
                                     {m.abbr}

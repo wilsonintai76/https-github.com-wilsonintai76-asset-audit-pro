@@ -44,6 +44,10 @@ interface CrossAuditManagementProps {
   showToast?: (message: string, type?: any) => void;
   onUpdateMaxAssetsPerDay?: (value: number) => void;
   onUpdateMaxLocationsPerDay?: (value: number) => void;
+  minAuditorsPerLocation?: number;
+  onUpdateMinAuditorsPerLocation?: (value: number) => void;
+  dailyInspectionCapacity?: number;
+  onUpdateDailyInspectionCapacity?: (value: number) => void;
   pairingLocked?: boolean;
   pairingLockInfo?: { lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null;
   onLockPairing?: (pairingCount: number) => Promise<void>;
@@ -71,9 +75,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   institutionKPIs = [],
   maxAssetsPerDay = 1000,
   maxLocationsPerDay = 5,
+  minAuditorsPerLocation: minAuditorsPerLocationProp = 2,
+  dailyInspectionCapacity: dailyInspectionCapacityProp = 150,
   showToast,
   onUpdateMaxAssetsPerDay,
   onUpdateMaxLocationsPerDay,
+  onUpdateMinAuditorsPerLocation,
+  onUpdateDailyInspectionCapacity,
   pairingLocked = false,
   pairingLockInfo = null,
   onLockPairing,
@@ -89,7 +97,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedAuditor, setSelectedAuditor] = useState<string>('');
-  const [respectManualPairings, setRespectManualPairings] = useState<boolean>(true);
+  const [respectManualPairings, setRespectManualPairings] = useState<boolean>(() => {
+    const s = localStorage.getItem('cross_audit_respect_manual'); return s === null ? true : s === 'true';
+  });
   
   // Manual Mode State
   const [manualAuditor, setManualAuditor] = useState('');
@@ -99,16 +109,23 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   // Workflow Control
   const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('grouping');
-  const [simulateIdealStaffing, setSimulateIdealStaffing] = useState(false);
+  const [simulateIdealStaffing, setSimulateIdealStaffing] = useState<boolean>(() => {
+    return localStorage.getItem('cross_audit_simulate_staff') === 'true';
+  });
   
   // Pairing Strategy Mode
-  const [pairingMode, setPairingMode] = useState<'assets' | 'assets_auditors'>('assets_auditors');
+  const [pairingMode, setPairingMode] = useState<'assets' | 'assets_auditors'>(() => {
+    const s = localStorage.getItem('cross_audit_pairing_mode');
+    return (s === 'assets' || s === 'assets_auditors') ? s : 'assets_auditors';
+  });
 
   // State for Auditor Strictness (Min 2 Auditors rule)
   const [strictAuditorRule, setStrictAuditorRule] = useState<boolean>(true);
 
   // Auto-pairing mutual toggle
-  const [autoPairingMutual, setAutoPairingMutual] = useState<boolean>(false);
+  const [autoPairingMutual, setAutoPairingMutual] = useState<boolean>(() => {
+    return localStorage.getItem('cross_audit_mutual') === 'true';
+  });
 
   // Tab mode
   const [managementMode, setManagementMode] = useState<ManagementMode>('auto');
@@ -208,6 +225,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       setIsApplied(false);
       setIsSimulatorActive(false);
       setSimulatedPairings([]);
+      localStorage.removeItem('cross_audit_simulator_active');
+      localStorage.removeItem('cross_audit_simulator_pairings');
 
       const updates = departments
         .filter(d => d.auditGroupId)
@@ -374,8 +393,33 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   };
 
   // --- SIMULATOR LOGIC ---
-  const [simulatedPairings, setSimulatedPairings] = useState<Omit<CrossAuditPermission, 'id'>[]>([]);
-  const [isSimulatorActive, setIsSimulatorActive] = useState(false);
+  const SIMULATOR_ACTIVE_KEY = 'cross_audit_simulator_active';
+  const SIMULATOR_PAIRINGS_KEY = 'cross_audit_simulator_pairings';
+
+  const [simulatedPairings, setSimulatedPairings] = useState<Omit<CrossAuditPermission, 'id'>[]>(() => {
+    try {
+      const stored = localStorage.getItem(SIMULATOR_PAIRINGS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  const [isSimulatorActive, setIsSimulatorActive] = useState<boolean>(() => {
+    return localStorage.getItem(SIMULATOR_ACTIVE_KEY) === 'true';
+  });
+
+  // Persist simulator state whenever it changes
+  useEffect(() => {
+    localStorage.setItem(SIMULATOR_ACTIVE_KEY, isSimulatorActive ? 'true' : 'false');
+  }, [isSimulatorActive]);
+
+  useEffect(() => {
+    localStorage.setItem(SIMULATOR_PAIRINGS_KEY, JSON.stringify(simulatedPairings));
+  }, [simulatedPairings]);
+
+  // Persist config toggles
+  useEffect(() => { localStorage.setItem('cross_audit_pairing_mode', pairingMode); }, [pairingMode]);
+  useEffect(() => { localStorage.setItem('cross_audit_respect_manual', respectManualPairings ? 'true' : 'false'); }, [respectManualPairings]);
+  useEffect(() => { localStorage.setItem('cross_audit_simulate_staff', simulateIdealStaffing ? 'true' : 'false'); }, [simulateIdealStaffing]);
+  useEffect(() => { localStorage.setItem('cross_audit_mutual', autoPairingMutual ? 'true' : 'false'); }, [autoPairingMutual]);
   
   const targetKPIPercentage = useMemo(() => {
     if (!institutionKPIs || institutionKPIs.length === 0) return 30;
@@ -665,6 +709,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       await onBulkAddPermissions(expandedPairings);
       setIsSimulatorActive(false);
       setSimulatedPairings([]);
+      localStorage.removeItem('cross_audit_simulator_active');
+      localStorage.removeItem('cross_audit_simulator_pairings');
       showToast?.(`Successfully committed ${expandedPairings.length} departmental links.`);
       await onLockPairing?.(expandedPairings.length);
     } catch (e) {
@@ -787,6 +833,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
                 maxLocationsPerDay={maxLocationsPerDay}
                 onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
+                minAuditorsPerLocation={minAuditorsPerLocationProp}
+                onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation || (() => {})}
+                dailyInspectionCapacity={dailyInspectionCapacityProp}
+                onUpdateDailyInspectionCapacity={onUpdateDailyInspectionCapacity || (() => {})}
               />
             </div>
           )}

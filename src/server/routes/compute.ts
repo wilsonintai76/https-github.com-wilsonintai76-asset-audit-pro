@@ -64,14 +64,23 @@ compute.get('/kpi', async (c) => {
 
   // 2. Pre-compute lookup tables
   const locAssets: Record<string, number> = {};
-  for (const l of locs) locAssets[l.id] = l.total_assets || 0;
+  const locAssetsByDept: Record<string, number> = {};
+  for (const l of locs) {
+    locAssets[l.id] = l.total_assets || 0;
+    locAssetsByDept[l.department_id] = (locAssetsByDept[l.department_id] || 0) + (l.total_assets || 0);
+  }
 
-  const institutionTotalAssets = depts.reduce((s: number, d: any) => s + (d.total_assets || 0), 0);
+  // Effective dept assets = MAX(dept.total_assets stored, SUM of its location assets)
+  // This mirrors the frontend departmentsWithAssets memo.
+  const deptEffective = (d: any) =>
+    Math.max(d.total_assets || 0, locAssetsByDept[d.id] || 0);
+
+  const institutionTotalAssets = depts.reduce((s: number, d: any) => s + deptEffective(d), 0);
 
   // 3. Tier stats
   const tierStats = tiers.map((tier: any, idx: number) => {
     const deptsInTier = depts.filter((d: any) => {
-      const assigned = resolveTier(d.total_assets || 0, institutionTotalAssets, tiers);
+      const assigned = resolveTier(deptEffective(d), institutionTotalAssets, tiers);
       return assigned?.id === tier.id;
     });
 
@@ -79,7 +88,7 @@ compute.get('/kpi', async (c) => {
       tierTargets.find((kt: any) => kt.tier_id === tier.id && kt.phase_id === activePhase.id)?.target_percentage ?? 0;
 
     const deptDetails = deptsInTier.map((d: any) => {
-      const total = d.total_assets || 0;
+      const total = deptEffective(d);
       const completedLocIds = schedules
         .filter((s: any) => s.department_id === d.id && s.phase_id === activePhase.id && s.status === 'Completed')
         .map((s: any) => s.location_id);
@@ -96,7 +105,7 @@ compute.get('/kpi', async (c) => {
       };
     }).sort((a: any, b: any) => a.percentage - b.percentage);
 
-    const totalTierAssets = deptsInTier.reduce((s: number, d: any) => s + (d.total_assets || 0), 0);
+    const totalTierAssets = deptsInTier.reduce((s: number, d: any) => s + deptEffective(d), 0);
     const inspectedTierAssets = deptDetails.reduce((s: number, d: any) => s + d.inspectedAssets, 0);
     const actualPct = totalTierAssets > 0 ? Math.round((inspectedTierAssets / totalTierAssets) * 100) : 0;
 
@@ -170,13 +179,23 @@ compute.post(
     const tierTargets = (tierTargetsRes.results || []) as any[];
     const phases = (phasesRes.results || []) as any[];
 
-    const institutionTotalAssets = depts.reduce((s: number, d: any) => s + (d.total_assets || 0), 0) || 1;
+    const institutionTotalAssets = (() => {
+      // Effective dept assets = MAX(dept.total_assets stored, SUM of its location assets)
+      // Mirrors frontend departmentsWithAssets memo and the /kpi route.
+      const locSumPerDept: Record<string, number> = {};
+      for (const l of allLocs) locSumPerDept[l.department_id] = (locSumPerDept[l.department_id] || 0) + (l.total_assets || 0);
+      return depts.reduce((s: number, d: any) => s + Math.max(d.total_assets || 0, locSumPerDept[d.id] || 0), 0) || 1;
+    })();
+
+    // Recompute effective assets per dept for use inside loop
+    const locSumPerDept: Record<string, number> = {};
+    for (const l of allLocs) locSumPerDept[l.department_id] = (locSumPerDept[l.department_id] || 0) + (l.total_assets || 0);
 
     const newAuditRows: any[] = [];
     const phaseUpdates: { id: string; phaseId: string }[] = [];
 
     for (const dept of depts) {
-      const totalAssets = dept.total_assets || 0;
+      const totalAssets = Math.max(dept.total_assets || 0, locSumPerDept[dept.id] || 0);
       if (totalAssets === 0) continue;
 
       const tier = resolveTier(totalAssets, institutionTotalAssets, tiers);
@@ -587,6 +606,268 @@ compute.post(
       projectedKPIPercentage: Math.round(projectedKPIPct * 10) / 10,
       targetKPIPercentage: targetKPIPct,
       isKPIMet: projectedKPIPct >= targetKPIPct,
+    });
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/compute/auto-tier-targets
+// Given the global institution KPI targets (per phase), auto-calculates
+// tier-specific per-phase % targets using the "Completion Phase" approach:
+//   • Tier 1 (Small)  → must be 100% by Phase 1 (finishes earliest)
+//   • Tier 2 (Medium) → must be 100% by Phase 2
+//   • Tier 3 (Large)  → must be 100% by Phase 3 (gets breathing room)
+// ALL tiers contribute a non-zero target in every phase they haven't
+// completed yet; locked tiers stay at 100%. Weighted sum of tier targets
+// matches the institution global target for each phase.
+// Persists results to kpi_tier_targets and returns the computed matrix.
+// ─────────────────────────────────────────────────────────────────────────────
+compute.post(
+  '/auto-tier-targets',
+  requirePermission('manage:system'),
+  async (c) => {
+    const db = c.env.DB;
+
+    // 1. Fetch all required data (including location sums for effective asset calc)
+    const [deptsRes, tiersRes, phasesRes, instKPIsRes, locSumsRes] = await Promise.all([
+      db.prepare('SELECT id, total_assets, is_exempted FROM departments').all(),
+      db.prepare('SELECT id, name, min_assets FROM kpi_tiers ORDER BY min_assets ASC').all(),
+      db.prepare('SELECT id, name, start_date, end_date FROM audit_phases ORDER BY start_date ASC').all(),
+      db.prepare('SELECT phase_id, target_percentage FROM institution_kpi_targets').all(),
+      db.prepare('SELECT department_id, SUM(total_assets) AS loc_sum FROM locations GROUP BY department_id').all(),
+    ]);
+
+    const depts = (deptsRes.results || []) as any[];
+    const tiers = (tiersRes.results || []) as any[];
+    const phases = (phasesRes.results || []) as any[];
+    const instKPIs = (instKPIsRes.results || []) as any[];
+
+    if (tiers.length === 0 || phases.length === 0) {
+      return c.json({ error: 'Tiers and phases must be configured first' }, 400);
+    }
+
+    // Build location-sum lookup (mirrors frontend departmentsWithAssets memo)
+    const locSumByDept: Record<string, number> = {};
+    for (const ls of (locSumsRes.results || []) as any[]) {
+      locSumByDept[ls.department_id] = ls.loc_sum || 0;
+    }
+    // Effective dept assets = MAX(stored dept.total_assets, SUM of location assets)
+    const effectiveAssets = (d: any) =>
+      Math.max(d.total_assets || 0, locSumByDept[d.id] || 0);
+
+    const institutionTotal = depts.reduce((s: number, d: any) => s + effectiveAssets(d), 0);
+    if (institutionTotal === 0) {
+      return c.json({ error: 'No department asset data available' }, 400);
+    }
+
+    // 2. Compute how many assets live in each tier
+    const tierAssets: Record<string, number> = {};
+    for (const tier of tiers) tierAssets[tier.id] = 0;
+
+    for (const dept of depts) {
+      if (dept.is_exempted) continue;
+      const assets = effectiveAssets(dept);
+      if (assets === 0) continue;
+      const assigned = resolveTier(assets, institutionTotal, tiers);
+      if (assigned) tierAssets[assigned.id] += assets;
+    }
+
+    // 3. Compute tier weights (fraction of total institution assets)
+    const tierWeights: Record<string, number> = {};
+    for (const tier of tiers) {
+      tierWeights[tier.id] = institutionTotal > 0 ? tierAssets[tier.id] / institutionTotal : 0;
+    }
+
+    // 4. Build the global target per phase (sorted chronologically)
+    const globalTargets: Record<string, number> = {};
+    for (const phase of phases) {
+      const inst = instKPIs.find((k: any) => k.phase_id === phase.id);
+      globalTargets[phase.id] = inst?.target_percentage ?? 0;
+    }
+
+    // 5. Fetch audit constraints for capacity estimation
+    const constraintRow = await db.prepare(
+      "SELECT value FROM system_settings WHERE id = 'audit_constraints'"
+    ).first<{ value: string }>();
+    const constraints = constraintRow ? JSON.parse(constraintRow.value) : {};
+    const minAuditorsPerLocation = constraints.minAuditorsPerLocation ?? 2;
+    const dailyInspectionCapacity = constraints.dailyInspectionCapacity ?? 150;
+
+    // ──────────────────────────────────────────────────────────────────
+    //  AUTO-CALCULATE TIER TARGETS — "Completion Phase" approach
+    //
+    //  Rule: Tier i (0=smallest) MUST reach 100% by Phase i.
+    //  After a tier hits 100%, it stops contributing — the remaining
+    //  (larger) tiers share the load for later phases.
+    //
+    //  For each phase pi:
+    //    • "Locked" tiers (completionPhase <= pi) → target = 100%
+    //    • "Flex" tiers (completionPhase > pi) → each gets the same %
+    //      so that Σ(w_i × t_i) = globalTarget
+    //
+    //  Example (3 tiers, 3 phases, G = 30/65/100):
+    //   Phase 1: Small=100%, Med+Large share rest → flexPct
+    //   Phase 2: Small+Med=100%, Large covers rest
+    //   Phase 3: All=100%
+    //
+    //  If numTiers ≠ numPhases, tiers are mapped proportionally
+    //  to phases so that smaller tiers finish earlier.
+    // ──────────────────────────────────────────────────────────────────
+    const numTiers = tiers.length;
+    const numPhases = phases.length;
+
+    // Map each tier to its "completion phase" index
+    // Tier 0 (smallest) completes at Phase 0 (earliest)
+    // Tier N-1 (largest) completes at Phase N-1 (latest)
+    const completionPhase: number[] = tiers.map((_: any, ti: number) => {
+      if (numTiers === 1) return numPhases - 1;
+      return Math.min(numPhases - 1, Math.round(ti * (numPhases - 1) / (numTiers - 1)));
+    });
+
+    const tierTargetMatrix: Record<string, Record<string, number>> = {};
+    for (const tier of tiers) tierTargetMatrix[tier.id] = {};
+
+    // 6. For each phase, compute tier targets
+    //
+    //  Two cases per flex tier (tiers that haven't completed yet):
+    //
+    //  Case A — locked tiers don't cover G yet (remaining > 0):
+    //    All flex tiers share: flexPct = remaining / flexWeight
+    //    This ensures Σ(w_i × t_i) = G exactly.
+    //
+    //  Case B — locked tiers alone already exceed G (remaining ≤ 0):
+    //    This happens when small-tier departments collectively own more
+    //    assets than the global target %. In this case we can't push
+    //    their combined contribution below G, so we fall back to a
+    //    "natural ramp" for flex tiers:
+    //      naturalPct[ti] = 100 × (pi+1) / (completionPhase[ti]+1)
+    //    This ensures every tier is always non-zero and reaches 100%
+    //    exactly by its completion phase.
+    for (let pi = 0; pi < numPhases; pi++) {
+      const phase = phases[pi];
+      const G = globalTargets[phase.id] || 0;
+
+      if (G === 0) {
+        for (const tier of tiers) tierTargetMatrix[tier.id][phase.id] = 0;
+        continue;
+      }
+
+      // Split tiers into locked (done) vs flex (still in progress)
+      let lockedContribution = 0;
+      let flexWeight = 0;
+      for (let ti = 0; ti < numTiers; ti++) {
+        const w = tierWeights[tiers[ti].id] || 0;
+        if (completionPhase[ti] <= pi) {
+          lockedContribution += w * 100;
+        } else {
+          flexWeight += w;
+        }
+      }
+
+      const remaining = G - lockedContribution;
+
+      // Case A: normal — there is room for flex tiers to contribute
+      // Case B: locked tiers already exceed G — use natural ramp instead
+      const useNaturalRamp = remaining <= 0;
+      const sharedFlexPct = (!useNaturalRamp && flexWeight > 0)
+        ? Math.min(100, Math.max(1, Math.round(remaining / flexWeight)))
+        : null;
+
+      for (let ti = 0; ti < numTiers; ti++) {
+        if (completionPhase[ti] <= pi) {
+          // Tier has reached its completion phase — lock at 100%
+          tierTargetMatrix[tiers[ti].id][phase.id] = 100;
+        } else if (sharedFlexPct !== null) {
+          // Case A: shared flex percentage
+          tierTargetMatrix[tiers[ti].id][phase.id] = sharedFlexPct;
+        } else {
+          // Case B: natural linear ramp toward 100% by completion phase
+          // e.g. Large (ci=2) in Phase 1 of 3: 100 × 1/3 = 33%
+          const natural = Math.round(100 * (pi + 1) / (completionPhase[ti] + 1));
+          tierTargetMatrix[tiers[ti].id][phase.id] = Math.min(99, Math.max(1, natural));
+        }
+      }
+    }
+
+    // 7. Enforce monotonically non-decreasing across phases per tier
+    for (let ti = 0; ti < numTiers; ti++) {
+      const tier = tiers[ti];
+      let prev = 0;
+      for (let pi = 0; pi < numPhases; pi++) {
+        const phase = phases[pi];
+        tierTargetMatrix[tier.id][phase.id] = Math.max(prev, tierTargetMatrix[tier.id][phase.id]);
+        prev = tierTargetMatrix[tier.id][phase.id];
+      }
+    }
+
+    // 9. Capacity estimation per phase (informational)
+    //    working days ≈ phase duration in calendar days × 5/7
+    //    capacity per phase = dailyCapacity × workingDays × numAuditorPairs
+    //    where each location needs minAuditorsPerLocation auditors
+    const capacityWarnings: string[] = [];
+    for (let pi = 0; pi < numPhases; pi++) {
+      const phase = phases[pi];
+      const start = new Date(phase.start_date);
+      const end = new Date(phase.end_date);
+      const calendarDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000));
+      const workingDays = Math.round(calendarDays * 5 / 7);
+
+      // Assets to inspect this phase (incremental)
+      const prevGlobal = pi > 0 ? (globalTargets[phases[pi - 1].id] || 0) : 0;
+      const thisGlobal = globalTargets[phase.id] || 0;
+      const incrementalPct = Math.max(0, thisGlobal - prevGlobal);
+      const assetsThisPhase = Math.ceil(institutionTotal * incrementalPct / 100);
+
+      // Capacity for one auditor pair
+      const pairCapacity = dailyInspectionCapacity * workingDays;
+      const pairsNeeded = pairCapacity > 0 ? Math.ceil(assetsThisPhase / pairCapacity) : 0;
+      const auditorsNeeded = pairsNeeded * minAuditorsPerLocation;
+
+      if (assetsThisPhase > 0) {
+        capacityWarnings.push(
+          `${phase.name}: ~${assetsThisPhase.toLocaleString()} assets over ${workingDays} working days → needs ~${pairsNeeded} teams (${auditorsNeeded} auditors @ ${minAuditorsPerLocation}/location, ${dailyInspectionCapacity} assets/day)`
+        );
+      }
+    }
+
+    // 9. Persist to kpi_tier_targets (upsert)
+    const stmts: any[] = [];
+    const resultMatrix: { tierId: string; tierName: string; phaseId: string; phaseName: string; targetPercentage: number }[] = [];
+
+    for (const tier of tiers) {
+      for (const phase of phases) {
+        const pct = tierTargetMatrix[tier.id][phase.id] || 0;
+        stmts.push(
+          db.prepare(`
+            INSERT INTO kpi_tier_targets (id, tier_id, phase_id, target_percentage)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(tier_id, phase_id) DO UPDATE SET target_percentage = excluded.target_percentage
+          `).bind(crypto.randomUUID(), tier.id, phase.id, pct),
+        );
+        resultMatrix.push({
+          tierId: tier.id,
+          tierName: tier.name,
+          phaseId: phase.id,
+          phaseName: phase.name,
+          targetPercentage: pct,
+        });
+      }
+    }
+
+    if (stmts.length > 0) {
+      const CHUNK = 100;
+      for (let i = 0; i < stmts.length; i += CHUNK) {
+        await db.batch(stmts.slice(i, i + CHUNK));
+      }
+    }
+
+    return c.json({
+      tierTargets: resultMatrix,
+      tierWeights: Object.fromEntries(tiers.map(t => [t.id, Math.round(tierWeights[t.id] * 1000) / 10])),
+      globalTargets,
+      capacityWarnings,
+      constraints: { minAuditorsPerLocation, dailyInspectionCapacity },
+      message: 'Tier targets auto-calculated and saved',
     });
   },
 );

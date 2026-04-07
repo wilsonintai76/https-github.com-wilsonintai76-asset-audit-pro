@@ -98,7 +98,7 @@ export const MappingRules: React.FC<MappingRulesProps> = ({
             <p className="text-xs font-black uppercase text-slate-500 tracking-widest mb-1">Manual Rule Helper</p>
             <p className="text-xs text-slate-500">Upload any asset CSV to extract department names for the dropdown below.</p>
           </div>
-          <input ref={csvMappingRef} type="file" accept=".csv" className="hidden" onChange={handleCsvHelperUpload} />
+          <input ref={csvMappingRef} type="file" accept=".csv" className="hidden" aria-label="Upload source CSV file" onChange={handleCsvHelperUpload} />
           <button
             onClick={() => csvMappingRef.current?.click()}
             className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 hover:bg-slate-50 transition-all active:scale-95 shrink-0"
@@ -112,6 +112,7 @@ export const MappingRules: React.FC<MappingRulesProps> = ({
           <div className="relative w-full md:w-2/5">
             <select
               className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none"
+              title="Source department name from CSV"
               value={newMappingSource}
               onChange={e => setNewMappingSource(e.target.value)}
             >
@@ -128,6 +129,7 @@ export const MappingRules: React.FC<MappingRulesProps> = ({
           <div className="relative w-full md:w-2/5">
             <select
               className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none"
+              title="Target official department"
               value={newMappingTargetId}
               onChange={e => setNewMappingTargetId(e.target.value)}
             >
@@ -167,11 +169,7 @@ export const MappingRules: React.FC<MappingRulesProps> = ({
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <button
-                          onClick={() => {
-                            if (confirm(`Remove mapping for "${mapping.sourceName}"?`)) {
-                              onDeleteDepartmentMapping(mapping.id);
-                            }
-                          }}
+                          onClick={() => onDeleteDepartmentMapping(mapping.id)}
                           className="text-xs font-bold text-red-600 hover:text-red-700"
                         >
                           Remove

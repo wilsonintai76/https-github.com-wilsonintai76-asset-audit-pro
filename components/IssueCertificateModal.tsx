@@ -105,11 +105,7 @@ export const IssueCertificateModal: React.FC<IssueCertificateModalProps> = ({ us
             
             {user.certificationExpiry && onRevoke && (
                 <button 
-                    onClick={() => {
-                        if (confirm(`Are you sure you want to revoke the institutional certificate for ${user.name}?`)) {
-                            onRevoke();
-                        }
-                    }}
+                    onClick={() => onRevoke?.()}
                     className="w-full py-4 bg-rose-50 text-rose-600 font-black text-xs uppercase tracking-widest rounded-2xl border border-rose-100 hover:bg-rose-100 transition-all active:scale-95"
                 >
                     Revoke Institutional Certificate

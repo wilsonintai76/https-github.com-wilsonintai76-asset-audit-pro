@@ -4,7 +4,7 @@ compatibility_date = "2025-02-14"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-crons = ["0 2 * * *"]  # Daily at 02:00 UTC (10:00 AM MYT)
+crons = ["0 2 * * *", "0 3 */3 * *"]  # Daily backup at 02:00 UTC; Supabase heartbeat every 3 days at 03:00 UTC
 
 [vars]
 SUPABASE_URL = "https://qwhkrbcvbqqclqdpigzw.supabase.co"

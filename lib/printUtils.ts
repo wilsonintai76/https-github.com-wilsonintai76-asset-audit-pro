@@ -431,63 +431,112 @@ export function printCrossAuditAssignments(
 
   const getEntity = (id: string) => entities.find(e => e.id === id);
 
+  const mutualCount = entityPermissions.filter(ep => ep.isMutual).length;
+  const oneWayCount = entityPermissions.length - mutualCount;
+
+  // Build entity cell HTML — assets inline under member pills
+  // assetLabel: null = hide, 'inspect' = "X assets to inspect" (prominent), 'capacity' = "own: X assets" (muted)
+  function entityCell(entity: Entity | undefined, id: string, assetLabel: 'inspect' | 'capacity' | null): string {
+    if (!entity) return `<em style="color:#94a3b8;">${id}</em>`;
+    const members = entity.members?.map(m => m.abbr || m.name || '').filter(Boolean) || [];
+    const isGroup = members.length > 1 || entity.isConsolidated;
+    const groupBadge = isGroup
+      ? `<span style="font-size:7pt;color:#6366f1;font-weight:700;letter-spacing:0.5pt;"> GROUP</span>`
+      : '';
+    const memberPills = members.map(m => `<span class="pill">${m}</span>`).join(' ');
+    let assetLine = '';
+    if (assetLabel === 'inspect' && entity.assets > 0) {
+      assetLine = `<div style="margin-top:4pt;font-size:7.5pt;color:#0f172a;font-weight:800;">
+           <span style="color:#6366f1;">&#9654;</span>&nbsp;${fmt(entity.assets)} assets to inspect
+         </div>`;
+    } else if (assetLabel === 'capacity' && entity.assets > 0) {
+      // Muted — shows own asset count for workload context on the inspecting side
+      assetLine = `<div style="margin-top:4pt;font-size:7pt;color:#94a3b8;font-weight:600;">
+           own: ${fmt(entity.assets)} assets
+         </div>`;
+    }
+    return `<strong>${entity.name}</strong>${groupBadge}
+      <div style="margin-top:3pt;">${memberPills}</div>
+      ${assetLine}`;
+  }
+
   const bodyRows = entityPermissions.map((ep, i) => {
     const auditor = getEntity(ep.auditorEntityId);
     const target = getEntity(ep.targetEntityId);
-    const dir = ep.isMutual ? '⇄ Mutual' : '→';
-    const auditorMembers = auditor?.members?.map(m => m.abbr || m.name || '').filter(Boolean) || [];
-    const targetMembers = target?.members?.map(m => m.abbr || m.name || '').filter(Boolean) || [];
 
-    return `<tr>
-      <td>${i + 1}</td>
-      <td>
-        <strong>${auditor?.name || ep.auditorEntityId}</strong><br>
-        ${auditorMembers.map(m => `<span class="pill">${m}</span>`).join(' ')}
-        ${(auditor?.isConsolidated || (auditorMembers.length > 0)) ? '<span style="font-size:7.5pt;color:#6366f1;"> [Group]</span>' : ''}
-      </td>
-      <td class="center"><strong>${dir}</strong></td>
-      <td>
-        <strong>${target?.name || ep.targetEntityId}</strong><br>
-        ${targetMembers.map(m => `<span class="pill">${m}</span>`).join(' ')}
-        ${(target?.isConsolidated || (targetMembers.length > 0)) ? '<span style="font-size:7.5pt;color:#6366f1;"> [Group]</span>' : ''}
-      </td>
-      <td class="right">${fmt(target?.assets || 0)}</td>
-    </tr>`;
+    if (ep.isMutual) {
+      // Mutual: A inspects B's assets, B inspects A's assets — each entity's own assets
+      // are exactly what the other party will come to inspect
+      return `<tr class="no-break">
+        <td style="vertical-align:top;color:#94a3b8;font-weight:700;">${i + 1}</td>
+        <td style="vertical-align:top;">${entityCell(auditor, ep.auditorEntityId, 'inspect')}</td>
+        <td class="center" style="vertical-align:middle;">
+          <div style="font-size:11pt;font-weight:900;color:#6366f1;">&#x21C4;</div>
+          <div style="font-size:7pt;font-weight:800;color:#6366f1;letter-spacing:0.5pt;margin-top:2pt;">MUTUAL</div>
+        </td>
+        <td style="vertical-align:top;">${entityCell(target, ep.targetEntityId, 'inspect')}</td>
+      </tr>`;
+    } else {
+      // One-way A → B: inspecting entity shows own capacity (muted), target shows assets to inspect (bold)
+      return `<tr class="no-break">
+        <td style="vertical-align:top;color:#94a3b8;font-weight:700;">${i + 1}</td>
+        <td style="vertical-align:top;">${entityCell(auditor, ep.auditorEntityId, 'capacity')}</td>
+        <td class="center" style="vertical-align:middle;">
+          <div style="font-size:14pt;font-weight:900;color:#334155;">&#x2192;</div>
+        </td>
+        <td style="vertical-align:top;">${entityCell(target, ep.targetEntityId, 'inspect')}</td>
+      </tr>`;
+    }
   }).join('');
 
   const html = `
 <div class="header">
   <h1>Cross-Audit Active Assignment</h1>
-  <p class="subtitle">Active inspection pairings — inspecting entity and their assigned target.</p>
+  <p class="subtitle">Active inspection pairings. Asset counts shown under each entity indicate the volume each party is responsible for inspecting.</p>
 </div>
 
 <div class="stat-row">
   <div class="stat-box">
-    <div class="stat-label">Total Active Pairings</div>
+    <div class="stat-label">Total Pairings</div>
     <div class="stat-value">${entityPermissions.length}</div>
   </div>
   <div class="stat-box">
-    <div class="stat-label">Mutual Pairings</div>
-    <div class="stat-value">${entityPermissions.filter(ep => ep.isMutual).length}</div>
+    <div class="stat-label">Mutual (&#x21C4;)</div>
+    <div class="stat-value">${mutualCount}</div>
+    <div class="stat-sub">Both parties inspect each other</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">One-Way (&#x2192;)</div>
+    <div class="stat-value">${oneWayCount}</div>
+    <div class="stat-sub">Single direction only</div>
+  </div>
+  <div class="stat-box">
+    <div class="stat-label">Entities Involved</div>
+    <div class="stat-value">${new Set(entityPermissions.flatMap(ep => [ep.auditorEntityId, ep.targetEntityId])).size}</div>
   </div>
 </div>
 
 <table>
   <thead>
     <tr>
-      <th style="width:28pt;">#</th>
+      <th style="width:22pt;">#</th>
       <th>Inspecting Entity</th>
-      <th class="center" style="width:50pt;">Dir.</th>
+      <th class="center" style="width:56pt;">Direction</th>
       <th>Target Entity</th>
-      <th class="right" style="width:70pt;">Target Assets</th>
     </tr>
   </thead>
   <tbody>
     ${bodyRows}
   </tbody>
-</table>`;
+</table>
 
-  openPrint('Cross-Audit Active Assignment', html);
+<p style="margin-top:10pt;font-size:7.5pt;color:#94a3b8;">
+  <strong style="color:#6366f1;">&#9654;</strong> Bold asset figure = assets the counterpart will come to inspect. &nbsp;|&nbsp;
+  <em>own: X assets</em> = inspecting entity's own holdings (workload reference, shown in muted text for one-way pairings only). &nbsp;|&nbsp;
+  For mutual pairings both parties carry symmetric inspection obligations.
+</p>`;
+
+  openPrint('Cross-Audit Active Assignment', html, true);
 }
 
 // ─── REPORT 5: Inspection Schedule by Department ──────────────────────────────

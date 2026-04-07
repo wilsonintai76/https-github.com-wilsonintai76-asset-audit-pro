@@ -162,6 +162,8 @@ export interface SystemActivity {
 export interface AuditConstraintsState {
   maxAssetsPerDay: number;
   maxLocationsPerDay: number;
+  minAuditorsPerLocation: number;
+  dailyInspectionCapacity: number;
 }
 
 export interface SystemSetting {

@@ -298,6 +298,10 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db['institution-kpi-targets'].$post({ json: { phaseId, targetPercentage: percentage } }, { headers: h }));
   }
 
+  async autoCalculateTierTargets(): Promise<{ tierTargets: { tierId: string; tierName: string; phaseId: string; phaseName: string; targetPercentage: number }[]; tierWeights: Record<string, number>; globalTargets: Record<string, number> }> {
+    return this.rpc(h => (api as any).compute['auto-tier-targets'].$post({}, { headers: h }));
+  }
+
   // --- BUILDINGS ---
   async getBuildings(): Promise<Building[]> {
     return (await this.rpcOrNull<Building[]>(h => (api as any).db.buildings.$get({}, { headers: h }))) ?? [];

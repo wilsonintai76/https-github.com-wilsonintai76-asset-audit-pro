@@ -50,8 +50,14 @@ const App: React.FC = () => {
   const [schedules, setSchedules] = useState<AuditSchedule[]>([]);
   const [maxAssetsPerDay, setMaxAssetsPerDay] = useState<number>(1000);
   const [maxLocationsPerDay, setMaxLocationsPerDay] = useState<number>(5);
-  const [pairingLocked, setPairingLocked] = useState(false);
-  const [pairingLockInfo, setPairingLockInfo] = useState<{ lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null>(null);
+  const [minAuditorsPerLocation, setMinAuditorsPerLocation] = useState<number>(2);
+  const [dailyInspectionCapacity, setDailyInspectionCapacity] = useState<number>(150);
+  const [pairingLocked, setPairingLocked] = useState<boolean>(() => {
+    try { return localStorage.getItem('pairing_lock_active') === 'true'; } catch { return false; }
+  });
+  const [pairingLockInfo, setPairingLockInfo] = useState<{ lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null>(() => {
+    try { const s = localStorage.getItem('pairing_lock_info'); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [crossAuditPermissions, setCrossAuditPermissions] = useState<CrossAuditPermission[]>([]);
@@ -118,6 +124,16 @@ const App: React.FC = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  useEffect(() => {
+    try { localStorage.setItem('pairing_lock_active', pairingLocked ? 'true' : 'false'); } catch { /* noop */ }
+  }, [pairingLocked]);
+  useEffect(() => {
+    try {
+      if (pairingLockInfo) localStorage.setItem('pairing_lock_info', JSON.stringify(pairingLockInfo));
+      else localStorage.removeItem('pairing_lock_info');
+    } catch { /* noop */ }
+  }, [pairingLockInfo]);
+
   const logActivity = useCallback(async (type: SystemActivity['type'], message: string, auditId?: string, metadata?: any) => {
     if (!currentUser) return;
     try {
@@ -155,12 +171,6 @@ const App: React.FC = () => {
   }, []);
   const loadAllData = useCallback(async () => {
     try {
-      // If admin, ensure default phases/tiers/targets exist on the server
-      // (single HTTP call, idempotent, uses INSERT OR IGNORE — safe to call every time)
-      if (isAdmin) {
-        try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults failed (non-fatal):', e); }
-      }
-
       const results = await Promise.all([
         gateway.getAudits(),
         gateway.getUsers(),
@@ -198,12 +208,16 @@ const App: React.FC = () => {
         if (constraints?.value) {
           if (constraints.value.maxAssetsPerDay) setMaxAssetsPerDay(constraints.value.maxAssetsPerDay);
           if (constraints.value.maxLocationsPerDay) setMaxLocationsPerDay(constraints.value.maxLocationsPerDay);
+          if (constraints.value.minAuditorsPerLocation) setMinAuditorsPerLocation(constraints.value.minAuditorsPerLocation);
+          if (constraints.value.dailyInspectionCapacity) setDailyInspectionCapacity(constraints.value.dailyInspectionCapacity);
         }
         const pairingLockSetting = settings.find(s => s.id === 'pairing_lock');
         if (pairingLockSetting?.value?.locked) {
           setPairingLocked(true);
           setPairingLockInfo(pairingLockSetting.value);
-        } else {
+        } else if (pairingLockSetting) {
+          // Only clear if the setting explicitly exists with locked=false (i.e. user unlocked).
+          // If the setting row is missing entirely, keep the localStorage-cached state.
           setPairingLocked(false);
           setPairingLockInfo(null);
         }
@@ -226,7 +240,7 @@ const App: React.FC = () => {
         : "Failed to load application data. Please refresh.";
       setConnectionErrorMessage(hint);
     }
-  }, [isAdmin]);
+  }, []);
 
 
 
@@ -481,6 +495,10 @@ const App: React.FC = () => {
             // Load data for page-refresh sessions (INITIAL_SESSION event — no SIGNED_IN fires)
             if (!dataLoadedRef.current) {
               dataLoadedRef.current = true;
+              // Ensure default phases/tiers exist — use fresh user.roles to avoid stale isAdmin closure
+              if ((user.roles || []).includes('Admin')) {
+                try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults failed (non-fatal):', e); }
+              }
               loadAllData();
             }
           } else {
@@ -535,6 +553,10 @@ const App: React.FC = () => {
             // SESSION_DISPLACED 401s caused by loadAllData racing the KV write.
             if (!dataLoadedRef.current) {
               dataLoadedRef.current = true;
+              // Ensure default phases/tiers exist — use fresh user.roles to avoid stale isAdmin closure
+              if ((user.roles || []).includes('Admin')) {
+                try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults failed (non-fatal):', e); }
+              }
               await awaitSessionRegistered();
               loadAllData();
             }
@@ -1468,9 +1490,27 @@ const App: React.FC = () => {
       await gateway.updateInstitutionKPI(phaseId, percentage);
       const updated = await gateway.getInstitutionKPIs();
       setInstitutionKPIs(updated);
-      showToast('Institutional KPI updated');
+
+      // Auto-calculate tier targets from global KPI targets (server-side math)
+      try {
+        await gateway.autoCalculateTierTargets();
+        setKpiTierTargets(await gateway.getKPITierTargets());
+        showToast('Institutional KPI updated — tier targets auto-calculated');
+      } catch {
+        showToast('Institutional KPI updated (tier auto-calc skipped — configure tiers first)');
+      }
     } catch (e) {
       showError(e, 'Failed to update institutional KPI');
+    }
+  };
+
+  const handleAutoCalculateTierTargets = async () => {
+    try {
+      await gateway.autoCalculateTierTargets();
+      setKpiTierTargets(await gateway.getKPITierTargets());
+      showToast('Tier targets auto-calculated from global KPI targets');
+    } catch (e) {
+      showError(e, 'Failed to auto-calculate tier targets');
     }
   };
 
@@ -1539,7 +1579,8 @@ const App: React.FC = () => {
           setUsers(updatedUsers);
           setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
 
-          // loadAllData will auto-recreate 3 default phases + 3 KPI tiers
+          // Recreate default phases + 3 KPI tiers, then reload
+          await gateway.initializeDefaults();
           await loadAllData();
 
           showToast('System fully reset. Start with Data Management → Departments.');
@@ -1602,6 +1643,7 @@ const App: React.FC = () => {
           setSchedules([]);
           setKpiTierTargets([]);
           setInstitutionKPIs([]);
+          await gateway.initializeDefaults();
           await loadAllData();
           showToast('Audit phases reset and defaults recreated.');
         } catch (e) {
@@ -1621,6 +1663,7 @@ const App: React.FC = () => {
           setKpiTiers([]);
           setKpiTierTargets([]);
           setInstitutionKPIs([]);
+          await gateway.initializeDefaults();
           await loadAllData();
           showToast('KPI tiers reset and defaults recreated.');
         } catch (e) {
@@ -1641,13 +1684,20 @@ const App: React.FC = () => {
   };
 
   const handleDeleteDepartmentMapping = async (id: string) => {
-    try {
-      await gateway.deleteDepartmentMapping(id);
-      setDepartmentMappings(await gateway.getDepartmentMappings());
-      showToast('Mapping deleted successfully');
-    } catch (e) {
-      showError(e, 'Failed to delete department mapping');
-    }
+    const mapping = departmentMappings.find(m => m.id === id);
+    customConfirm(
+      'Remove Mapping',
+      `Remove the mapping for "${mapping?.sourceName || 'this entry'}"? This cannot be undone.`,
+      async () => {
+        try {
+          await gateway.deleteDepartmentMapping(id);
+          setDepartmentMappings(await gateway.getDepartmentMappings());
+          showToast('Mapping deleted successfully');
+        } catch (e) {
+          showError(e, 'Failed to delete department mapping');
+        }
+      }
+    );
   };
 
   // --- AUDIT GROUPS ---
@@ -1693,6 +1743,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteBuilding = async (id: string) => {
+    // Note: BuildingManagement already shows its own ConfirmationModal — this is a safety guard
     try {
       await gateway.deleteBuilding(id);
       setBuildings(prev => prev.filter(b => b.id !== id));
@@ -1703,16 +1754,20 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAuditGroup = async (id: string) => {
-    if (confirm("Delete this group? Departments will be unassigned.")) {
-      try {
-        await gateway.deleteAuditGroup(id);
-        setAuditGroups(await gateway.getAuditGroups());
-        setDepartments(await gateway.getDepartments());
-        showToast('Group removed');
-      } catch (e) {
-        showError(e, 'Delete failed');
+    customConfirm(
+      'Dissolve Group',
+      'Dissolve this consolidation group? All member departments will be unassigned.',
+      async () => {
+        try {
+          await gateway.deleteAuditGroup(id);
+          setAuditGroups(await gateway.getAuditGroups());
+          setDepartments(await gateway.getDepartments());
+          showToast('Group removed');
+        } catch (e) {
+          showError(e, 'Delete failed');
+        }
       }
-    }
+    );
   };
 
   const handleBulkDeleteAuditGroups = async (ids: string[]) => {
@@ -2038,23 +2093,27 @@ const App: React.FC = () => {
   };
 
   const handleDeleteMember = async (id: string) => {
-    if (confirm("Remove user?")) {
-      try {
-        const user = users.find(u => u.id === id);
-        await gateway.deleteUser(id);
-        setUsers(await gateway.getUsers());
-        showToast('Member removed successfully');
-        logActivity('DELETE', `Removed member: ${user?.name || id}`, undefined, { userId: id });
-      } catch (e: any) {
-        console.error("Delete failed:", e);
-        if (e?.code === '23503') {
-          alert("Cannot delete this user because they are assigned to audits or have other dependencies. Please unassign them first.");
-        } else {
-          showError(e, 'Removal Failed');
-          alert(`Failed to remove user: ${e.message}`);
+    const user = users.find(u => u.id === id);
+    customConfirm(
+      'Remove Member',
+      `Remove "${user?.name || 'this member'}" from the system? This cannot be undone.`,
+      async () => {
+        try {
+          await gateway.deleteUser(id);
+          setUsers(await gateway.getUsers());
+          showToast('Member removed successfully');
+          logActivity('DELETE', `Removed member: ${user?.name || id}`, undefined, { userId: id });
+        } catch (e: any) {
+          console.error("Delete failed:", e);
+          if (e?.code === '23503') {
+            customAlert("Cannot delete this user because they are assigned to audits or have other dependencies. Please unassign them first.");
+          } else {
+            showError(e, 'Removal Failed');
+            customAlert(`Failed to remove user: ${(e as any).message}`);
+          }
         }
       }
-    }
+    );
   };
 
   const handleUpdateUserStatus = async (id: string, status: 'Active' | 'Inactive' | 'Suspended' | 'Pending') => {
@@ -2455,6 +2514,7 @@ const App: React.FC = () => {
               onDeleteKPITier={handleDeleteKPITier}
               onUpdateKPITierTarget={handleUpdateKPITierTarget}
               onUpdateInstitutionKPI={handleUpdateInstitutionKPI}
+              onAutoCalculateTierTargets={handleAutoCalculateTierTargets}
               onResetLocations={handleResetLocations}
               onResetOperationalData={handleResetOperationalData}
               onResetDepartments={handleResetDepartments}
@@ -2467,13 +2527,23 @@ const App: React.FC = () => {
               onBulkActivateStaff={handleBulkActivateStaff}
               maxAssetsPerDay={maxAssetsPerDay}
               maxLocationsPerDay={maxLocationsPerDay}
+              minAuditorsPerLocation={minAuditorsPerLocation}
+              dailyInspectionCapacity={dailyInspectionCapacity}
               onUpdateMaxAssetsPerDay={async (val) => {
                 setMaxAssetsPerDay(val);
-                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay: val, maxLocationsPerDay });
+                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay: val, maxLocationsPerDay, minAuditorsPerLocation, dailyInspectionCapacity });
               }}
               onUpdateMaxLocationsPerDay={async (val) => {
                 setMaxLocationsPerDay(val);
-                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: val });
+                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: val, minAuditorsPerLocation, dailyInspectionCapacity });
+              }}
+              onUpdateMinAuditorsPerLocation={async (val) => {
+                setMinAuditorsPerLocation(val);
+                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation: val, dailyInspectionCapacity });
+              }}
+              onUpdateDailyInspectionCapacity={async (val) => {
+                setDailyInspectionCapacity(val);
+                await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, dailyInspectionCapacity: val });
               }}
               onRebalanceSchedule={handleRebalanceSchedule}
               schedules={schedules}

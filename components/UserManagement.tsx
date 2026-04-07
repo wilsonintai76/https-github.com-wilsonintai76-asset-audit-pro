@@ -568,11 +568,17 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             setCertifyingUser(null);
           }}
           onRevoke={() => {
-            onUpdateMember(certifyingUser.id, { 
-              certificationIssued: null as any, 
-              certificationExpiry: null as any 
-            });
-            setCertifyingUser(null);
+            customConfirm(
+              'Revoke Certificate',
+              `Revoke the institutional certificate for ${certifyingUser.name}? This cannot be undone.`,
+              () => {
+                onUpdateMember(certifyingUser.id, { 
+                  certificationIssued: null as any, 
+                  certificationExpiry: null as any 
+                });
+                setCertifyingUser(null);
+              }
+            );
           }}
         />
       )}

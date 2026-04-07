@@ -5,6 +5,10 @@ interface AuditConstraintsProps {
   onUpdateMaxAssetsPerDay: (value: number) => void;
   maxLocationsPerDay: number;
   onUpdateMaxLocationsPerDay: (value: number) => void;
+  minAuditorsPerLocation: number;
+  onUpdateMinAuditorsPerLocation: (value: number) => void;
+  dailyInspectionCapacity: number;
+  onUpdateDailyInspectionCapacity: (value: number) => void;
 }
 
 export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
@@ -12,6 +16,10 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
   onUpdateMaxAssetsPerDay,
   maxLocationsPerDay,
   onUpdateMaxLocationsPerDay,
+  minAuditorsPerLocation,
+  onUpdateMinAuditorsPerLocation,
+  dailyInspectionCapacity,
+  onUpdateDailyInspectionCapacity,
 }) => {
   return (
     <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
@@ -42,6 +50,32 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
             onChange={(e) => onUpdateMaxLocationsPerDay(parseInt(e.target.value, 10) || 5)}
           />
           <p className="text-[10px] text-slate-400 font-medium">Limits distinct locations a team can visit daily.</p>
+        </div>
+
+        <div className="space-y-4">
+          <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Min Auditors Per Location</label>
+          <input
+            type="number"
+            min="1"
+            max="10"
+            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
+            value={minAuditorsPerLocation}
+            onChange={(e) => onUpdateMinAuditorsPerLocation(Math.max(1, parseInt(e.target.value, 10) || 2))}
+          />
+          <p className="text-[10px] text-slate-400 font-medium">Minimum inspectors/auditors assigned per location (e.g. 2 for cross-verification).</p>
+        </div>
+
+        <div className="space-y-4">
+          <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Daily Inspection Capacity</label>
+          <input
+            type="number"
+            min="10"
+            step="10"
+            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
+            value={dailyInspectionCapacity}
+            onChange={(e) => onUpdateDailyInspectionCapacity(Math.max(10, parseInt(e.target.value, 10) || 150))}
+          />
+          <p className="text-[10px] text-slate-400 font-medium">Estimated assets one auditor team can check per day (used for capacity estimation in auto-calculate).</p>
         </div>
       </div>
     </div>

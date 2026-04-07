@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from 'react';
 import { KPITier, AuditPhase, KPITierTarget, Department, InstitutionKPITarget } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Lock, Plus, Check, X, Pencil, Trash2, Boxes, Building2 } from 'lucide-react';
+import { Lock, Plus, Check, X, Pencil, Trash2, Boxes, Building2, Sparkles } from 'lucide-react';
 
 interface KPISettingsProps {
   tiers: KPITier[];
@@ -14,6 +14,7 @@ interface KPISettingsProps {
   onDeleteTier: (id: string) => void;
   onUpdateTarget: (tierId: string, phaseId: string, percentage: number) => void;
   onUpdateInstitutionKPI: (phaseId: string, percentage: number) => void;
+  onAutoCalculateTierTargets?: () => Promise<void>;
   departments: Department[];
 }
 
@@ -27,10 +28,12 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
   onUpdateTier,
   onDeleteTier,
   onUpdateTarget,
-  onUpdateInstitutionKPI
+  onUpdateInstitutionKPI,
+  onAutoCalculateTierTargets
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tierToDelete, setTierToDelete] = useState<string | null>(null);
+  const [isAutoCalcRunning, setIsAutoCalcRunning] = useState(false);
   const [formData, setFormData] = useState<{ name: string; minAssets: number; targets: Record<string, number> }>({
     name: '',
     minAssets: 0,
@@ -162,17 +165,27 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{phase.name}</span>
                   {isEditing ? (
-                    <button onClick={() => {
-                       onUpdateInstitutionKPI(phase.id, formData.targets[phase.id] || 0);
-                       setEditingId(null);
-                    }} className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center hover:bg-blue-700 shadow-sm shadow-blue-500/20">
+                    <button
+                      title="Save KPI target"
+                      aria-label="Save KPI target"
+                      onClick={() => {
+                        onUpdateInstitutionKPI(phase.id, formData.targets[phase.id] || 0);
+                        setEditingId(null);
+                      }}
+                      className="w-7 h-7 bg-blue-600 text-white rounded-lg flex items-center justify-center hover:bg-blue-700 shadow-sm shadow-blue-500/20"
+                    >
                       <Check className="w-3.5 h-3.5" />
                     </button>
                   ) : (
-                    <button onClick={() => {
+                    <button
+                      title="Edit KPI target"
+                      aria-label="Edit KPI target"
+                      onClick={() => {
                         setEditingId(`inst-${phase.id}`);
                         setFormData(prev => ({ ...prev, targets: { ...prev.targets, [phase.id]: targetValue } }));
-                    }} className="text-slate-400 hover:text-blue-600 transition-colors">
+                      }}
+                      className="text-slate-400 hover:text-blue-600 transition-colors"
+                    >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -186,6 +199,9 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                          min="0"
                          max="100"
                          autoFocus
+                         title="Institution KPI target percentage"
+                         aria-label="Institution KPI target percentage"
+                         placeholder="0"
                          className="w-20 text-3xl font-black bg-transparent border-b-2 border-blue-500 text-slate-900 outline-none p-0"
                          value={formData.targets[phase.id] ?? ''}
                          onChange={(e) => handleTargetChange(phase.id, e.target.value)}
@@ -213,17 +229,32 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
             Set percentage boundaries to group your departments into Small, Medium, and Large.
           </p>
         </div>
-        <button 
-          onClick={autoBalanceTiers}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-100/50 hover:bg-slate-100 text-slate-700 rounded-xl font-bold text-[13px] transition-colors border border-slate-200 shadow-sm"
-        >
-          <Boxes className="w-4 h-4 text-blue-600" />
-          Auto-Balance Tiers
-        </button>
+        <div className="flex items-center gap-2">
+          {onAutoCalculateTierTargets && (
+            <button 
+              onClick={async () => {
+                setIsAutoCalcRunning(true);
+                try { await onAutoCalculateTierTargets(); } finally { setIsAutoCalcRunning(false); }
+              }}
+              disabled={isAutoCalcRunning}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-bold text-[13px] transition-colors border border-blue-200 shadow-sm disabled:opacity-50"
+            >
+              <Sparkles className={`w-4 h-4 ${isAutoCalcRunning ? 'animate-spin' : ''}`} />
+              {isAutoCalcRunning ? 'Calculating...' : 'Auto-Calculate Targets'}
+            </button>
+          )}
+          <button 
+            onClick={autoBalanceTiers}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100/50 hover:bg-slate-100 text-slate-700 rounded-xl font-bold text-[13px] transition-colors border border-slate-200 shadow-sm"
+          >
+            <Boxes className="w-4 h-4 text-blue-600" />
+            Auto-Balance Tiers
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-200">
-        <table className="w-full text-left min-w-[800px]">
+        <table className="w-full text-left min-w-200">
           <thead className="bg-slate-50/50 border-b border-slate-100">
             <tr>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest w-48">Movable Asset Tier</th>
@@ -248,6 +279,9 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                     {isEditing ? (
                        <input 
                          readOnly
+                         title="Tier name"
+                         aria-label="Tier name"
+                         placeholder="Tier name"
                          className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-400 cursor-not-allowed outline-none"
                          value={formData.name}
                        />
@@ -265,6 +299,9 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                           min={0}
                           max={100}
                           disabled={tier.id === sortedTiers[0].id}
+                          title="Minimum asset threshold percentage"
+                          aria-label="Minimum asset threshold percentage"
+                          placeholder="0"
                           className="w-16 px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100 disabled:text-slate-400"
                           value={formData.minAssets}
                           onChange={e => setFormData({...formData, minAssets: parseInt(e.target.value) || 0})}
@@ -315,16 +352,16 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                   <td className="px-6 py-4 text-right sticky right-0 bg-white">
                     {isEditing ? (
                       <div className="flex justify-end gap-2">
-                        <button onClick={saveEdit} className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-lg shadow-blue-500/20">
+                        <button title="Save tier" aria-label="Save tier" onClick={saveEdit} className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 shadow-lg shadow-blue-500/20">
                           <Check className="w-4 h-4" />
                         </button>
-                        <button onClick={resetForm} className="w-8 h-8 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-300">
+                        <button title="Cancel edit" aria-label="Cancel edit" onClick={resetForm} className="w-8 h-8 rounded-lg bg-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-300">
                            <X className="w-4 h-4" />
                         </button>
                       </div>
                     ) : (
                       <div className="flex justify-end gap-2">
-                        <button onClick={() => startEdit(tier)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center transition-colors">
+                        <button title="Edit tier" aria-label="Edit tier" onClick={() => startEdit(tier)} className="w-8 h-8 rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 flex items-center justify-center transition-colors">
                           <Pencil className="w-4 h-4" />
                         </button>
                         {/* Remove Delete button to lock to 3 tiers */}

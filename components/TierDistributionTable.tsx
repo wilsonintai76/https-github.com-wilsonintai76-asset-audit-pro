@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget } from '../types';
+import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget, Location } from '../types';
 import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printKPIPhasePlan } from '../lib/printUtils';
@@ -11,6 +11,7 @@ interface TierDistributionTableProps {
   kpiTierTargets: KPITierTarget[];
   phases: AuditPhase[];
   schedules: AuditSchedule[];
+  locations?: Location[];
   maxAssetsPerDay?: number;
   maxLocationsPerDay?: number;
 }
@@ -21,6 +22,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
   kpiTierTargets,
   phases,
   schedules,
+  locations = [],
   maxAssetsPerDay = 1000,
   maxLocationsPerDay = 5
 }) => {
@@ -36,30 +38,45 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
         .filter(t => deptPercentage >= t.minAssets)
         .sort((a,b) => b.minAssets - a.minAssets)[0];
       const deptAudits = schedules.filter(s => s.departmentId === dept.id);
-      
-      const phaseStatus = sortedPhases.map(phase => {
-        const hasAudit = deptAudits.some(a => a.phaseId === phase.id);
+
+      // Pre-compute location coverage so phaseStatus can use it
+      const deptLocIds = new Set(locations.filter(l => l.departmentId === dept.id).map(l => l.id));
+      const scheduledLocIds = new Set(deptAudits.map(a => a.locationId));
+      const allLocsScheduled = deptLocIds.size > 0 && [...deptLocIds].every(lid => scheduledLocIds.has(lid));
+
+      // Use reduce so we can track whether a previous phase already hit 100%.
+      // Once a tier reaches 100% in phase N, all later phases are NOT required.
+      // When all locations are already scheduled (allLocsScheduled), treat every
+      // required phase as "hasAudit=true" — the work is covered across phases.
+      const phaseStatus = sortedPhases.reduce<{
+        phaseId: string; hasAudit: boolean; isRequired: boolean;
+        isCompleted: boolean; targetPct: number; targetAssets: number;
+      }[]>((acc, phase) => {
+        const hasAuditDirect = deptAudits.some(a => a.phaseId === phase.id);
         const targetPct = tier
           ? (kpiTierTargets.find(kt => kt.tierId === tier.id && kt.phaseId === phase.id)?.targetPercentage
              ?? tier.targets?.[phase.id]
              ?? 0)
           : 0;
-        const isRequired = (dept.totalAssets || 0) > 0 && targetPct > 0;
+        // If any earlier phase already hit 100%, this phase is not required
+        const prevReached100 = acc.some(p => p.targetPct >= 100);
+        const isRequired = (dept.totalAssets || 0) > 0 && targetPct > 0 && !prevReached100;
+        // Show as scheduled (blue) if directly scheduled OR if all locations covered
+        const hasAudit = hasAuditDirect || (isRequired && allLocsScheduled);
         const isCompleted = deptAudits.some(a => a.phaseId === phase.id && a.status === 'Completed');
         const targetAssets = Math.ceil((dept.totalAssets || 0) * targetPct / 100);
-        
-        return {
-          phaseId: phase.id,
-          hasAudit,
-          isRequired,
-          isCompleted,
-          targetPct,
-          targetAssets
-        };
-      });
+
+        acc.push({ phaseId: phase.id, hasAudit, isRequired, isCompleted, targetPct, targetAssets });
+        return acc;
+      }, []);
 
       const hasNoAssets = (dept.totalAssets || 0) === 0;
-      const isFullyScheduled = !hasNoAssets && phaseStatus.every(p => !p.isRequired || p.hasAudit);
+      // Ready = all locations have a schedule assigned (phase-agnostic)
+      const isFullyScheduled = !hasNoAssets && (
+        deptLocIds.size > 0
+          ? allLocsScheduled
+          : phaseStatus.every(p => !p.isRequired || p.hasAudit)
+      );
       
       return {
         ...dept,
