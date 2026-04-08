@@ -525,12 +525,28 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
 db.delete('/users/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
-    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
-    // Evict roles cache + force-out active session
+    // 1. Nullify references in all tables that reference users(id)
+    // First, formal FK in system_activities
+    const cleanup = [
+      c.env.DB.prepare('UPDATE system_activities SET user_id = NULL WHERE user_id = ?').bind(id),
+      // Logical references (no formal FK but should be nullified)
+      c.env.DB.prepare('UPDATE audit_schedules SET supervisor_id = NULL WHERE supervisor_id = ?').bind(id),
+      c.env.DB.prepare('UPDATE audit_schedules SET auditor1_id = NULL WHERE auditor1_id = ?').bind(id),
+      c.env.DB.prepare('UPDATE audit_schedules SET auditor2_id = NULL WHERE auditor2_id = ?').bind(id),
+      c.env.DB.prepare('UPDATE locations SET supervisor_id = NULL WHERE supervisor_id = ?').bind(id),
+      c.env.DB.prepare('UPDATE departments SET head_of_dept_id = NULL WHERE head_of_dept_id = ?').bind(id),
+      // Finally delete the user
+      c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id)
+    ];
+
+    await c.env.DB.batch(cleanup);
+
+    // 2. Evict roles cache + force-out active session
     await Promise.allSettled([
       c.env.SETTINGS.delete(`ucache:${id}`),
       c.env.SETTINGS.delete(`sess:${id}`),
     ]);
+
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -613,6 +629,22 @@ db.post('/departments', rbacGuard('manage:departments'), async (c) => {
       dept.isExempted ? 1 : 0
     ).run();
     return c.json({ id, ...dept });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.post('/departments/refresh', rbacGuard('admin:hub'), async (c) => {
+  try {
+    await c.env.DB.prepare(`
+      UPDATE departments 
+      SET total_assets = (
+        SELECT COALESCE(SUM(l.total_assets), 0) 
+        FROM locations l 
+        WHERE l.department_id = departments.id
+      )
+    `).run();
+    return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -827,6 +859,51 @@ db.post('/locations/clear', rbacGuard('admin:hub'), async (c) => {
     await c.env.DB.prepare('UPDATE departments SET total_assets = 0, uninspected_asset_count = 0').run();
 
     return c.json({ success: true, message: 'Locations and groups cleared. Departments maintained.' });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+/**
+ * Bulk updates uninspected asset counts.
+ * Implements an "OVERWRITE" strategy: resets all existing counts to 0 before applying new data.
+ */
+db.post('/locations/uninspected/bulk', rbacGuard('manage:locations'), async (c) => {
+  try {
+    const { updates, deptExtras } = await c.req.json();
+    
+    const statements = [];
+    
+    // 1. Reset all counts to zero
+    statements.push(c.env.DB.prepare('UPDATE locations SET uninspected_asset_count = 0'));
+    statements.push(c.env.DB.prepare('UPDATE departments SET uninspected_asset_count = 0'));
+    
+    // 2. Apply location-level updates
+    if (Array.isArray(updates) && updates.length > 0) {
+      updates.forEach((u: any) => {
+        statements.push(
+          c.env.DB.prepare('UPDATE locations SET uninspected_asset_count = ? WHERE id = ?')
+            .bind(u.uninspectedCount, u.id)
+        );
+      });
+    }
+    
+    // 3. Apply department-level extra counts (fallback for unmatched locations)
+    if (deptExtras && typeof deptExtras === 'object') {
+      Object.entries(deptExtras).forEach(([deptId, count]) => {
+        statements.push(
+          c.env.DB.prepare('UPDATE departments SET uninspected_asset_count = ? WHERE id = ?')
+            .bind(count, deptId)
+        );
+      });
+    }
+    
+    await c.env.DB.batch(statements);
+    
+    return c.json({ 
+      success: true, 
+      message: `Overwrote uninspected counts for ${updates?.length || 0} locations and ${Object.keys(deptExtras || {}).length} departments.` 
+    });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -1210,6 +1287,103 @@ db.delete('/audit-groups/:id', rbacGuard('admin:hub'), async (c) => {
   try {
     await c.env.DB.prepare('DELETE FROM audit_groups WHERE id = ?').bind(id).run();
     return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.post('/audit-groups/consolidate', rbacGuard('admin:hub'), zValidator('json', z.object({
+  threshold: z.number().int().positive().optional().default(500),
+  excludedDeptIds: z.array(z.string()).optional().default([]),
+  minAuditors: z.number().int().min(0).optional().default(2),
+})), async (c) => {
+  const { threshold, excludedDeptIds, minAuditors } = c.req.valid('json');
+  const db = c.env.DB;
+
+  try {
+    // 1. Purge existing auto-generated groups (names that start with 'Group ')
+    const { results: existingGroups } = await db.prepare("SELECT id FROM audit_groups WHERE name LIKE 'Group %'").all();
+    const oldGroupIds = ((existingGroups || []) as any[]).map((g) => g.id);
+
+    if (oldGroupIds.length > 0) {
+      const unlinkStmts = oldGroupIds.map((id: string) =>
+        db.prepare('UPDATE departments SET audit_group_id = NULL WHERE audit_group_id = ?').bind(id),
+      );
+      await db.batch(unlinkStmts);
+      const deleteStmts = oldGroupIds.map((id: string) =>
+        db.prepare('DELETE FROM audit_groups WHERE id = ?').bind(id),
+      );
+      await db.batch(deleteStmts);
+    }
+
+    // 2. Fetch fresh department data
+    const { results: freshDepts } = await db.prepare('SELECT id, name, total_assets, is_exempted FROM departments').all();
+    const depts = (freshDepts || []) as any[];
+
+    // 3. Separate standalones (excluded) from pool (needs grouping)
+    const eligible = depts
+      .filter(
+        (d: any) =>
+          !excludedDeptIds.includes(d.id) && d.is_exempted !== 1 && (d.total_assets || 0) > 0,
+      )
+      .sort((a: any, b: any) => (a.total_assets || 0) - (b.total_assets || 0));
+
+    if (eligible.length === 0) {
+      return c.json({ groups: [], ungrouped: [], standaloneCount: excludedDeptIds.length, createdCount: 0 });
+    }
+
+    // 4. Greedy grouping: accumulate until threshold is met
+    const bundles: (typeof eligible)[] = [];
+    let current: typeof eligible = [];
+    let runningAssets = 0;
+
+    for (const dept of eligible) {
+      current.push(dept);
+      runningAssets += dept.total_assets || 0;
+
+      if (runningAssets >= threshold) {
+        const leftoverAssets = (eligible
+          .slice(eligible.indexOf(dept) + 1)
+          .reduce((s: number, d: any) => s + (d.total_assets || 0), 0));
+        if (leftoverAssets > 0 && leftoverAssets < threshold * 0.7) {
+          continue;
+        }
+        bundles.push([...current]);
+        current = [];
+        runningAssets = 0;
+      }
+    }
+    if (current.length > 0) {
+      if (bundles.length > 0) {
+        bundles[bundles.length - 1].push(...current);
+      } else {
+        bundles.push(current);
+      }
+    }
+
+    // 5. Create audit_groups A, B, C … and link departments
+    const createdGroups: { name: string; id: string; departments: string[] }[] = [];
+    const writeStmts: any[] = [];
+
+    for (let i = 0; i < bundles.length; i++) {
+      const groupName = `Group ${String.fromCharCode(65 + i)}`;
+      const groupId = crypto.randomUUID();
+
+      writeStmts.push(db.prepare('INSERT INTO audit_groups (id, name) VALUES (?, ?)').bind(groupId, groupName));
+      for (const dept of bundles[i]) {
+        writeStmts.push(db.prepare('UPDATE departments SET audit_group_id = ? WHERE id = ?').bind(groupId, dept.id));
+      }
+      createdGroups.push({ name: groupName, id: groupId, departments: bundles[i].map((d: any) => d.id) });
+    }
+
+    if (writeStmts.length > 0) {
+      const CHUNK = 100;
+      for (let i = 0; i < writeStmts.length; i += CHUNK) {
+        await db.batch(writeStmts.slice(i, i + CHUNK));
+      }
+    }
+
+    return c.json({ groups: createdGroups, ungrouped: excludedDeptIds, standaloneCount: excludedDeptIds.length, createdCount: createdGroups.length });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }

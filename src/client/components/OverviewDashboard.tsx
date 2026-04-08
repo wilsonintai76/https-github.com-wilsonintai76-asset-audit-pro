@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '@shared/types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
@@ -28,6 +27,7 @@ interface OverviewDashboardProps {
   institutionKPIs?: InstitutionKPITarget[];
   buildings?: Building[];
   kpiTierTargets?: KPITierTarget[];
+  users: User[];
 }
 
 function BarFill({ pct, className }: { pct: number; className: string }) {
@@ -59,7 +59,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   maxAssetsPerDay = 500,
   institutionKPIs = [],
   buildings = [],
-  kpiTierTargets = []
+  kpiTierTargets = [],
+  users = []
 }) => {
   const { t } = useLanguage();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
@@ -160,15 +161,28 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   const activeEntities = useMemo(() => {
     const groupedDepts: Record<string, Department[]> = {};
     
+    // Helper to count auditors in a department live from users list
+    const getAuditorCount = (deptId: string) => {
+      const today = new Date().toISOString().split('T')[0];
+      return users.filter(u => 
+        u.departmentId === deptId && 
+        u.status === 'Active' && 
+        u.certificationExpiry && 
+        u.certificationExpiry >= today
+      ).length;
+    };
+
     departments.filter(d => !d.isExempted).forEach(dept => {
       const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
-      groupedDepts[key].push(dept);
+      groupedDepts[key].push({
+        ...dept,
+        auditorCount: getAuditorCount(dept.id) // Override with live count
+      });
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
       const isUnassigned = groupId.startsWith('unassigned_');
-      const deptIds = depts.map(d => d.id);
       const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       
@@ -187,7 +201,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         members: depts
       };
     }).sort((a, b) => b.assets - a.assets);
-  }, [departments, auditGroups, schedules]);
+  }, [departments, auditGroups, users]); // Added users to dependencies
 
   const overallTotalAssets = useMemo(() => {
      return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
@@ -204,6 +218,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     });
   }, [phases]);
 
+  const hasUploadedUninspectedData = useMemo(() => 
+    locations.some(l => (l.uninspectedAssetCount ?? 0) > 0),
+    [locations]
+  );
+
   const inspectionStats = useMemo(() => {
     const stats: Record<string, { total: number; inspected: number; uninspected: number; progress: number }> = {};
     
@@ -218,8 +237,10 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
 
       const uninspected = deptLocs.reduce((sum, l) => sum + (l.uninspectedAssetCount || 0), 0);
       
-      // Use explicit uninspected count if available (>0), otherwise fallback to (total - inspected)
-      const finalUninspected = uninspected > 0 ? uninspected : Math.max(0, total - inspected);
+      // If user has uploaded uninspected data, use it. 
+      // Otherwise, ONLY show uninspected if they haven't uploaded the file yet but we want to show the remainder?
+      // User says: "i not yet upload uninspected file but i already show" -> they don't want the fallback.
+      const finalUninspected = hasUploadedUninspectedData ? uninspected : 0;
 
       stats[dept.name] = {
         total,
@@ -230,19 +251,21 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     });
 
     return stats;
-  }, [departments, locations, schedules]);
+  }, [departments, locations, schedules, hasUploadedUninspectedData]);
 
   const overallStats = useMemo(() => {
     const values = Object.values(inspectionStats) as { total: number; inspected: number; uninspected: number; progress: number }[];
     const total = values.reduce((sum, s) => sum + s.total, 0);
     const inspected = values.reduce((sum, s) => sum + s.inspected, 0);
+    const uninspected = values.reduce((sum, s) => sum + s.uninspected, 0);
+    
     return {
       total,
       inspected,
-      uninspected: total - inspected,
+      uninspected: hasUploadedUninspectedData ? uninspected : 0,
       progress: total > 0 ? (inspected / total) * 100 : 0
     };
-  }, [inspectionStats]);
+  }, [inspectionStats, hasUploadedUninspectedData]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">

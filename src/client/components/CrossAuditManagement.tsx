@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Department, CrossAuditPermission, User, AuditGroup } from '../types';
+import { Department, CrossAuditPermission, User, AuditGroup } from '@shared/types';
 import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowLeftRight, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown, ShieldOff, Lock, Calendar } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -161,11 +161,25 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const entities = useMemo(() => {
     const groupedDepts: Record<string, Department[]> = {};
     
+    // Helper to count auditors in a department live from users list
+    const getAuditorCount = (deptId: string) => {
+      const today = new Date().toISOString().split('T')[0];
+      return users.filter(u => 
+        u.departmentId === deptId && 
+        u.status === 'Active' && 
+        u.certificationExpiry && 
+        u.certificationExpiry >= today
+      ).length;
+    };
+
     activeDepts.forEach(dept => {
       const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
       const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
-      groupedDepts[key].push(dept);
+      groupedDepts[key].push({
+        ...dept,
+        auditorCount: getAuditorCount(dept.id) // Override with live count
+      });
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
