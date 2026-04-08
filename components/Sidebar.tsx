@@ -72,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   
   const canAccessSchedule = (hasPerm('view:schedule:all') || hasPerm('view:schedule:own')) && isProfileComplete;
   const canAccessLocations = hasPerm('manage:locations') && isProfileComplete;
-  const canAccessTeam = hasPerm('view:team:all') && isProfileComplete;
+  const canAccessTeam = (hasPerm('view:team:all') || hasPerm('view:team:own')) && isProfileComplete;
   const canAccessDepartments = hasPerm('manage:departments') && isProfileComplete;
   const canAccessAdminSettings = hasPerm('manage:system');
   const showMainDashboard = (isProfileComplete || isAdmin) && hasPerm('view:overview');

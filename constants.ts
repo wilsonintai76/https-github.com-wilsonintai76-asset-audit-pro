@@ -159,15 +159,3 @@ export const BRANDING = {
   logoHorizontal: 'https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/A%20horizontal%20logo.png',
   logoSquare: 'https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/Sidebar%20Icon.png'
 };
-
-export const CURRENT_USER: User = {
-  id: 'b887fa1e-7613-4cc6-b7dd-a690ebe8ea72',
-  name: 'SysAdmin',
-  email: 'wilson@poliku.edu.my',
-  roles: ['Admin', 'Coordinator', 'Supervisor', 'Staff'], 
-  departmentId: '00000000-0000-0000-0000-000000000000', // System Management ID
-  contactNumber: '+60 12-345 6789',
-  certificationExpiry: fortyFiveDaysLater.toISOString().split('T')[0],
-  status: 'Active',
-  isVerified: true
-};

@@ -26,6 +26,7 @@ interface GroupBuilderTabProps {
   onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors: number) => Promise<void>;
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<AuditGroup | null>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
+  onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
   onBulkUpdateDepartments: (updates: { id: string, data: Partial<Department> }[]) => void;
   isProcessing: boolean;
   setIsProcessing: (processing: boolean) => void;
@@ -42,6 +43,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   auditGroups,
   onAutoConsolidate,
   onDeleteAuditGroup,
+  onBulkDeleteAuditGroups,
   onBulkUpdateDepartments,
   isProcessing,
   setIsProcessing,
@@ -131,6 +133,41 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     }
   };
 
+  const handleResetAllGroups = async () => {
+    if (auditGroups.length === 0) return;
+    if (!confirm('Reset all audit groups? This will unassign all departments from groups and delete all group configurations.')) return;
+
+    setIsProcessing(true);
+    try {
+      // Step 1: Unassign ALL departments from groups
+      const deptsWithGroup = departments.filter(d => d.auditGroupId);
+      if (deptsWithGroup.length > 0) {
+        const updates = deptsWithGroup.map(d => ({
+          id: d.id,
+          data: { auditGroupId: null }
+        }));
+        await onBulkUpdateDepartments(updates);
+      }
+
+      // Step 2: Delete all audit groups
+      if (onBulkDeleteAuditGroups && auditGroups.length > 0) {
+        await onBulkDeleteAuditGroups(auditGroups.map(g => g.id));
+      } else if (onDeleteAuditGroup && auditGroups.length > 0) {
+        for (const group of auditGroups) {
+          await onDeleteAuditGroup(group.id);
+        }
+      }
+
+      setBuilderTab(1);
+      setEditingGroupId(null);
+    } catch (e) {
+      console.error('Reset all groups failed:', e);
+      alert('Failed to reset all groups.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const editingGroupObj = auditGroups.find(g => g.id === editingGroupId);
 
   const entities = useMemo(() => {
@@ -172,8 +209,13 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   }, [departments, auditGroups, standaloneCutoff]);
 
   const grandTotalAssets = useMemo(() => {
-    return entities.reduce((sum, e) => sum + e.assets, 0);
-  }, [entities]);
+    // Grand total should include ALL departments (even exempted ones like Kediaman)
+    // so it matches the Source of Truth institutional sum.
+    return departments.reduce((sum, d) => {
+      const val = (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0));
+      return sum + val;
+    }, 0);
+  }, [departments]);
 
   const consolidationPrintData = useMemo(() => {
     let total = 0;
@@ -393,9 +435,20 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                        <span className="text-[8px] font-black uppercase text-slate-500 tracking-widest mb-1">Institutional Total</span>
                        <span className="text-3xl font-mono font-black text-white px-2 italic tracking-tighter">{grandTotalAssets.toLocaleString()}</span>
                     </div>
-                    
-                    <button 
-                      onClick={() => window.location.reload()} 
+
+                    {auditGroups.length > 0 && (
+                      <button
+                        onClick={handleResetAllGroups}
+                        disabled={isProcessing || initLocked}
+                        title={initLocked ? 'Locked — Audit In Progress' : 'Reset all groups'}
+                        className="w-12 h-12 bg-white border-2 border-rose-200 text-rose-400 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50 rounded-xl transition-all shadow-sm flex items-center justify-center active:scale-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => window.location.reload()}
                       title="Refresh"
                       className="w-12 h-12 bg-white border-2 border-slate-100 text-slate-300 hover:text-indigo-600 hover:border-indigo-100 hover:bg-slate-50 rounded-xl transition-all shadow-sm flex items-center justify-center active:scale-90"
                     >

@@ -16,6 +16,14 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
     departmentId: user.departmentId || '',
     designation: user.designation || 'Staff',
   });
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const isAdmin = user.roles.includes('Admin');
@@ -23,14 +31,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
   // If department and contact and designation are filled, the user has completed their profile
   const isProfileComplete = Boolean(user.departmentId && user.contactNumber && user.designation);
 
-  const getRolesForDesignation = (designation: string) => {
-    switch (designation) {
-      case 'Head Of Department': return ['Staff'];
-      case 'Coordinator': return ['Coordinator'];
-      case 'Supervisor': return ['Supervisor'];
-      case 'Staff': default: return ['Staff'];
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +39,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
     
     try {
       const updates: Partial<User> = { 
-        ...formData,
-        roles: getRolesForDesignation(formData.designation) as UserRole[] 
+        ...formData
       };
       
       if (user.status === 'Pending') {
@@ -55,6 +54,39 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
       // Error is handled by App.tsx showError, we just stop the saving state here
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(false);
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      // We use the standard onUpdate but specifically pass the new password
+      // The backend will handle the hashing
+      await onUpdate(user.id, { 
+        password: passwordData.newPassword 
+      } as any);
+      
+      setPasswordSuccess(true);
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setPasswordSuccess(false), 5000);
+    } catch (err: any) {
+      setPasswordError(err.message || 'Failed to update password');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -162,6 +194,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                           <option value="Supervisor">Supervisor</option>
                           <option value="Coordinator">Coordinator</option>
                           <option value="Head Of Department">Head Of Department</option>
+                          {user.email?.toLowerCase() === 'admin@poliku.edu.my' && <option value="Developer">Developer</option>}
                         </select>
                       </div>
                     </div>
@@ -287,6 +320,91 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                </div>
             </div>
           </div>
+
+          {/* Security Section (New) */}
+          <div className="mt-12 pt-12 border-t border-slate-100">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Access & Security</h3>
+                <p className="text-sm text-slate-500 font-medium">Manage your institutional credentials.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handlePasswordChange} className="grid md:grid-cols-2 gap-8 items-start">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">New Password</label>
+                  <input 
+                    required
+                    type="password"
+                    placeholder="Min. 8 characters"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+                    value={passwordData.newPassword}
+                    onChange={e => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Confirm New Password</label>
+                  <input 
+                    required
+                    type="password"
+                    placeholder="Repeat new password"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all"
+                    value={passwordData.confirmPassword}
+                    onChange={e => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  />
+                </div>
+
+                {passwordError && (
+                  <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-2 text-rose-600 text-[10px] font-bold">
+                    <AlertCircle className="w-4 h-4" />
+                    {passwordError}
+                  </div>
+                )}
+
+                {passwordSuccess && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2 text-emerald-600 text-[10px] font-bold">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Password updated successfully
+                  </div>
+                )}
+
+                <button 
+                  type="submit"
+                  disabled={isChangingPassword}
+                  className="flex items-center justify-center gap-2 px-6 py-3 bg-slate-100 text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {isChangingPassword ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCw className="w-3 h-3" />}
+                  Update Credentials
+                </button>
+              </div>
+
+              <div className="bg-slate-50/50 rounded-3xl p-6 border border-slate-100 self-center">
+                 <div className="flex items-center gap-3 mb-4">
+                    <Shield className="w-5 h-5 text-blue-500" />
+                    <h4 className="text-xs font-black text-slate-900 uppercase">Credential Policy</h4>
+                 </div>
+                 <ul className="space-y-3">
+                   <li className="flex items-start gap-2 text-[10px] text-slate-500 font-medium leading-relaxed">
+                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 shrink-0" />
+                     Passwords must contain at least 8 characters.
+                   </li>
+                   <li className="flex items-start gap-2 text-[10px] text-slate-500 font-medium leading-relaxed">
+                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 shrink-0" />
+                     Updating your password will require forced re-login on other devices.
+                   </li>
+                   <li className="flex items-start gap-2 text-[10px] text-slate-500 font-medium leading-relaxed">
+                     <span className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 shrink-0" />
+                     If you forget your password, contact a <strong>System Administrator</strong> to initiate a recovery reset.
+                   </li>
+                 </ul>
+              </div>
+            </form>
+          </div>
+
         </div>
       </div>
 

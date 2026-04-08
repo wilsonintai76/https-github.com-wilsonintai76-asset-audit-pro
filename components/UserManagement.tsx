@@ -16,6 +16,7 @@ interface UserManagementProps {
   onDeleteMember: (id: string) => void;
   onUpdateRoles: (userId: string, newRoles: UserRole[]) => void;
   onUpdateStatus: (userId: string, status: 'Active' | 'Inactive' | 'Suspended' | 'Pending') => void;
+  onResetPassword: (userId: string) => void;
   currentUserRoles: UserRole[];
   departments: Department[];
   customConfirm: (title: string, message: string, onConfirm: () => void, isDestructive?: boolean) => void;
@@ -27,7 +28,7 @@ interface UserManagementProps {
 }
 
 export const UserManagement: React.FC<UserManagementProps> = ({ 
-  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, currentUserRoles, departments, customConfirm, customAlert, phases = [], selectedDeptFilter: propSelectedDeptFilter, onDeptFilterChange, currentUserId 
+  users, onAddMember, onBulkAddMembers, onUpdateMember, onDeleteMember, onUpdateRoles, onUpdateStatus, onResetPassword, currentUserRoles, departments, customConfirm, customAlert, phases = [], selectedDeptFilter: propSelectedDeptFilter, onDeptFilterChange, currentUserId 
 }) => {
   const { hasPermission, rbacMatrix } = useRBAC();
   const [internalSelectedDeptFilter, setInternalSelectedDeptFilter] = useState('All');
@@ -88,6 +89,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
           // 3. Dept Filtering
           if (selectedDeptFilter !== 'All' && u.departmentId !== selectedDeptFilter) return false;
+          
+          // 4. Superadmin Privacy (Safety check in UI)
+          if (u.email?.toLowerCase() === 'admin@poliku.edu.my' && currentUserId !== u.id && !users.find(curr => curr.id === currentUserId)?.email?.toLowerCase().includes('admin@poliku.edu.my')) {
+              return false;
+          }
           
           return true;
       });
@@ -202,7 +208,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   const resetForm = () => {
-    setFormData({ name: '', email: '', departmentId: '', roles: ['Staff'], designation: '', contactNumber: '' });
+    const isAdmin = currentUserRoles.includes('Admin');
+    const deptId = (!isAdmin && currentUserData?.departmentId) ? currentUserData.departmentId : '';
+    setFormData({ name: '', email: '', departmentId: deptId, roles: ['Staff'], designation: '', contactNumber: '' });
     setIsFormOpen(false);
     setEditingId(null);
   };
@@ -405,7 +413,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-slate-400">Department</label>
-                    <select required title="Department" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.departmentId} onChange={e => setFormData({ ...formData, departmentId: e.target.value })}>
+                    <select 
+                      required 
+                      disabled={!isAdmin}
+                      title="Department" 
+                      className={`w-full px-4 py-3 border rounded-xl text-sm ${!isAdmin ? 'bg-slate-100 cursor-not-allowed text-slate-500' : 'bg-slate-50 border-slate-200'}`} 
+                      value={formData.departmentId} 
+                      onChange={e => setFormData({ ...formData, departmentId: e.target.value })}
+                    >
                       <option value="">Select Dept</option>
                       {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
@@ -418,6 +433,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       <option value="Coordinator">Coordinator</option>
                       <option value="Supervisor">Supervisor</option>
                       <option value="Staff">Staff</option>
+                      {users.find(u => u.id === currentUserId)?.email?.toLowerCase() === 'admin@poliku.edu.my' && (
+                        <option value="Developer">Developer</option>
+                      )}
                     </select>
                   </div>
                   <div className="space-y-1 md:col-span-2">
@@ -525,6 +543,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                               title="Issue Official Institutional Certificate"
                             >
                               <Stamp className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => onResetPassword(user.id)}
+                              className="w-9 h-9 flex items-center justify-center bg-amber-50 text-amber-600 border border-amber-100 rounded-xl hover:bg-amber-600 hover:text-white transition-all shadow-sm"
+                              title="Reset to default password"
+                            >
+                              <Key className="w-4 h-4" />
                             </button>
                           </>
                         )}

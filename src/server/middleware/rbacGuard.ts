@@ -18,6 +18,10 @@ export function rbacGuard(permission: RBACPermission, opts?: { requireCert?: boo
   return async (c: Context, next: Next) => {
     const user = c.get('user'); // set by auth middleware
     if (!user) return c.json({ error: 'Unauthorized' }, 401);
+    
+    // Superadmin bypass
+    if (user.email?.toLowerCase() === 'admin@poliku.edu.my') return next();
+
     const userRoles: UserRole[] = user.roles || [];
 
     // 1. Role-based check

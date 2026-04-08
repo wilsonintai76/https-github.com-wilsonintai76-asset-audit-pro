@@ -165,7 +165,7 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
         title="Location Nodes"
         icon={MapPin}
         activePhase={activePhase}
-        description={(isCoordinator && !isAdmin) ? `Managing locations for ${userDeptId}` : 'Institutional site mapping and audit execution points.'}
+        description={(isCoordinator && !isAdmin) ? `Managing locations for ${departments.find(d => d.id === userDeptId)?.name || userDeptId}` : 'Institutional site mapping and audit execution points.'}
       >
         {canManage && (
           <button 

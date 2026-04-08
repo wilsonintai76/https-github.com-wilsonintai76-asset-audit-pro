@@ -266,8 +266,8 @@ const App: React.FC = () => {
       // weren't matched during the granular asset sync (unresolved Bahagian values).
       const finalAssets = Math.max(computedAssets, dept.totalAssets || 0);
       
-      const auditors = users.filter(u => 
-        u.departmentId === dept.id &&
+      const auditors = users.filter(u =>
+        u.departmentId && u.departmentId === dept.id &&
         ['Staff', 'Auditor', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
         u.status === 'Active'
       ).length;
@@ -307,8 +307,8 @@ const App: React.FC = () => {
         // Use max(location sum, mapping-derived dept total) so authoritative mapping totals
         // act as a floor for assets that weren't matched during granular asset sync.
         const totalAssets = Math.max(calculatedAssets, d.totalAssets || 0);
-        const auditors = allUsers.filter(u => 
-          u.departmentId === d.id &&
+        const auditors = allUsers.filter(u =>
+          u.departmentId && u.departmentId === d.id &&
           ['Staff', 'Auditor', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
           u.status === 'Active'
         ).length;
@@ -860,7 +860,7 @@ const App: React.FC = () => {
       setNotifications(prev => [{
         id: `bulk-loc-${Date.now()}`,
         title: 'Locations Imported',
-        message: `Imported ${result.addedCount} new locations and updated ${result.updatedCount} existing locations.`,
+        message: `Imported ${result.addedCount ?? 0} new locations and updated ${'updatedCount' in result ? (result as any).updatedCount ?? 0 : 0} existing locations.`,
         timestamp: new Date().toISOString(),
         type: 'success',
         read: false
