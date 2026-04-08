@@ -196,28 +196,17 @@ export const bulkManagement = {
 
     latestLocsFromImport.forEach((loc, key) => {
       const existingLoc = existingLocsMap.get(key);
-      if (existingLoc) {
-        const updates: Partial<Location> = {};
-        if (loc.totalAssets !== undefined && loc.totalAssets !== existingLoc.totalAssets) updates.totalAssets = loc.totalAssets;
-        if (loc.supervisorId && loc.supervisorId !== existingLoc.supervisorId) updates.supervisorId = loc.supervisorId;
-        if (loc.abbr && loc.abbr !== existingLoc.abbr) updates.abbr = loc.abbr;
-        if (loc.building !== undefined && loc.building !== existingLoc.building) updates.building = loc.building;
-        if (loc.level !== undefined && loc.level !== existingLoc.level) updates.level = loc.level;
-        if (loc.contact !== undefined && loc.contact !== existingLoc.contact) updates.contact = loc.contact;
-        if (loc.description !== undefined && loc.description !== existingLoc.description) updates.description = loc.description;
-        if (Object.keys(updates).length > 0) locsToUpdate.push({ id: existingLoc.id, updates });
-      } else {
+      if (!existingLoc) {
         locsToAdd.push(loc);
       }
     });
 
     if (locsToAdd.length > 0) await gateway.bulkAddLocations(locsToAdd);
-    for (const update of locsToUpdate) await gateway.updateLocation(update.id, update.updates);
 
     return {
       success: true,
       addedCount: locsToAdd.length,
-      updatedCount: locsToUpdate.length,
+      skippedCount: latestLocsFromImport.size - locsToAdd.length,
       newUsersCreated
     };
   },
@@ -306,13 +295,7 @@ export const bulkManagement = {
       }
 
       const existingDept = existingDeptsMap.get(d.name.toUpperCase().trim());
-      if (existingDept) {
-        const updates: Partial<Department> = {};
-        if (d.abbr && d.abbr !== existingDept.abbr) updates.abbr = d.abbr;
-        if (finalHeadId !== existingDept.headOfDeptId) updates.headOfDeptId = finalHeadId;
-        if (Object.keys(updates).length > 0) await gateway.updateDepartment(existingDept.id, updates);
-        if (newTempUserId) await gateway.updateUser(newTempUserId, { departmentId: existingDept.id });
-      } else {
+      if (!existingDept) {
         const createdDept = await gateway.addDepartment({ ...d, headOfDeptId: finalHeadId, auditGroupId: null });
         if (newTempUserId && createdDept?.id) await gateway.updateUser(newTempUserId, { departmentId: createdDept.id });
       }

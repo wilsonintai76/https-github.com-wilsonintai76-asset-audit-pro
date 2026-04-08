@@ -23,7 +23,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { IssueCertificateModal } from './components/IssueCertificateModal';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { bulkManagement } from './services/bulkManagement';
-import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Menu, BookOpen, AlertCircle, X, Key, UserCheck, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_DASHBOARD_CONFIG: DashboardConfig = {
   showStats: false,
@@ -38,6 +38,10 @@ type ViewState = 'landing' | 'app' | 'docs';
 const App: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>('landing');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [showForcePasswordModal, setShowForcePasswordModal] = useState(false);
+  const [showProfileCompleteModal, setShowProfileCompleteModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [activeView, setActiveView] = useState<AppView>('overview');
   // Prevents duplicate loadAllData() calls when both initSession and SIGNED_IN fire
   const dataLoadedRef = useRef(false);
@@ -407,7 +411,20 @@ const App: React.FC = () => {
     }
 
     localStorage.setItem('audit_pro_session', JSON.stringify(finalUser));
-  }, []);
+
+    // Initialize defaults for admins and reload all data to populate the dashboard
+    if (isAdmin) {
+      try { await gateway.initializeDefaults(); } catch (e) { console.warn('initialize-defaults-post-login failed:', e); }
+    }
+    loadAllData();
+
+    // Check for onboarding / force updates
+    if (finalUser.mustChangePIN) {
+      setShowForcePasswordModal(true);
+    } else if (!finalUser.departmentId || !finalUser.contactNumber) {
+      setShowProfileCompleteModal(true);
+    }
+  }, [isAdmin, loadAllData]);
 
 
 
@@ -479,6 +496,13 @@ const App: React.FC = () => {
             }
           }
           
+          // Onboarding checks
+          if (user.mustChangePIN) {
+            setShowForcePasswordModal(true);
+          } else if (!user.departmentId || !user.contactNumber) {
+            setShowProfileCompleteModal(true);
+          }
+
           if (!dataLoadedRef.current) {
             dataLoadedRef.current = true;
             if ((user.roles || []).includes('Admin')) {
@@ -767,6 +791,17 @@ const App: React.FC = () => {
 
   const handleAddLoc = async (loc: Omit<Location, 'id'>) => {
     try {
+      // Prevent duplicates gracefully before hitting the database constraint
+      const existing = locations.find(l => 
+        l.name.toLowerCase().trim() === loc.name.toLowerCase().trim() && 
+        l.departmentId === loc.departmentId
+      );
+      
+      if (existing) {
+        customAlert(`A location named "${loc.name}" already exists in this department.`);
+        return;
+      }
+
       const newLoc = await gateway.addLocation(loc);
       const updatedLocs = await gateway.getLocations();
       setLocations(updatedLocs);
@@ -1472,27 +1507,6 @@ const App: React.FC = () => {
     });
   };
 
-  const handleResetLocations = async () => {
-    customConfirm("Reset Locations & Audits", "Are you sure you want to delete all locations and their associated audit schedules? This will NOT delete departments or users. Proceed?", async () => {
-      try {
-        await gateway.clearAllLocations();
-        setLocations([]);
-        setSchedules([]);
-        setNotifications(prev => [{
-          id: `reset-loc-${Date.now()}`,
-          title: 'Locations Reset',
-          message: 'All locations and associated audit schedules have been deleted.',
-          timestamp: new Date().toISOString(),
-          type: 'success',
-          read: false
-        }, ...prev]);
-        showToast('All locations and audits reset successfully');
-      } catch (e) {
-        showError(e, 'Failed to reset locations');
-      }
-    });
-  };
-
   const handleResetOperationalData = async () => {
     customConfirm(
       "Full System Reset",
@@ -1520,7 +1534,7 @@ const App: React.FC = () => {
           setUsers(updatedUsers);
           setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
 
-          // Recreate default phases + 3 KPI tiers, then reload
+          // Recreate default phases + 3 KPI tiers, then reload (this also triggers asset sync)
           await gateway.initializeDefaults();
           await loadAllData();
 
@@ -1535,7 +1549,7 @@ const App: React.FC = () => {
   const handleResetDepartments = async () => {
     customConfirm(
       "Reset Departments",
-      "This will delete ALL departments, locations, mappings, schedules, and users (except you). Proceed?",
+      "This will delete ALL departments, locations, mappings, schedules, and consolidation groups. **User accounts will be maintained**, but their department associations will be cleared. Proceed?",
       async () => {
         try {
           await gateway.clearAllDepartments(currentUser.id);
@@ -1544,12 +1558,41 @@ const App: React.FC = () => {
           setSchedules([]);
           setCrossAuditPermissions([]);
           setDepartmentMappings([]);
+          setAuditGroups([]);
+          
+          // Users are maintained but their dept association is cleared on server
           const updatedUsers = await gateway.getUsers();
           setUsers(updatedUsers);
+          
+          // Re-sync current user to reflect dept clearance
           setCurrentUser(prev => prev ? { ...prev, departmentId: undefined } : null);
-          showToast('Departments cleared successfully.');
+          
+          showToast('Departments cleared. User accounts preserved.');
         } catch (e) {
           showError(e, 'Failed to reset departments');
+        }
+      }
+    );
+  };
+
+  const handleResetLocations = async () => {
+    customConfirm(
+      "Clear Locations & Groups",
+      "This will delete ALL locations, audit schedules, and consolidation groups. **Departments and User accounts will be maintained**, but department asset totals will be reset to zero. Proceed?",
+      async () => {
+        try {
+          await gateway.clearAllLocations();
+          setLocations([]);
+          setSchedules([]);
+          setAuditGroups([]);
+          
+          // Departments stay, but their totals hit 0
+          const updatedDepts = await gateway.getDepartments();
+          setDepartments(updatedDepts);
+          
+          showToast('Locations and groups cleared. Departments preserved.');
+        } catch (e) {
+          showError(e, 'Failed to clear locations');
         }
       }
     );
@@ -1691,6 +1734,17 @@ const App: React.FC = () => {
       showToast("Building removed");
     } catch (e) {
       showError(e, 'Failed to remove building');
+    }
+  };
+
+  const handleBulkAddBuildings = async (newBuildings: Omit<Building, 'id'>[]) => {
+    try {
+      await gateway.bulkAddBuildings(newBuildings);
+      // Refresh building list to get new IDs and handle IGNORE cases
+      setBuildings(await gateway.getBuildings());
+      showToast(`Successfully imported ${newBuildings.length} buildings.`);
+    } catch (e) {
+      showError(e, 'Bulk Import Failed');
     }
   };
 
@@ -2075,6 +2129,24 @@ const App: React.FC = () => {
     }
   };
 
+  const handleResetUserPassword = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    customConfirm(
+      "Reset Password",
+      `Reset password for ${user?.name || 'this user'} to institutional default: Poliku@2024? They will be forced to change it on their next login.`,
+      async () => {
+        try {
+          await gateway.resetUserPassword(userId);
+          setUsers(await gateway.getUsers());
+          showToast(`Password reset successful for ${user?.name}`);
+          logActivity('SECURITY', `Reset password for user: ${user?.name || userId}`, undefined, { userId });
+        } catch (e) {
+          showError(e, 'Reset Password Failed');
+        }
+      }
+    );
+  };
+
   const checkProfileComplete = (u: User | null) => {
     if (!u) return false;
     const isAdmin = (u.roles || []).includes('Admin');
@@ -2354,6 +2426,7 @@ const App: React.FC = () => {
               onDeleteMember={handleDeleteMember}
               onUpdateRoles={handleUpdateUserRoles}
               onUpdateStatus={handleUpdateUserStatus}
+              onResetPassword={handleResetUserPassword}
               currentUserRoles={currentUser.roles}
               customConfirm={customConfirm}
               customAlert={customAlert}
@@ -2421,6 +2494,7 @@ const App: React.FC = () => {
               buildings={buildings}
               locations={locations}
               onAdd={handleUpdateBuilding}
+              onBulkAdd={handleBulkAddBuildings}
               onUpdate={handleUpdateBuilding}
               onDelete={handleDeleteBuilding}
             />
@@ -2560,6 +2634,106 @@ const App: React.FC = () => {
           onClose={() => setCertRenewalModalUser(null)}
           onIssue={handleIssueCertForRenewal}
         />
+      )}
+      
+      {/* Forced Password Update Modal */}
+      {showForcePasswordModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-blue-50 animate-in zoom-in-95">
+            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-6">
+              <Key className="w-8 h-8 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Update Credentials</h2>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+              Your account has been created with a temporary password. You must set a new secure password before proceeding.
+            </p>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (newPassword.length < 8) {
+                showToast('Password must be at least 8 characters long', 'warning');
+                return;
+              }
+              try {
+                setIsUpdatingPassword(true);
+                await gateway.updateUser(currentUser!.id, { pin: newPassword, mustChangePIN: false });
+                setShowForcePasswordModal(false);
+                setCurrentUser(prev => prev ? { ...prev, mustChangePIN: false } : null);
+                showToast('Password updated successfully');
+                
+                // After password updated, check for profile completion
+                if (!currentUser?.departmentId || !currentUser?.contactNumber) {
+                  setShowProfileCompleteModal(true);
+                }
+              } catch (err: any) {
+                showError(err, 'Failed to update password');
+              } finally {
+                setIsUpdatingPassword(false);
+              }
+            }}>
+              <div className="space-y-4 mb-8">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1.5 ml-1">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    autoFocus
+                    placeholder="Enter at least 8 characters"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-400 focus:bg-white transition-all outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isUpdatingPassword}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                {isUpdatingPassword ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>Set New Password</>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Incomplete Reminder */}
+      {showProfileCompleteModal && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-amber-50 animate-in zoom-in-95">
+            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mb-6">
+              <UserCheck className="w-8 h-8 text-amber-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Complete Your Profile</h2>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+              Some important details are missing from your profile (Department or Contact Number). Please complete them to ensure full access to institutional features.
+            </p>
+            
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  setShowProfileCompleteModal(false);
+                  setActiveView('profile');
+                  setViewState('app');
+                }}
+                className="w-full py-4 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-2xl shadow-lg shadow-amber-100 transition-all active:scale-[0.98]"
+              >
+                Go to Profile
+              </button>
+              <button
+                onClick={() => setShowProfileCompleteModal(false)}
+                className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-all"
+              >
+                Remind Me Later
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       </div>
     </div>

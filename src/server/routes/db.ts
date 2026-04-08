@@ -7,6 +7,26 @@ import { Bindings, Variables } from '../types';
 import { rbacGuard } from '../middleware/rbacGuard';
 import { auditAssignmentGuard } from '../middleware/conflictOfInterest';
 import { verifyNativeJwt } from '../middleware/auth';
+import { hashPassword } from '../services/authService';
+
+const DEFAULT_USER_PASSWORD = 'Poliku@2024';
+
+const getRolesForDesignation = (designation?: string | null): string[] | null => {
+  if (!designation) return null;
+  switch (designation) {
+    case 'Head Of Department':
+    case 'Coordinator':
+      return ['Coordinator', 'Supervisor', 'Auditor', 'Staff'];
+    case 'Supervisor':
+      return ['Supervisor', 'Auditor', 'Staff'];
+    case 'Staff':
+      return ['Staff'];
+    case 'Developer':
+      return ['Admin', 'Coordinator', 'Supervisor', 'Auditor', 'Staff'];
+    default:
+      return null;
+  }
+};
 
 const db = new Hono<{ Bindings: Bindings, Variables: Variables }>();
 
@@ -168,13 +188,16 @@ const patchUserSchema = z.object({
   email: z.string().email().optional(),
   name: z.string().min(1).optional(),
   roles: z.array(z.string()).optional(),
+  designation: z.string().nullable().optional(),
   departmentId: z.string().nullable().optional(),
   contactNumber: z.string().nullable().optional(),
   isVerified: z.boolean().optional(),
+  mustChangePIN: z.boolean().optional(),
   lastActive: z.string().optional(),
   certificationIssued: z.string().nullable().optional(),
   certificationExpiry: z.string().nullable().optional(),
   renewalRequested: z.string().nullable().optional(),
+  password: z.string().min(8).optional(),
 });
 
 db.get('/audits', async (c) => {
@@ -295,12 +318,53 @@ db.post('/audits/bulk', rbacGuard('assign:others'), async (c) => {
   }
 });
 
+// --- USER MANAGEMENT ---
+
+db.post('/users/:id/reset-password', rbacGuard('admin:hub'), async (c) => {
+  const id = c.req.param('id');
+  try {
+    const defaultHash = await hashPassword(DEFAULT_USER_PASSWORD);
+    await c.env.DB.prepare(
+      'UPDATE users SET password_hash = ?, must_change_pin = 1 WHERE id = ?'
+    ).bind(defaultHash, id).run();
+    
+    // Evict cache
+    await c.env.SETTINGS.delete(`ucache:${id}`).catch(() => {});
+    
+    return c.json({ success: true, message: `Password reset to default: ${DEFAULT_USER_PASSWORD}` });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // Users
 db.get('/users', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare(
-    'SELECT id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, renewal_requested, last_active FROM users',
-  ).all();
+    const caller = c.get('user');
+    const isSuperAdmin = caller?.email?.toLowerCase() === 'admin@poliku.edu.my';
+    const isAdmin = caller?.roles?.includes('Admin');
+
+    let sql = 'SELECT id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, renewal_requested, last_active FROM users';
+    const binds: any[] = [];
+    
+    // Filtering logic
+    const filters: string[] = [];
+    if (!isSuperAdmin) {
+      filters.push('email != ?');
+      binds.push('admin@poliku.edu.my');
+    }
+
+    // Role-based filtering for Coordinators
+    if (!isSuperAdmin && !isAdmin && caller?.roles?.includes('Coordinator')) {
+      filters.push('department_id = ?');
+      binds.push(caller.departmentId);
+    }
+
+    if (filters.length > 0) {
+      sql += ' WHERE ' + filters.join(' AND ');
+    }
+
+    const { results } = await c.env.DB.prepare(sql).bind(...binds).all();
 
     return c.json((results || []).map((u: any) => ({
       id: u.id,
@@ -324,32 +388,54 @@ db.get('/users', async (c) => {
   }
 });
 
-db.post('/users', rbacGuard('assign:others'), zValidator('json', userSchema), async (c) => {
-  const user = c.req.valid('json');
-  const id = user.id || crypto.randomUUID();
+db.post('/users', rbacGuard('edit:team'), zValidator('json', userSchema), async (c) => {
+  const newUser = c.req.valid('json');
+  const caller = c.get('user');
+  const isSuperAdmin = caller?.email?.toLowerCase() === 'admin@poliku.edu.my';
+  const isAdmin = caller?.roles?.includes('Admin');
+
+  // Enforce departmental isolation for non-admins
+  if (!isSuperAdmin && !isAdmin && caller?.roles?.includes('Coordinator')) {
+    if (newUser.departmentId !== caller.departmentId) {
+      return c.json({ error: 'Coordinators can only create users in their own department' }, 403);
+    }
+  }
+
+  const id = newUser.id || crypto.randomUUID();
   
+  // 1. Calculate Binding Roles if not explicitly provided
+  let roles = newUser.roles;
+  if (!roles || roles.length === 0) {
+    roles = getRolesForDesignation(newUser.designation) || ['Staff'];
+  }
+
+  // 2. Set Default Password Hash & Force PIN Change for manual creation
+  const defaultHash = await hashPassword(DEFAULT_USER_PASSWORD);
+  const mustChangePIN = newUser.mustChangePIN !== undefined ? newUser.mustChangePIN : true;
+
   try {
     await c.env.DB.prepare(
       `INSERT INTO users 
-       (id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, email, password_hash, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
-      user.name,
-      user.email,
-      JSON.stringify(user.roles || ['Staff']),
-      user.designation ?? null,
-      user.picture ?? null,
-      user.departmentId ?? null,
-      user.contactNumber ?? null,
-      user.status ?? 'Active',
-      user.isVerified ? 1 : 0,
-      user.mustChangePIN ? 1 : 0,
-      user.certificationIssued ?? null,
-      user.certificationExpiry ?? null
+      newUser.name,
+      newUser.email,
+      defaultHash,
+      JSON.stringify(roles),
+      newUser.designation ?? null,
+      newUser.picture ?? null,
+      newUser.departmentId ?? null,
+      newUser.contactNumber ?? null,
+      newUser.status ?? 'Active',
+      newUser.isVerified ? 1 : 0,
+      mustChangePIN ? 1 : 0,
+      newUser.certificationIssued ?? null,
+      newUser.certificationExpiry ?? null
     ).run();
 
-    return c.json({ id, ...user });
+    return c.json({ id, ...newUser, roles, mustChangePIN });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -360,12 +446,28 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
   const updates = c.req.valid('json');
   const caller = c.get('user');
   const callerRoles: string[] = caller?.roles || [];
+  const isSuperAdmin = caller?.email?.toLowerCase() === 'admin@poliku.edu.my';
   const isAdmin = callerRoles.includes('Admin');
   const isCoordinator = callerRoles.includes('Coordinator');
 
-  // Non-admin/coordinator can only update their own record
-  if (!isAdmin && !isCoordinator && caller?.id !== id) {
+  if (isSuperAdmin) {
+    // Superadmin bypass
+  } else if (!isAdmin && !isCoordinator && caller?.id !== id) {
+    // Staff can only update themselves
     return c.json({ error: 'Forbidden' }, 403);
+  } else if (!isAdmin && isCoordinator) {
+    // Coordinators can update themselves OR users in their department
+    if (caller?.id !== id) {
+      const targetUser = await c.env.DB.prepare('SELECT department_id FROM users WHERE id = ?').bind(id).first<{department_id: string}>();
+      if (!targetUser || targetUser.department_id !== caller?.departmentId) {
+        return c.json({ error: 'Coordinators can only manage users within their own department' }, 403);
+      }
+      
+      // Prevent Coordinator from re-assigning user to another department
+      if (updates.departmentId && updates.departmentId !== caller?.departmentId) {
+         return c.json({ error: 'Cannot re-assign user to a different department' }, 403);
+      }
+    }
   }
   // Only Admin can change roles, verification, and certification
   if (!isAdmin && (updates.roles !== undefined || updates.isVerified !== undefined || updates.certificationIssued !== undefined || updates.certificationExpiry !== undefined)) {
@@ -375,12 +477,27 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
   const fields: string[] = [];
   const values: any[] = [];
 
+  // Sync roles if designation is updated and roles are NOT explicitly provided
+  if (updates.designation !== undefined && updates.roles === undefined) {
+    const boundRoles = getRolesForDesignation(updates.designation);
+    if (boundRoles) {
+      updates.roles = boundRoles;
+    }
+  }
+
+  if (updates.password !== undefined) { 
+    const hash = await hashPassword(updates.password);
+    fields.push('password_hash = ?'); 
+    values.push(hash); 
+  }
   if (updates.email !== undefined) { fields.push('email = ?'); values.push(updates.email); }
   if (updates.name !== undefined) { fields.push('name = ?'); values.push(updates.name); }
   if (updates.roles !== undefined) { fields.push('roles = ?'); values.push(JSON.stringify(updates.roles)); }
+  if (updates.designation !== undefined) { fields.push('designation = ?'); values.push(updates.designation); }
   if (updates.departmentId !== undefined) { fields.push('department_id = ?'); values.push(updates.departmentId); }
   if (updates.contactNumber !== undefined) { fields.push('contact_number = ?'); values.push(updates.contactNumber); }
   if (updates.isVerified !== undefined) { fields.push('is_verified = ?'); values.push(updates.isVerified ? 1 : 0); }
+  if (updates.mustChangePIN !== undefined) { fields.push('must_change_pin = ?'); values.push(updates.mustChangePIN ? 1 : 0); }
   if (updates.lastActive !== undefined) { fields.push('last_active = ?'); values.push(updates.lastActive); }
   if (updates.certificationIssued !== undefined) { fields.push('certification_issued = ?'); values.push(updates.certificationIssued); }
   if (updates.certificationExpiry !== undefined) { fields.push('certification_expiry = ?'); values.push(updates.certificationExpiry); }
@@ -452,9 +569,18 @@ db.post('/users/:id/verify', rbacGuard('admin:hub'), async (c) => {
 // Departments
 db.get('/departments', async (c) => {
   try {
-    const { results } = await c.env.DB.prepare(
-    'SELECT id, name, abbr, description, head_of_dept_id, audit_group_id, is_exempted, total_assets, uninspected_asset_count FROM departments',
-  ).all();
+    const caller = c.get('user');
+    const isSuperAdmin = caller?.email?.toLowerCase() === 'admin@poliku.edu.my';
+
+    let sql = 'SELECT id, name, abbr, description, head_of_dept_id, audit_group_id, is_exempted, total_assets, uninspected_asset_count FROM departments';
+    const binds: any[] = [];
+
+    if (!isSuperAdmin) {
+      sql += ' WHERE name != ?';
+      binds.push('Software Development');
+    }
+
+    const { results } = await c.env.DB.prepare(sql).bind(...binds).all();
     return c.json((results || []).map((d: any) => ({
       id: d.id,
       name: d.name,
@@ -539,25 +665,34 @@ db.delete('/departments/:id/force', rbacGuard('admin:hub'), async (c) => {
   }
 });
 
+// ─── RESET DEPARTMENTS ───────────────────────────────────────────────────────
+// Deletes ALL departments, locations, and schedules. MAINTAINS users.
 db.post('/departments/clear', rbacGuard('admin:hub'), async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const keep_user_id: string | undefined = body?.keep_user_id;
   try {
-    // Sequential individual DELETEs — not batch — so each auto-commits independently.
-    await c.env.DB.prepare('DELETE FROM audit_schedules').run();
-    await c.env.DB.prepare('DELETE FROM cross_audit_permissions').run();
-    await c.env.DB.prepare('DELETE FROM department_mappings').run();
-    await c.env.DB.prepare('DELETE FROM locations').run();
-    await c.env.DB.prepare('DELETE FROM buildings').run();
-    await c.env.DB.prepare('DELETE FROM system_activities').run();
-    if (keep_user_id) {
-      await c.env.DB.prepare('DELETE FROM users WHERE id != ?').bind(keep_user_id).run();
-    } else {
-      await c.env.DB.prepare('DELETE FROM users').run();
+    const deletes = [
+      { id: 'schedules', sql: 'DELETE FROM audit_schedules' },
+      { id: 'groups',    sql: 'DELETE FROM audit_groups' },
+      { id: 'perms',     sql: 'DELETE FROM cross_audit_permissions' },
+      { id: 'mappings',  sql: 'DELETE FROM department_mappings' },
+      { id: 'locations', sql: 'DELETE FROM locations' },
+      { id: 'buildings', sql: 'DELETE FROM buildings' },
+      { id: 'activities',sql: 'DELETE FROM system_activities' },
+    ];
+
+    for (const d of deletes) {
+      await c.env.DB.prepare(d.sql).run();
     }
+
+    // Departments are the root — clearing them effectively resets the hierarchy
     await c.env.DB.prepare('DELETE FROM departments').run();
+    
+    // Clear department associations from users but keep the accounts
+    await c.env.DB.prepare('UPDATE users SET department_id = NULL').run();
+
+    // Clear KV buildings cache
     await c.env.SETTINGS.delete('buildings').catch(() => {});
-    return c.json({ success: true });
+
+    return c.json({ success: true, message: 'Departments cleared. User accounts maintained.' });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -633,11 +768,11 @@ db.patch('/locations/:id', rbacGuard('manage:locations'), async (c) => {
 
   if (updates.name !== undefined) { fields.push('name = ?'); values.push(updates.name); }
   if (updates.abbr !== undefined) { fields.push('abbr = ?'); values.push(updates.abbr); }
-  if (updates.departmentId !== undefined) { fields.push('department_id = ?'); values.push(updates.departmentId); }
-  if (updates.buildingId !== undefined) { fields.push('building_id = ?'); values.push(updates.buildingId); }
-  if (updates.level !== undefined) { fields.push('level = ?'); values.push(updates.level); }
-  if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
-  if (updates.supervisorId !== undefined) { fields.push('supervisor_id = ?'); values.push(updates.supervisorId); }
+  if (updates.departmentId !== undefined) { fields.push('department_id = ?'); values.push(updates.departmentId || null); }
+  if (updates.buildingId !== undefined) { fields.push('building_id = ?'); values.push(updates.buildingId || null); }
+  if (updates.level !== undefined) { fields.push('level = ?'); values.push(updates.level || null); }
+  if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description || null); }
+  if (updates.supervisorId !== undefined) { fields.push('supervisor_id = ?'); values.push(updates.supervisorId || null); }
   if (updates.contact !== undefined) { fields.push('contact = ?'); values.push(updates.contact); }
   if (updates.totalAssets !== undefined) { fields.push('total_assets = ?'); values.push(updates.totalAssets); }
   if (updates.uninspectedAssetCount !== undefined) { fields.push('uninspected_asset_count = ?'); values.push(updates.uninspectedAssetCount); }
@@ -674,14 +809,24 @@ db.delete('/locations/:id/force', rbacGuard('admin:hub'), async (c) => {
   }
 });
 
+// ─── RESET LOCATIONS ─────────────────────────────────────────────────────────
+// Deletes ALL locations and consolidation groups. Keeps departments.
 db.post('/locations/clear', rbacGuard('admin:hub'), async (c) => {
   try {
-    // Delete audit_schedules first (they FK-reference locations)
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM audit_schedules'),
-      c.env.DB.prepare('DELETE FROM locations'),
-    ]);
-    return c.json({ success: true });
+    const deletes = [
+      { id: 'schedules', sql: 'DELETE FROM audit_schedules' },
+      { id: 'groups',    sql: 'DELETE FROM audit_groups' },
+      { id: 'locations', sql: 'DELETE FROM locations' },
+    ];
+
+    for (const d of deletes) {
+      await c.env.DB.prepare(d.sql).run();
+    }
+
+    // Reset department totals since they derive from locations
+    await c.env.DB.prepare('UPDATE departments SET total_assets = 0, uninspected_asset_count = 0').run();
+
+    return c.json({ success: true, message: 'Locations and groups cleared. Departments maintained.' });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -690,24 +835,33 @@ db.post('/locations/clear', rbacGuard('admin:hub'), async (c) => {
 db.post('/locations/bulk', rbacGuard('manage:locations'), async (c) => {
   const locs = await c.req.json();
   try {
-    // Pre-validate: fetch all existing department IDs from DB so we never hit a FK error
+    // 1. Fetch existing departments for validation
     const { results: deptRows } = await c.env.DB.prepare('SELECT id FROM departments').all();
     const validDeptIds = new Set((deptRows || []).map((d: any) => d.id));
 
-    // Filter out locations whose departmentId doesn't exist in DB
-    const validLocs = (locs as any[]).filter(loc => {
+    // 2. Fetch existing locations for deduplication (Key: name|dept|bldg)
+    const { results: existingLocRows } = await c.env.DB.prepare('SELECT name, department_id, building_id FROM locations').all();
+    const existingLocKeys = new Set((existingLocRows || []).map((l: any) => 
+      `${(l.name || '').toUpperCase().trim()}|${l.department_id || ''}|${l.building_id || ''}`
+    ));
+
+    // 3. Filter valid AND unique locations
+    const processedLocs = (locs as any[]).filter(loc => {
       const deptId = loc.departmentId || '';
-      return deptId && validDeptIds.has(deptId);
+      if (!deptId || !validDeptIds.has(deptId)) return false;
+
+      const key = `${(loc.name || '').toUpperCase().trim()}|${loc.departmentId || ''}|${loc.buildingId || ''}`;
+      return !existingLocKeys.has(key);
     });
 
-    const skipped = locs.length - validLocs.length;
+    const skipped = locs.length - processedLocs.length;
 
-    if (validLocs.length === 0) {
-      return c.json({ success: true, count: 0, skipped, reason: 'No locations had a valid department_id' });
+    if (processedLocs.length === 0) {
+      return c.json({ success: true, count: 0, skipped, status: 'No new unique locations to add' });
     }
 
-    // INSERT OR IGNORE so a single bad row can never abort the entire batch
-    const statements = validLocs.map((loc: any) => {
+    // 4. Batch Insert
+    const statements = processedLocs.map((loc: any) => {
       const id = loc.id || crypto.randomUUID();
       return c.env.DB.prepare(
         `INSERT OR IGNORE INTO locations 
@@ -731,7 +885,7 @@ db.post('/locations/bulk', rbacGuard('manage:locations'), async (c) => {
     });
 
     await c.env.DB.batch(statements);
-    return c.json({ success: true, count: validLocs.length, skipped });
+    return c.json({ success: true, count: processedLocs.length, skipped });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -1179,6 +1333,40 @@ db.delete('/buildings/:id', rbacGuard('admin:hub'), async (c) => {
   }
 });
 
+db.post('/buildings/bulk', rbacGuard('admin:hub'), zValidator('json', z.array(z.object({
+  name:        z.string().min(1),
+  abbr:        z.string().min(1),
+  description: z.string().nullable().optional(),
+}))), async (c) => {
+  const buildings = c.req.valid('json');
+  try {
+    // 1. Fetch existing abbreviations for deduplication
+    const { results: existingRows } = await c.env.DB.prepare('SELECT abbr FROM buildings').all();
+    const existingAbbrs = new Set((existingRows || []).map((r: any) => r.abbr.toUpperCase().trim()));
+
+    // 2. Filter out items that already exist
+    const newBuildings = buildings.filter(b => !existingAbbrs.has(b.abbr.toUpperCase().trim()));
+    const skipped = buildings.length - newBuildings.length;
+
+    if (newBuildings.length === 0) {
+      return c.json({ success: true, count: 0, skipped, status: 'No new buildings to add' });
+    }
+
+    const statements = newBuildings.map(b => {
+      const id = crypto.randomUUID();
+      return c.env.DB.prepare(
+        'INSERT OR IGNORE INTO buildings (id, name, abbr, description) VALUES (?, ?, ?, ?)'
+      ).bind(id, b.name, b.abbr, b.description ?? null);
+    });
+
+    await c.env.DB.batch(statements);
+    await c.env.SETTINGS.delete(KV_BUILDINGS).catch(() => {});
+    return c.json({ success: true, count: newBuildings.length, skipped });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // System Settings (SQL version for persistence if KV is for volatile)
 db.get('/system-settings', async (c) => {
   try {
@@ -1365,6 +1553,39 @@ db.post('/system/initialize-defaults', rbacGuard('admin:hub'), async (c) => {
         ]);
       }
     }
+
+    // 9. Bootstrap Software Development department (Superadmin only)
+    const softDev = await c.env.DB.prepare("SELECT id FROM departments WHERE name = ?").bind('Software Development').first<{id: string}>();
+    let softDevId = softDev?.id;
+
+    if (!softDevId) {
+      softDevId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        "INSERT INTO departments (id, name, abbr, description, is_exempted) VALUES (?, ?, ?, ?, ?)"
+      ).bind(softDevId, 'Software Development', 'SOFTDEV', 'Internal development and system optimization.', 1).run();
+    }
+
+    // 10. Auto-provision Superadmin identity to stop the Profile Completion popup
+    const caller = c.get('user');
+    if (caller?.email?.toLowerCase() === 'admin@poliku.edu.my') {
+      await c.env.DB.prepare(
+        "UPDATE users SET status = 'Active', designation = 'Developer', department_id = ?, is_verified = 1, must_change_pin = 0 WHERE email = ?"
+      ).bind(softDevId, 'admin@poliku.edu.my').run();
+      
+      // Evict cache to reflect changes immediately
+      await c.env.SETTINGS.delete(`ucache:${caller.id}`).catch(() => {});
+    }
+
+    // 11. Synchronize department asset totals from locations (Source of Truth)
+    await c.env.DB.prepare(`
+      UPDATE departments 
+      SET total_assets = (
+        SELECT COALESCE(SUM(l.total_assets), 0) 
+        FROM locations l 
+        WHERE l.department_id = departments.id
+      )
+      WHERE id IN (SELECT DISTINCT department_id FROM locations)
+    `).run();
 
     return c.json({ success: true });
   } catch (err: any) {

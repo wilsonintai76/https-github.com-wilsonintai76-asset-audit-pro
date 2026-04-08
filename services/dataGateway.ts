@@ -153,6 +153,14 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db.locations.clear.$post({}, { headers: h }));
   }
 
+  async requestPasswordReset(email: string) {
+    await this.rpc<unknown>(h => (api as any).auth['request-reset'].$post({ json: { email } }, { headers: h }));
+  }
+
+  async resetUserPassword(userId: string) {
+    await this.rpc<unknown>(h => (api as any).db.users[':id']['reset-password'].$post({ param: { id: userId } }, { headers: h }));
+  }
+
   async clearAllDepartments(currentUserId?: string) {
     await this.rpc<unknown>(h => (api as any).db.departments.clear.$post({ json: { keep_user_id: currentUserId } }, { headers: h }));
   }
@@ -315,6 +323,10 @@ class DataGateway {
 
   async deleteBuilding(id: string): Promise<void> {
     await this.rpc<unknown>(h => (api as any).db.buildings[':id'].$delete({ param: { id } }, { headers: h }));
+  }
+
+  async bulkAddBuildings(buildings: Omit<Building, 'id'>[]): Promise<{ count: number }> {
+    return this.rpc<{ count: number }>(h => (api as any).db.buildings.bulk.$post({ json: buildings as any }, { headers: h }));
   }
 
   async getSystemSettings(): Promise<SystemSetting[]> {
