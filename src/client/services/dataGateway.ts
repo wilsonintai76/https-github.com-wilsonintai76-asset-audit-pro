@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, SystemSetting } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, SystemSetting } from '@shared/types';
 import { api, getAuthHeaders } from './honoClient';
 
 class DataGateway {
@@ -161,6 +161,14 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db.users[':id']['reset-password'].$post({ param: { id: userId } }, { headers: h }));
   }
 
+  async requestCertificationRenewal(userId: string) {
+    await this.rpc<unknown>(h => (api as any).db.users[':id'].renew.$post({ param: { id: userId } }, { headers: h }));
+  }
+
+  async approveCertification(userId: string) {
+    await this.rpc<unknown>(h => (api as any).db.users[':id'].approve.$post({ param: { id: userId } }, { headers: h }));
+  }
+
   async clearAllDepartments(currentUserId?: string) {
     await this.rpc<unknown>(h => (api as any).db.departments.clear.$post({ json: { keep_user_id: currentUserId } }, { headers: h }));
   }
@@ -279,6 +287,10 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db['kpi-tier-targets'].$post({ json: { tierId, phaseId, targetPercentage: percentage } }, { headers: h }));
   }
 
+  async updateKPITierTarget(id: string, updates: Partial<KPITierTarget>) {
+    await this.rpc<unknown>(h => (api as any).db['kpi-tier-targets'][':id'].$patch({ param: { id }, json: updates as any }, { headers: h }));
+  }
+
   async deleteKPITierTarget(id: string): Promise<void> {
     await this.rpc<unknown>(h => (api as any).db['kpi-tier-targets'][':id'].$delete({ param: { id } }, { headers: h }));
   }
@@ -308,8 +320,12 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db['institution-kpi-targets'].$post({ json: { phaseId, targetPercentage: percentage } }, { headers: h }));
   }
 
-  async autoCalculateTierTargets(): Promise<{ tierTargets: { tierId: string; tierName: string; phaseId: string; phaseName: string; targetPercentage: number }[]; tierWeights: Record<string, number>; globalTargets: Record<string, number> }> {
-    return this.rpc(h => (api as any).compute['auto-tier-targets'].$post({}, { headers: h }));
+  async updateInstitutionKPITarget(id: string, updates: Partial<InstitutionKPITarget>) {
+    await this.rpc<unknown>(h => (api as any).db['institution-kpi-targets'][':id'].$patch({ param: { id }, json: updates as any }, { headers: h }));
+  }
+
+  async autoCalculateTierTargets(tierId?: string): Promise<{ tierTargets: any[] }> {
+    return this.rpc(h => (api as any).compute['auto-tier-targets'].$post({ json: { tierId } }, { headers: h }));
   }
 
   // --- BUILDINGS ---
@@ -317,8 +333,12 @@ class DataGateway {
     return (await this.rpcOrNull<Building[]>(h => (api as any).db.buildings.$get({}, { headers: h }))) ?? [];
   }
 
-  async updateBuilding(building: Partial<Building>): Promise<Building> {
+  async addBuilding(building: Omit<Building, 'id'>): Promise<Building> {
     return this.rpc<Building>(h => (api as any).db.buildings.$post({ json: building as any }, { headers: h }));
+  }
+
+  async updateBuilding(id: string, updates: Partial<Building>): Promise<void> {
+    await this.rpc<unknown>(h => (api as any).db.buildings[':id'].$patch({ param: { id }, json: updates as any }, { headers: h }));
   }
 
   async deleteBuilding(id: string): Promise<void> {
@@ -335,6 +355,22 @@ class DataGateway {
 
   async updateSystemSetting(id: string, value: any): Promise<void> {
     await this.rpc<unknown>(h => (api as any).db['system-settings'][':id'].$post({ param: { id }, json: { value } }, { headers: h }));
+  }
+
+  async autoConsolidateAuditGroups() {
+    await this.rpc<unknown>(h => (api as any).db['audit-groups'].consolidate.$post({}, { headers: h }));
+  }
+
+  async setDeptTotalsFromMapping() {
+    await this.rpc<unknown>(h => (api as any).db.departments.refresh.$post({}, { headers: h }));
+  }
+
+  async upsertLocations(locations: Omit<Location, 'id'>[]) {
+    await this.rpc<unknown>(h => (api as any).db.locations.upsert.$post({ json: locations as any }, { headers: h }));
+  }
+
+  async syncLocationMappings() {
+    await this.rpc<unknown>(h => (api as any).db.locations.sync.$post({}, { headers: h }));
   }
 }
 

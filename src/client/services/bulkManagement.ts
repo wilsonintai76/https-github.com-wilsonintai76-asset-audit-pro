@@ -1,6 +1,5 @@
-
 import { gateway } from './dataGateway';
-import { AuditSchedule, User, Department, Location } from '../types';
+import { AuditSchedule, User, Department, Location } from '@shared/types';
 
 export const bulkManagement = {
   /**
@@ -87,7 +86,7 @@ export const bulkManagement = {
     // 4. Add new locations
     if (newLocs.length > 0) {
       const locsToAdd: Omit<Location, 'id'>[] = newLocs.map(loc => {
-        const auditForLoc = processedAudits.find(a => a.locationId === loc.locationId && a.departmentId === loc.departmentId);
+        const auditForLoc = processedAudits.find((a: any) => a.locationId === loc.locationId && a.departmentId === loc.departmentId);
         const supId = auditForLoc ? auditForLoc.supervisorId : 'dummy-user-id';
 
         return {
@@ -114,8 +113,8 @@ export const bulkManagement = {
     }
 
     // 5. Finally add the audits (filtered by assets)
-    const assetFilteredAudits = processedAudits.filter(a => {
-      const dept = departmentsWithAssets.find(d => d.id === a.departmentId);
+    const assetFilteredAudits = processedAudits.filter((a: any) => {
+      const dept = departmentsWithAssets.find((d: any) => d.id === a.departmentId);
       return dept && (dept.totalAssets || 0) > 0;
     });
 
@@ -207,6 +206,7 @@ export const bulkManagement = {
       success: true,
       addedCount: locsToAdd.length,
       skippedCount: latestLocsFromImport.size - locsToAdd.length,
+      updatedCount: 0, // Placeholder for now, as we're not doing updates in this version
       newUsersCreated
     };
   },
@@ -302,5 +302,23 @@ export const bulkManagement = {
     }
 
     return { usersChanged };
+  },
+
+  /**
+   * Processes a batch of user profiles.
+   */
+  async addUsers(
+    members: Omit<User, 'id'>[],
+    currentDepartments: Department[]
+  ) {
+    const deptNameToId = new Map(currentDepartments.map(d => [d.name.toUpperCase().trim(), d.id]));
+    let createdCount = 0;
+
+    for (const m of members) {
+      const deptId = m.departmentId ? (deptNameToId.get(m.departmentId.toUpperCase().trim()) || m.departmentId) : null;
+      await gateway.addUser({ ...m, departmentId: deptId });
+      createdCount++;
+    }
+    return { createdCount };
   }
 };

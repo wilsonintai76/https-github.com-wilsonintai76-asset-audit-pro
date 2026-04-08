@@ -1,6 +1,6 @@
 import { clearAuthCache, serverLogout, api as honoApi, setAuthToken, getAuthToken } from './honoClient';
 const api = honoApi as any;
-import { User } from '../types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, SystemSetting } from '@shared/types';
 
 export const authService = {
   login: async (email: string, password: string): Promise<User> => {

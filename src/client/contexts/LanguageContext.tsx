@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Locale } from '../types';
+import { Locale } from '@shared/types';
 
 interface LanguageContextType {
   locale: Locale;

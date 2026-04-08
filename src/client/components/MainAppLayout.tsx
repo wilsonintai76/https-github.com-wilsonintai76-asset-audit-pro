@@ -1,0 +1,120 @@
+import React from 'react';
+import { Menu, BookOpen, AlertCircle, ShieldCheck } from 'lucide-react';
+import { User, AppView, SystemActivity, AppNotification } from '@shared/types';
+import Sidebar from './Sidebar';
+import { NotificationCenter } from './NotificationCenter';
+
+interface MainAppLayoutProps {
+  currentUser: User;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
+  activeView: AppView;
+  handleViewChange: (view: AppView) => void;
+  handleLogout: () => void;
+  rbacMatrix: any;
+  checkProfileComplete: (u: User) => boolean;
+  notifications: AppNotification[];
+  setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
+  connectionErrorMessage: string | null;
+  children: React.ReactNode;
+}
+
+export const MainAppLayout: React.FC<MainAppLayoutProps> = ({
+  currentUser,
+  isSidebarOpen,
+  setIsSidebarOpen,
+  activeView,
+  handleViewChange,
+  handleLogout,
+  rbacMatrix,
+  checkProfileComplete,
+  notifications,
+  setNotifications,
+  connectionErrorMessage,
+  children
+}) => {
+  return (
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden select-none">
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          activeView={activeView}
+          onViewChange={handleViewChange}
+          onLogout={handleLogout}
+          userRoles={currentUser.roles}
+          isCertified={!!(currentUser.certificationExpiry && new Date(currentUser.certificationExpiry) > new Date())}
+          userStatus={currentUser.status}
+          isProfileComplete={checkProfileComplete(currentUser)}
+          rbacMatrix={rbacMatrix}
+        />
+
+        <div className="grow lg:pl-72 flex flex-col h-full min-w-0">
+          <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-4 md:px-8 py-3 md:py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsSidebarOpen(true)} 
+                title="Open sidebar" 
+                className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-600"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-bold text-slate-900 capitalize leading-none">{activeView.replace('-', ' ')}</h1>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border bg-indigo-50 text-indigo-600 border-indigo-100">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                  Secure Session
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              {checkProfileComplete(currentUser) && (
+                <>
+                  <button
+                    onClick={() => handleViewChange('knowledge-base')}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${activeView === 'knowledge-base' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                    title="Knowledge Base"
+                  >
+                    <BookOpen className="w-5 h-5" />
+                  </button>
+                  <NotificationCenter 
+                    notifications={notifications} 
+                    onMarkAsRead={(id) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))} 
+                    onClearAll={() => setNotifications([])} 
+                  />
+                  <div className="h-8 w-px bg-slate-200"></div>
+                </>
+              )}
+              <button onClick={() => handleViewChange('profile')} className="flex items-center gap-2 p-1 pr-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">{currentUser.name[0]}</div>
+                <span className="text-xs font-bold text-slate-700 hidden sm:block">{currentUser.name}</span>
+              </button>
+            </div>
+          </header>
+
+          <main className="grow p-4 md:p-8 w-full flex flex-col min-h-0 overflow-y-auto">
+            {connectionErrorMessage && (
+              <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span className="font-medium text-sm">{connectionErrorMessage}</span>
+              </div>
+            )}
+            {children}
+          </main>
+
+          <footer className="shrink-0 border-t border-slate-100 bg-white/80 backdrop-blur-sm px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+              <span className="font-semibold text-slate-500">Inspect-<span className="text-blue-500">able</span></span>
+              <span className="hidden sm:inline">— Institutional Asset Audit Platform</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="font-mono">v{import.meta.env.VITE_APP_VERSION || '1.0.0'}</span>
+              <span>© {new Date().getFullYear()} Politeknik Kuching Sarawak. All rights reserved.</span>
+            </div>
+          </footer>
+        </div>
+      </div>
+    </div>
+  );
+};

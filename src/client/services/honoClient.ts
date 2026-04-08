@@ -1,5 +1,5 @@
 import { hc } from 'hono/client';
-import type { AppType } from '../src/server';
+import type { AppType } from '../../server';
 
 const getBaseUrl = () => {
   let base = window.location.origin;

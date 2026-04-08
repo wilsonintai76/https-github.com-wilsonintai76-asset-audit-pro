@@ -1,7 +1,7 @@
 // Hono middleware to enforce RBAC policy and certification/COI/cross-audit rules
 import { Context, Next } from 'hono';
 import { RBAC_POLICY, RBACPermission } from './rbacPolicy';
-import { UserRole } from '../../../types';
+import { UserRole } from '@shared/types';
 
 // Helper: check if user has any allowed role
 function hasRole(userRoles: UserRole[], allowed: UserRole[]) {

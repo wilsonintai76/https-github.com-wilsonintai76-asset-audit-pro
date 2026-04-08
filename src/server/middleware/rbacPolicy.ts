@@ -1,6 +1,6 @@
 // RBAC policy for all roles, enforced in backend
 // Source of truth: RBAC_ROLE_MATRIX.md
-import { UserRole } from '../../../types';
+import { UserRole } from '@shared/types';
 
 export type RBACPermission =
   | 'view:overview'
