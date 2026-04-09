@@ -238,7 +238,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   }, [departments, locations, schedules]);
 
   const overallStats = useMemo(() => {
-    const values = Object.values(inspectionStats) as { total: number; inspected: number; uninspected: number; progress: number }[];
+    const values = Object.values(inspectionStats) as { total: number; inspected: number; uninspected: number; progress: number; locations: number }[];
     const total = values.reduce((sum, s) => sum + s.total, 0);
     const inspected = values.reduce((sum, s) => sum + s.inspected, 0);
     return {
