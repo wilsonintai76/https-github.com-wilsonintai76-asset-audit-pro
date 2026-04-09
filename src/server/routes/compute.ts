@@ -962,7 +962,7 @@ compute.post(
   requirePermission('manage:system'),
   async (c) => {
     const db = c.env.DB;
-    const MODEL = '@cf/meta/llama-3.1-8b-instruct';
+    const MODEL = '@cf/meta/llama-3-8b-instruct';
 
     const [deptsRes, usersRes, phasesRes, instKPIsRes, settingRes] = await Promise.all([
       db.prepare('SELECT id, name, total_assets FROM departments WHERE is_exempted = 0').all(),
@@ -1006,47 +1006,91 @@ compute.post(
 Total Certified Auditors: ${certifiedAuditors}
 Total Assets: ${institutionTotalAssets}
 
-Active Units Analysis:
-${activeUnits.length > 40 ? '(Large Dataset: Focusing on high-impact units)' : ''}
-${activeUnits.slice(0, 40).map(d => `- ${d.name}: ${d.total_assets || 0} assets, ${auditorCountByDept[d.id] || 0} auditors`).join('\n')}
+Active Units Analysis (Focusing on Top 20 High-Impact Units):
+${activeUnits.slice(0, 20).map(d => `- ${d.name}: ${d.total_assets || 0} assets, ${auditorCountByDept[d.id] || 0} auditors`).join('\n')}
 
 Rules:
-1. Fragile Unit: < 2 auditors. Recommend consolidation.
+1. Recommendation: Consolidated if < 2 auditors.
 2. Resource Gap: High asset count vs low auditors.
 
-CRITICAL: Return ONLY a raw JSON object. Do not include introductory text.
+CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR AFTER.
 {
-  "score": <0-100>,
+  "score": number,
   "riskLevel": "Low"|"Medium"|"High"|"Critical",
-  "bottlenecks": ["..."],
-  "recommendations": ["..."],
+  "bottlenecks": string[],
+  "recommendations": string[],
   "exemptionRecommendations": [],
   "projections": {}
 }
 `;
 
+    let result: any = null;
     try {
-      const result = await c.env.AI.run(MODEL, {
+      result = await c.env.AI.run(MODEL, {
         messages: [
-          { role: 'system', content: 'You are an Audit Strategy AI. You analyze resource constraints vs goals. Respond with valid JSON only.' },
+          { role: 'system', content: 'You are an Audit Strategy AI. You analyze resource constraints vs goals. Respond with valid JSON only. The "score" field must be an integer from 0 to 100 representing feasibility percentage. Limit "bottlenecks" to top 5 most critical issues.' },
           { role: 'user', content: aiPrompt }
-        ]
-      }) as { response: string };
+        ],
+        max_tokens: 1024
+      });
 
-      // Better JSON extraction: find the first { and last }
-      const text = result.response || '';
-      const start = text.indexOf('{');
-      const end = text.lastIndexOf('}');
-      const rawResponse = result.response || '';
-      const firstBrace = rawResponse.indexOf('{');
-      const lastBrace = rawResponse.lastIndexOf('}');
-      
-      if (firstBrace === -1 || lastBrace === -1) {
-        throw new Error('AI response did not contain a valid JSON block.');
+      // Robust extraction: Handle if result is { response: string }, { result: string }, or raw string
+      let rawResponse = '';
+      if (typeof result === 'string') {
+        rawResponse = result;
+      } else if (result && typeof result === 'object') {
+        // AI models sometimes wrap the answer in 'response' or 'result' fields
+        const obj = result as any;
+        rawResponse = obj.response || obj.result || JSON.stringify(result);
       }
 
-      const jsonStr = rawResponse.substring(firstBrace, lastBrace + 1);
-      return c.json(JSON.parse(jsonStr));
+      // Regex to find the widest possible JSON block {...}
+      let jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+      
+      // If the extracted content itself was a stringified JSON (common in double-wrapped responses), 
+      // try to parse the whole thing first
+      let parsed: any = null;
+      try {
+        // Case 1: The response is already the object we want
+        if (typeof result === 'object' && result.score !== undefined) {
+          parsed = result;
+        } 
+        // Case 2: The response is a string that is perfect JSON
+        else if (jsonMatch) {
+          const extracted = jsonMatch[0];
+          parsed = JSON.parse(extracted);
+          
+          // Re-check for nested 'response' inside the parsed string 
+          // (Handles the {"response": "{\"score\":...}"} case in the user screenshot)
+          if (parsed.response && typeof parsed.response === 'string' && parsed.response.includes('{')) {
+            const nestedMatch = parsed.response.match(/\{[\s\S]*\}/);
+            if (nestedMatch) parsed = JSON.parse(nestedMatch[0]);
+          }
+        }
+      } catch (e) {
+        console.error('Initial parse failed, falling back to regex match');
+      }
+
+      if (!parsed && jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch (e) {
+          throw new Error('AI response did not contain a valid JSON block.');
+        }
+      }
+
+      if (!parsed) {
+        throw new Error('AI response did not contain a valid JSON block.');
+      }
+      
+      // Normalize score to 0-100 range if it comes back as 0-1
+      if (typeof parsed.score === 'number' && parsed.score <= 1 && parsed.score > 0) {
+        parsed.score = Math.round(parsed.score * 100);
+      } else if (typeof parsed.score === 'number') {
+        parsed.score = Math.round(parsed.score);
+      }
+
+      return c.json(parsed);
     } catch (err: any) {
       console.error('AI Feasibility failed:', err);
       return c.json({ 
@@ -1054,7 +1098,8 @@ CRITICAL: Return ONLY a raw JSON object. Do not include introductory text.
         riskLevel: 'System Error', 
         bottlenecks: [`Analysis failed: ${err.message}`], 
         recommendations: ['Check Cloudflare AI quota/binding', 'Ensure all departments have asset data'], 
-        projections: {} 
+        projections: {},
+        rawText: `[Type: ${typeof result}] ` + (typeof result === 'string' ? result : JSON.stringify(result))?.substring(0, 800) || 'No response captured'
       });
     }
   }

@@ -927,18 +927,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                   },
                   feasibilityReport || null,
                   entities,
-                  isSimulatorActive 
-                    ? simulatedPairings 
-                    : permissions.filter(p => p.isActive).map(p => ({ 
-                        auditorDeptId: p.auditor_dept_id, 
-                        targetDeptId: p.target_dept_id, 
-                        isMutual: !!p.is_mutual 
-                      })),
+                  entityPermissions,
                   { approver: 'PENGARAH', supporter: 'TIMBALAN PENGARAH (AKADEMIK) / KETUA UNIT' },
                   auditGroups,
                   departments
                 )}
-                disabled={!isSimulatorActive && permissions.filter(p => p.isActive).length === 0}
+                disabled={entityPermissions.length === 0}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border bg-indigo-50 border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-all active:scale-95 disabled:opacity-50"
                 title={isSimulatorActive ? 'Generate Simulation Report' : 'Print Final Approval Memo'}
               >

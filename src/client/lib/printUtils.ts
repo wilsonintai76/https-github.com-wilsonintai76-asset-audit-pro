@@ -862,21 +862,52 @@ export function printStrategicInspectionPlanApproval(
 ): void {
   const getEntity = (id: string) => entities.find(e => e.id === id);
 
-  const pairingRows = pairings.map((p, i) => {
+  // Consolidate pairings: Group A -> Group B and Group B -> Group A into one row if mutual
+  const processedKeys = new Set<string>();
+  const consolidatedPairings: { auditor: string; target: string; isMutual: boolean; assets: number; targetAssets: number }[] = [];
+
+  pairings.forEach(p => {
+    const key = `${p.auditorEntityId}-${p.targetEntityId}`;
+    const reverseKey = `${p.targetEntityId}-${p.auditorEntityId}`;
+    
+    if (processedKeys.has(key)) return;
+
     const auditor = getEntity(p.auditorEntityId);
     const target = getEntity(p.targetEntityId);
-    return `
-      <tr>
-        <td class="center">${i + 1}</td>
-        <td><strong>${auditor?.name || ''}</strong></td>
-        <td class="center" style="font-size:8pt;color:${p.isMutual ? '#10b981' : '#6366f1'}">
-          ${p.isMutual ? 'MUTUAL / TIMBAL BALAS' : 'ONE-WAY / SOKONGAN'}
-        </td>
-        <td><strong>${target?.name || ''}</strong></td>
-        <td class="right">${fmt(target?.assets || 0)}</td>
-      </tr>
-    `;
-  }).join('');
+
+    // Check if there is a reciprocal pair
+    const isMutual = p.isMutual || pairings.some(other => 
+      other.auditorEntityId === p.targetEntityId && 
+      other.targetEntityId === p.auditorEntityId && 
+      other.isMutual
+    );
+
+    consolidatedPairings.push({
+      auditor: auditor?.name || 'Unknown',
+      target: target?.name || 'Unknown',
+      isMutual: !!p.isMutual,
+      assets: auditor?.assets || 0,
+      targetAssets: target?.assets || 0
+    });
+
+    processedKeys.add(key);
+    if (isMutual) {
+      processedKeys.add(reverseKey);
+    }
+  });
+
+  const pairingRows = consolidatedPairings.map((p, i) => `
+    <tr>
+      <td class="center">${i + 1}</td>
+      <td><strong>${p.auditor}</strong></td>
+      <td class="center" style="font-size:7pt;color:${p.isMutual ? '#059669' : '#4f46e5'}">
+        <div style="font-weight:900;">${p.isMutual ? '↔' : '→'}</div>
+        ${p.isMutual ? 'MUTUAL / TIMBAL BALAS' : 'ONE-WAY / SOKONGAN'}
+      </td>
+      <td><strong>${p.target}</strong></td>
+      <td class="right">${fmt(p.targetAssets)}</td>
+    </tr>
+  `).join('');
 
   // Analysis of Unit Consolidation
   const groupRows = auditGroups.map((g, i) => {
@@ -892,33 +923,47 @@ export function printStrategicInspectionPlanApproval(
     `;
   }).filter(Boolean).join('');
 
-  const bottleneckItems = feasibility?.bottlenecks.map(b => 
-    `<li style="margin-bottom:4pt;">${b}</li>`
-  ).join('') || '<li>Tiada kekangan utama dikenal pasti.</li>';
+  const bottleneckItems = (feasibility?.bottlenecks && feasibility.bottlenecks.length > 0)
+    ? feasibility.bottlenecks.map(b => `<li style="margin-bottom:2pt;">${b}</li>`).join('')
+    : '<li>Tiada kekangan utama dikenal pasti.</li>';
 
-  const recommendationItems = feasibility?.recommendations.map(r => 
-    `<li style="margin-bottom:4pt;color:#1e40af;"><strong>Syor / Recommendation:</strong> ${r}</li>`
-  ).join('') || '<li>Tiada syor khusus dijanakan.</li>';
+  const recommendationItems = (feasibility?.recommendations && feasibility.recommendations.length > 0)
+    ? feasibility.recommendations.map(r => `<li style="margin-bottom:2pt;color:#1e40af;"><strong>Syor / Recommendation:</strong> ${r}</li>`).join('')
+    : '<li>Tiada syor khusus dijanakan.</li>';
 
   const html = `
-<div class="header" style="border-bottom: 3pt solid #111;">
+<style>
+  @media print {
+    .section { break-inside: avoid; margin-bottom: 12pt; }
+    h3 { margin-top: 10pt; margin-bottom: 5pt; font-size: 11pt; border-bottom: 1pt solid #eee; padding-bottom: 2pt; }
+    table { font-size: 8.5pt; margin-bottom: 10pt; }
+    td, th { padding: 4pt 6pt; }
+    .stat-box { padding: 8pt; }
+    .stat-value { font-size: 18pt; }
+  }
+  .section { margin-bottom: 15pt; }
+  .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15pt; margin-top: 10pt; }
+  .stat-box { border: 1pt solid #e2e8f0; border-radius: 12pt; background: #fff; }
+</style>
+
+<div class="header" style="border-bottom: 2pt solid #111; padding-bottom: 5pt;">
   <div style="display:flex;justify-content:space-between;align-items:flex-end;">
     <div style="text-align:left;">
-      <h1 style="font-size:18pt;margin-bottom:0;">MEMORANDUM KELULUSAN STRATEGI AUDIT</h1>
-      <h2 style="font-size:14pt;margin-top:0;color:#475569;font-weight:600;">STRATEGIC AUDIT PLAN APPROVAL MEMORANDUM</h2>
+      <h1 style="font-size:16pt;margin-bottom:0;">MEMORANDUM KELULUSAN STRATEGI AUDIT</h1>
+      <h2 style="font-size:12pt;margin-top:0;color:#475569;font-weight:600;">STRATEGIC AUDIT PLAN APPROVAL MEMORANDUM</h2>
     </div>
     <div style="text-align:right;">
-      <div style="font-weight:900;font-size:14pt;">CONFIDENTIAL / SULIT</div>
+      <div style="font-weight:900;font-size:12pt;">CONFIDENTIAL / SULIT</div>
     </div>
   </div>
 </div>
 
-<div style="margin: 15pt 0; line-height: 1.6;">
-  <table>
-    <tr style="background:none;"><td style="width:100pt;border:none;font-weight:800;">KEPADA / TO:</td><td style="border:none;">${signatures.approver}</td></tr>
-    <tr style="background:none;"><td style="border:none;font-weight:800;">DARIPADA / FROM:</td><td style="border:none;">Urusetia Program Audit Silang Asset / Asset Cross-Audit Secretariat</td></tr>
-    <tr style="background:none;"><td style="border:none;font-weight:800;">TARIKH / DATE:</td><td style="border:none;">${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</td></tr>
-    <tr style="background:none;"><td style="border:none;font-weight:800;">PERKARA / RE:</td><td style="border:none;font-weight:800;text-transform:uppercase;">PERANCANGAN STRATEGIK DAN KPI AUDIT ASET TAHUN ${cycleYear}</td></tr>
+<div style="margin: 10pt 0; line-height: 1.4; font-size: 9.5pt;">
+  <table style="border:none;">
+    <tr style="background:none;"><td style="width:100pt;border:none;font-weight:800;padding:2pt 0;">KEPADA / TO:</td><td style="border:none;padding:2pt 0;">${signatures.approver}</td></tr>
+    <tr style="background:none;"><td style="border:none;font-weight:800;padding:2pt 0;">DARIPADA / FROM:</td><td style="border:none;padding:2pt 0;">Urusetia Program Audit Silang Asset / Asset Cross-Audit Secretariat</td></tr>
+    <tr style="background:none;"><td style="border:none;font-weight:800;padding:2pt 0;">TARIKH / DATE:</td><td style="border:none;padding:2pt 0;">${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</td></tr>
+    <tr style="background:none;"><td style="border:none;font-weight:800;padding:2pt 0;">PERKARA / RE:</td><td style="border:none;font-weight:800;text-transform:uppercase;padding:2pt 0;">PERANCANGAN STRATEGIK DAN KPI AUDIT ASET TAHUN ${cycleYear}</td></tr>
   </table>
 </div>
 
@@ -928,20 +973,20 @@ export function printStrategicInspectionPlanApproval(
   <h3>1. RINGKASAN EKSEKUTIF / EXECUTIVE SUMMARY</h3>
   <div class="stat-row">
     <div class="stat-box" style="border-left: 4pt solid #6366f1;">
-      <div class="stat-label">SKOR KEBOLEHLAKSANAAN / FEASIBILITY SCORE</div>
-      <div class="stat-value">${feasibility?.score || 0}%</div>
-      <div class="stat-sub">Risk Level: ${feasibility?.riskLevel || 'Unknown'}</div>
+      <div class="stat-label" style="font-size:8pt;font-weight:800;color:#64748b;">SKOR KEBOLEHLAKSANAAN / FEASIBILITY SCORE</div>
+      <div class="stat-value" style="font-size:20pt;font-weight:900;color:#1e293b;margin:2pt 0;">${feasibility?.score || 0}%</div>
+      <div class="stat-sub" style="font-size:8pt;font-weight:700;color:#6366f1;">Risk Level: ${feasibility?.riskLevel || 'Unknown'}</div>
     </div>
     <div class="stat-box" style="border-left: 4pt solid #10b981;">
-      <div class="stat-label">SASARAN INSTITUSI / INSTITUTIONAL TARGET</div>
-      <div class="stat-value">${globalStats.targetPercentage}%</div>
-      <div class="stat-sub">${fmt(globalStats.targetAssets)} Assets Total</div>
+      <div class="stat-label" style="font-size:8pt;font-weight:800;color:#64748b;">SASARAN INSTITUSI / INSTITUTIONAL TARGET</div>
+      <div class="stat-value" style="font-size:20pt;font-weight:900;color:#1e293b;margin:2pt 0;">${globalStats.targetPercentage}%</div>
+      <div class="stat-sub" style="font-size:8pt;font-weight:700;color:#059669;">${fmt(globalStats.targetAssets)} Assets Total</div>
     </div>
   </div>
   
-  <div style="margin-top:15pt;padding:10pt;background:#f8fafc;border:1pt solid #e2e8f0;border-radius:8pt;">
-    <h4 style="margin:0 0 5pt 0;font-size:9pt;text-transform:uppercase;color:#475569;">Syor AI / AI Recommendations:</h4>
-    <ul style="padding-left:15pt;font-size:8.5pt;margin:0;">
+  <div style="margin-top:10pt;padding:8pt;background:#f8fafc;border:1pt solid #e2e8f0;border-radius:10pt;">
+    <h4 style="margin:0 0 4pt 0;font-size:8.5pt;text-transform:uppercase;color:#475569;">Syor AI / AI Recommendations:</h4>
+    <ul style="padding-left:15pt;font-size:8pt;margin:0;">
       ${recommendationItems}
     </ul>
   </div>
@@ -949,10 +994,10 @@ export function printStrategicInspectionPlanApproval(
 
 <div class="section">
   <h3>2. KEKANGAN DAN GABUNGAN UNIT / CONSTRAINTS & UNIT CONSOLIDATION</h3>
-  <p style="font-size:9pt;margin-bottom:8pt;">Analisis sumber telah mengenal pasti kekangan berikut dan mencadangkan penggabungan unit (Unit Consolidation) untuk meningkatkan kecekapan:</p>
+  <p style="font-size:8.5pt;margin-bottom:6pt;">Analisis sumber telah mengenal pasti kekangan berikut dan mencadangkan penggabungan unit untuk meningkatkan kecekapan:</p>
   
-  <div style="margin-bottom:15pt;">
-    <h4 style="font-size:9pt;margin-bottom:5pt;">Jadual Penggabungan Unit / Consolidation Table:</h4>
+  <div style="margin-bottom:10pt;">
+    <h4 style="font-size:8.5pt;margin-bottom:4pt;">Jadual Penggabungan Unit / Consolidation Table:</h4>
     <table>
       <thead>
         <tr>
@@ -968,46 +1013,58 @@ export function printStrategicInspectionPlanApproval(
     </table>
   </div>
 
-  <h4 style="font-size:9pt;margin-bottom:5pt;">Analisis Kekangan / Bottleneck Analysis:</h4>
-  <ul style="padding-left:18pt;font-size:9pt;margin-top:0;">
+  <h4 style="font-size:8.5pt;margin-bottom:4pt;">Analisis Kekangan / Bottleneck Analysis:</h4>
+  <ul style="padding-left:18pt;font-size:8.5pt;margin-top:0;">
     ${bottleneckItems}
   </ul>
 </div>
 
-<div class="page-break"></div>
-
 <div class="section">
   <h3>3. STRATEGI PEMADANAN AUDIT / STRATEGIC AUDIT PAIRING</h3>
-  <p style="font-size:9pt;margin-bottom:8pt;">Strategi pemadanan berikut telah dirangka untuk memastikan integriti audit dan mengelakkan sebarang konflik kepentingan:</p>
+  <p style="font-size:8.5pt;margin-bottom:6pt;">Strategi pemadanan telah diringkaskan untuk keberkesanan (Mutual pairings are consolidated):</p>
   <table>
     <thead>
       <tr>
         <th style="width:30pt;" class="center">Bil</th>
-        <th>Unit Pemeriksa / Inspecting Unit</th>
-        <th class="center" style="width:100pt;">Mod / Mode</th>
-        <th>Unit Sasaran / Target Unit</th>
-        <th class="right">Aset / Assets</th>
+        <th style="text-align:left;">ENTITI PEMERIKSA / INSPECTOR</th>
+        <th class="center" style="width:110pt;">MOD / DIRECTION</th>
+        <th style="text-align:left;">ENTITI SASARAN / TARGET</th>
       </tr>
     </thead>
     <tbody>
-      ${pairingRows}
+      ${consolidatedPairings.map((p, i) => `
+        <tr>
+          <td class="center">${i + 1}</td>
+          <td>
+            <div style="font-weight:800;font-size:9pt;">${p.auditor}</div>
+            <div style="font-size:7.5pt;color:#64748b;font-weight:600;margin-top:1pt;">${fmt(p.assets)} ASSETS</div>
+          </td>
+          <td class="center" style="font-size:7pt;color:${p.isMutual ? '#10b981' : '#4f46e5'}">
+            <div style="font-weight:900;font-size:12pt;line-height:1;margin-bottom:2pt;">${p.isMutual ? '↔' : '→'}</div>
+            <div style="font-weight:700;letter-spacing:0.5pt;">${p.isMutual ? 'MUTUAL / TIMBAL BALAS' : 'ONE-WAY / SOKONGAN'}</div>
+          </td>
+          <td>
+            <div style="font-weight:800;font-size:9pt;">${p.target}</div>
+            <div style="font-size:7.5pt;color:#64748b;font-weight:600;margin-top:1pt;">${fmt(p.targetAssets)} ASSETS</div>
+          </td>
+        </tr>
+      `).join('')}
     </tbody>
   </table>
 </div>
 
-<div class="section" style="margin-top:20pt;background:#fff7ed;padding:15pt;border:1pt solid #ffedd5;border-radius:12pt;">
-  <h3 style="margin-top:0;color:#9a3412;">4. PROTOKOL INTEGRITI DAN KEPATUHAN / INTEGRITY PROTOCOLS</h3>
-  <p style="font-size:9pt;margin-bottom:0;color:#9a3412;">
-    <strong>KAWALAN KESELAMATAN:</strong> Sistem telah mengunci tugasan untuk mengelakkan "Self-Audit" (Pemeriksaan Unit Sendiri).<br>
-    <strong>KONFLIK KEPETINGAN:</strong> Mana-mana Pegawai yang telah dilantik sebagai Penyelia Lokasi (Site Supervisor) adalah <strong>TIDAK DIBENARKAN</strong> secara mutlak untuk menjadi Pemeriksa bagi lokasi tersebut.<br>
-    <strong>SENSITIVITI SOSIAL:</strong> Syor AI telah mengambil kira sensitiviti jantina bagi lokasi khas (mis: Kolej Kediaman Siswi) mengikut dasar keselamatan dan etika pemeriksaan institusi.
+<div class="section" style="margin-top:15pt;background:#fff7ed;padding:12pt;border:1pt solid #ffedd5;border-radius:10pt;">
+  <h3 style="margin-top:0;color:#9a3412;border:none;">4. PROTOKOL INTEGRITI DAN KEPATUHAN / INTEGRITY PROTOCOLS</h3>
+  <p style="font-size:8.5pt;margin-bottom:0;color:#9a3412;">
+    <strong>KAWALAN KESELAMATAN:</strong> Sistem telah mengunci tugasan untuk mengelakkan "Self-Audit".<br>
+    <strong>KONFLIK KEPETINGAN:</strong> Site Supervisor <strong>TIDAK DIBENARKAN</strong> secara mutlak untuk menjadi Pemeriksa bagi lokasi tersebut.<br>
+    <strong>SENSITIVITI SOSIAL:</strong> Syor AI telah mengambil kira sensitiviti jantina bagi lokasi khas (mis: Kolej Kediaman Siswi).
   </p>
 </div>
 
 ${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.length > 0 ? `
 <div class="section">
-  <h3>6. CADANGAN PENGECUALIAN POLISI (EXEMPTIONS) / PROPOSED POLICY EXCEPTIONS</h3>
-  <p style="font-size:9pt;margin-bottom:8pt;">Berdasarkan kepadatan aset vs ketersediaan pegawai, unit-unit di bawah dicadangkan untuk <strong>Pengecualian Pemeriksaan Silang (Self-Audit)</strong> dengan justifikasi berikut:</p>
+  <h3>6. CADANGAN PENGECUALIAN POLISI / PROPOSED POLICY EXCEPTIONS</h3>
   <table>
     <thead>
       <tr>
@@ -1031,51 +1088,49 @@ ${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.
 
 <div class="section">
   <h3>${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.length > 0 ? '7' : '6'}. PERAKUAN DAN KELULUSAN / RECOMMENDATION AND APPROVAL</h3>
-  <div style="margin-top:20pt;display:grid;grid-template-columns: 1fr 1fr; gap:30pt;">
+  <div style="margin-top:10pt;display:grid;grid-template-columns: 1fr 1fr; gap:20pt;">
     
-    <div style="border:1pt solid #cbd5e1;padding:15pt;border-radius:10pt;background:#f8fafc;">
-      <p style="font-weight:800;margin-bottom:10pt;color:#1e293b;">DISOKONG OLEH / SUPPORTED BY:</p>
-      <div style="height:50pt;border-bottom:1pt dashed #94a3b8;margin-bottom:10pt;"></div>
+    <div style="border:1pt solid #cbd5e1;padding:12pt;border-radius:10pt;background:#f8fafc;">
+      <p style="font-weight:800;margin-bottom:8pt;color:#1e293b;font-size:9pt;">DISOKONG OLEH / SUPPORTED BY:</p>
+      <div style="height:40pt;border-bottom:1pt dashed #94a3b8;margin-bottom:8pt;"></div>
       <p style="font-weight:800;font-size:10pt;">(${signatures.supporter})</p>
-      <p style="font-size:8pt;color:#64748b;margin-top:2pt;">Timbalan Pengarah Sokongan Akademik / Ketua Unit</p>
-      <p style="font-size:8pt;color:#64748b;margin-top:10pt;">Tarikh / Date: .......................................</p>
+      <p style="font-size:7.5pt;color:#64748b;margin-top:2pt;">Ketua Unit / Timbalan Pengarah</p>
+      <p style="font-size:7.5pt;color:#64748b;margin-top:8pt;">Tarikh / Date: .......................................</p>
     </div>
 
-    <div style="border:2pt solid #1e293b;padding:15pt;border-radius:10pt;">
-      <p style="font-weight:800;margin-bottom:10pt;color:#1e293b;">KEPUTUSAN PENGARAH / DIRECTOR'S DECISION:</p>
+    <div style="border:2pt solid #1e293b;padding:12pt;border-radius:10pt;">
+      <p style="font-weight:800;margin-bottom:8pt;color:#1e293b;font-size:9pt;">KEPUTUSAN PENGARAH / DIRECTOR'S DECISION:</p>
       
-      <div style="margin: 15pt 0; space-y: 10pt;">
-        <div style="display:flex;align-items:center;gap:10pt;margin-bottom:8pt;">
-          <div style="width:15pt;height:15pt;border:1.5pt solid #1e293b;border-radius:3pt;"></div>
-          <span style="font-size:9pt;font-weight:700;">LULUS / APPROVED</span>
+      <div style="margin: 10pt 0;">
+        <div style="display:flex;align-items:center;gap:8pt;margin-bottom:6pt;">
+          <div style="width:12pt;height:12pt;border:1.5pt solid #1e293b;border-radius:3pt;"></div>
+          <span style="font-size:8.5pt;font-weight:700;">LULUS / APPROVED</span>
         </div>
-        <div style="display:flex;align-items:center;gap:10pt;margin-bottom:8pt;">
-          <div style="width:15pt;height:15pt;border:1.5pt solid #1e293b;border-radius:3pt;"></div>
-          <span style="font-size:9pt;font-weight:700;">PINDAAN DIPERLUKAN / AMENDMENT REQUIRED</span>
+        <div style="display:flex;align-items:center;gap:8pt;margin-bottom:6pt;">
+          <div style="width:12pt;height:12pt;border:1.5pt solid #1e293b;border-radius:3pt;"></div>
+          <span style="font-size:8.5pt;font-weight:700;">PINDAAN / AMENDMENT</span>
         </div>
-        <div style="display:flex;align-items:center;gap:10pt;">
-          <div style="width:15pt;height:15pt;border:1.5pt solid #1e293b;border-radius:3pt;"></div>
-          <span style="font-size:9pt;font-weight:700;">TOLAK / REJECTED</span>
+        <div style="display:flex;align-items:center;gap:8pt;">
+          <div style="width:12pt;height:12pt;border:1.5pt solid #1e293b;border-radius:3pt;"></div>
+          <span style="font-size:8.5pt;font-weight:700;">TOLAK / REJECTED</span>
         </div>
       </div>
 
-      <div style="height:35pt;border-bottom:1pt dashed #94a3b8;margin-bottom:10pt;"></div>
+      <div style="height:30pt;border-bottom:1pt dashed #94a3b8;margin-bottom:8pt;"></div>
       <p style="font-weight:800;font-size:10pt;">(${signatures.approver})</p>
-      <p style="font-size:8pt;color:#64748b;margin-top:2pt;">Pengarah</p>
-      <p style="font-size:8pt;color:#64748b;margin-top:10pt;">Tarikh / Date: .......................................</p>
+      <p style="font-size:7.5pt;color:#64748b;margin-top:2pt;">Pengarah</p>
     </div>
 
   </div>
 
-  <div style="margin-top:20pt; border: 1pt solid #cbd5e1; border-radius:10pt; padding:15pt;">
-    <h4 style="margin:0 0 10pt 0;font-size:9pt;text-transform:uppercase;">Catatan / Comments:</h4>
-    <div style="height:80pt;"></div>
+  <div style="margin-top:15pt; border: 1pt solid #cbd5e1; border-radius:10pt; padding:10pt;">
+    <h4 style="margin:0 0 6pt 0;font-size:8.5pt;text-transform:uppercase;">Catatan / Comments:</h4>
+    <div style="height:60pt;"></div>
   </div>
 </div>
 
-<div class="footer" style="margin-top:30pt;text-align:center;font-size:8pt;color:#94a3b8;border-top:1pt solid #e2e8f0;padding-top:10pt;">
+<div class="footer" style="margin-top:20pt;text-align:center;font-size:7.5pt;color:#94a3b8;border-top:1pt solid #e2e8f0;padding-top:8pt;">
   Dokumen ini dijanakan secara digital oleh Sistem <strong>Inspect-able</strong> AI Strategy Engine.<br>
-  <em>This document is digitally generated by Inspect-able AI Strategy Engine.</em>
 </div>
   `;
 

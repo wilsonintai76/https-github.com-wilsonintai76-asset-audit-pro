@@ -582,7 +582,16 @@ export const useAppActions = (props: AppActionsProps) => {
   };
 
   const handleRunStrategicPairing = async (payload: any) => {
-    return await gateway.generateStrategicPairings(payload);
+    try {
+      const res = await gateway.generateStrategicPairings(payload);
+      if (res && (props as any).setFeasibilityReport) {
+        (props as any).setFeasibilityReport(res);
+      }
+      return res;
+    } catch (e) {
+      showError(e);
+      throw e;
+    }
   };
 
   const handleSetDeptTotalsFromMapping = async () => {
