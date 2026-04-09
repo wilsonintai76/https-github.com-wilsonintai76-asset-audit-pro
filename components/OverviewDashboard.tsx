@@ -209,19 +209,19 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   }, [phases]);
 
   const inspectionStats = useMemo(() => {
-    const stats: Record<string, { total: number; inspected: number; uninspected: number; progress: number }> = {};
-    
+    const stats: Record<string, { total: number; inspected: number; uninspected: number; progress: number; locations: number }> = {};
+
     departments.forEach(dept => {
       const deptLocs = locations.filter(l => l.departmentId === dept.id && l.isActive);
       const total = deptLocs.reduce((sum, l) => sum + (l.totalAssets || 0), 0);
-      
+
       const inspected = deptLocs.reduce((sum, l) => {
         const isCompleted = schedules.some(s => s.locationId === l.id && s.status === 'Completed');
         return sum + (isCompleted ? (l.totalAssets || 0) : 0);
       }, 0);
 
       const uninspected = deptLocs.reduce((sum, l) => sum + (l.uninspectedAssetCount || 0), 0);
-      
+
       // Use explicit uninspected count if available (>0), otherwise fallback to (total - inspected)
       const finalUninspected = uninspected > 0 ? uninspected : Math.max(0, total - inspected);
 
@@ -229,7 +229,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         total,
         inspected,
         uninspected: finalUninspected,
-        progress: total > 0 ? (inspected / total) * 100 : 0
+        progress: total > 0 ? (inspected / total) * 100 : 0,
+        locations: deptLocs.length
       };
     });
 
@@ -376,12 +377,12 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                 <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
                 <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Total Assets</th>
                 <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-emerald-600">Inspected</th>
-                <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-rose-500">Uninspected</th>
+                <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-slate-500">Locations</th>
                 <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Progress (%)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(Object.entries(inspectionStats) as [string, { total: number; inspected: number; uninspected: number; progress: number }][]).map(([deptName, stats]) => (
+              {(Object.entries(inspectionStats) as [string, { total: number; inspected: number; uninspected: number; progress: number; locations: number }][]).map(([deptName, stats]) => (
                 <tr key={deptName} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-5 px-8">
                     <span className="text-sm font-bold text-slate-800">{deptName}</span>
@@ -393,7 +394,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                     <span className="text-sm font-bold text-emerald-600">{stats.inspected.toLocaleString()}</span>
                   </td>
                   <td className="py-5 px-6 text-center">
-                    <span className="text-sm font-bold text-rose-500">{stats.uninspected.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-slate-700">{stats.locations}</span>
                   </td>
                   <td className="py-5 px-8">
                     <div className="flex items-center justify-end gap-3">

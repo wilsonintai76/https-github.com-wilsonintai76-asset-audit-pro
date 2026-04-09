@@ -1,6 +1,14 @@
 
 import { AuditSchedule, User, AppNotification, Department, Location } from './types';
 
+// ─── System Exclusions ─────────────────────────────────────────────
+// Software Development is a superadmin internal department — excluded from
+// consolidation, pairing, printing, and institutional counts.
+export const SOFTWARE_DEV_DEPT_NAME = 'Software Development';
+
+// Superadmin email — excluded from auditor counts, pairing, and printing.
+export const SUPERADMIN_EMAIL = 'admin@poliku.edu.my';
+
 // New Department List based on user provided data
 export const INITIAL_DEPARTMENTS: Omit<Department, 'id'>[] = [
   { name: 'Unit Kamsis', abbr: 'KAMSIS', headOfDeptId: 'dummy-user-id', description: 'Student Accommodation Unit', auditGroupId: null },

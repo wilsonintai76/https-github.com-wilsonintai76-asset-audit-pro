@@ -25,6 +25,7 @@ interface DepartmentManagementProps {
 
 export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   departments,
+  locations,
   onAdd,
   onUpdate,
   onDelete,
@@ -38,6 +39,16 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   const { rbacMatrix } = useRBAC();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
+
+  const deptLocationCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    (locations || []).forEach(loc => {
+      if (loc.departmentId) {
+        counts[loc.departmentId] = (counts[loc.departmentId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [locations]);
 
   const canManage = (() => {
     if (!rbacMatrix) return isAdmin;
@@ -70,13 +81,14 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     const rows = departments.map(dept => {
       const headUser = users.find(u => u.id === dept.headOfDeptId);
       const groupName = auditGroups.find(g => g.id === dept.auditGroupId)?.name || '—';
+      const locCount = (locations || []).filter(l => l.departmentId === dept.id).length;
       return `
         <tr>
           <td><strong>${dept.abbr}</strong><br/><span class="sub">${dept.name}</span></td>
           <td>${headUser ? headUser.name : '<span class="na">Not Assigned</span>'}</td>
           <td class="center">${dept.auditorCount || 0}</td>
           <td class="center">${(dept.totalAssets || 0).toLocaleString()}</td>
-          <td class="center">${(dept.uninspectedAssetCount || 0) > 0 ? `<span class="badge-red">${(dept.uninspectedAssetCount || 0).toLocaleString()}</span>` : '—'}</td>
+          <td class="center">${locCount || '—'}</td>
           <td>${groupName !== '—' ? `<span class="badge-blue">${groupName}</span>` : '—'}</td>
           <td class="center">${dept.isExempted ? '<span class="badge-red">Exempted</span>' : '<span class="badge-green">Included</span>'}</td>
         </tr>`;
@@ -140,7 +152,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
         <th>Head of Department</th>
         <th class="center">Auditors</th>
         <th class="center">Total Assets</th>
-        <th class="center">Uninspected</th>
+        <th class="center">Locations</th>
         <th>Audit Group</th>
         <th class="center">Cross-Audit</th>
       </tr>
@@ -222,7 +234,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Head of Department</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Auditors</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Asset</th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Uninspected</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Locations</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Tier & Group</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-left">Actions</th>
               </tr>
@@ -280,16 +292,10 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                         {(dept.totalAssets || 0).toLocaleString()}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        {(dept.uninspectedAssetCount || 0) > 0 ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-100 text-rose-600 text-xs font-bold">
-                            {(dept.uninspectedAssetCount || 0).toLocaleString()}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 text-xs font-medium">—</span>
-                        )}
-                      </div>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span className="font-bold text-slate-900 text-sm">
+                        {deptLocationCounts[dept.id] || 0}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 flex-wrap">
