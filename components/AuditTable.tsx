@@ -3,30 +3,31 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase, Building as BuildingType } from '../types';
 import { useRBAC } from '../contexts/RBACContext';
 import { AuditReportModal } from './AuditReportModal';
-import { 
-  ShieldOff, 
-  Loader2, 
-  X, 
-  ChevronDown, 
-  Building, 
+import {
+  ShieldOff,
+  Loader2,
+  X,
+  ChevronDown,
+  Building,
   Layers,
-  UserCheck, 
-  Phone, 
-  Lock, 
+  UserCheck,
+  Phone,
+  Lock,
   Unlock,
   AlertTriangle,
-  RotateCcw, 
-  FileText, 
+  RotateCcw,
+  FileText,
   Search,
   Filter,
   Calendar,
   Zap,
-  Package
+  Package,
+  FileSpreadsheet
 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
 import { PrintButton } from './PrintButton';
-import { printInspectionSchedule } from '../lib/printUtils';
+import { printInspectionSchedule, exportInspectionSchedule } from '../lib/printUtils';
 
 interface AuditTableProps {
   schedules: AuditSchedule[];
@@ -419,6 +420,14 @@ export const AuditTable: React.FC<AuditTableProps> = ({
           label="Print"
           title="Print Inspection Schedule"
         />
+        <button
+          onClick={() => exportInspectionSchedule(displaySchedules, allDepartments, allLocations, users, auditPhases, selectedDept)}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+          title="Export to Excel (one sheet per department)"
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          Export Excel
+        </button>
         {canAutoAssign && (
           <button
             onClick={handleAutoAssign}
