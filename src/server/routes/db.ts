@@ -402,7 +402,13 @@ db.post('/users', rbacGuard('edit:team'), zValidator('json', userSchema), async 
   }
 
   const id = newUser.id || crypto.randomUUID();
-  
+
+  // Check for duplicate email (case-insensitive)
+  const existing = await c.env.DB.prepare('SELECT id, name FROM users WHERE LOWER(email) = ?').bind(newUser.email.toLowerCase()).first();
+  if (existing) {
+    return c.json({ error: `Email ${newUser.email} is already registered to ${(existing as any).name}.` }, 409);
+  }
+
   // 1. Calculate Binding Roles if not explicitly provided
   let roles = newUser.roles;
   if (!roles || roles.length === 0) {

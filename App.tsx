@@ -1957,9 +1957,11 @@ const App: React.FC = () => {
 
   const handleAddMember = async (user: User) => {
     try {
-      const emailExists = users.some(u => u.email.toLowerCase() === user.email.toLowerCase());
+      // Fetch fresh users list to check against server state (not just local cache)
+      const freshUsers = await gateway.getUsers();
+      const emailExists = freshUsers.some(u => u.email.toLowerCase() === user.email.toLowerCase());
       if (emailExists) {
-        showToast('This email is already registered.', 'error');
+        customAlert(`The email ${user.email} is already registered to another team member.`);
         return;
       }
       await gateway.addUser(user);
