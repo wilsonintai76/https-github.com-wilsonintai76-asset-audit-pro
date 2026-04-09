@@ -874,14 +874,13 @@ const App: React.FC = () => {
     }
   };
 
-  const handleBulkActivateStaff = async (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => {
+  const handleBulkActivateStaff = async (entries: { name: string; email: string }[]) => {
     try {
       const { createdCount, skippedCount } = await bulkManagement.activateStaff(
         entries,
-        users,
-        departments
+        users
       );
-      
+
       const updatedUsers = await gateway.getUsers();
       setUsers(updatedUsers);
       showToast(`Staff import complete: ${createdCount} created, ${skippedCount} duplicates skipped.`);
