@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '@shared/types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '../types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';
@@ -24,10 +25,11 @@ interface OverviewDashboardProps {
   currentUser: User;
   auditGroups?: AuditGroup[];
   maxAssetsPerDay?: number;
+  maxLocationsPerDay?: number;
   institutionKPIs?: InstitutionKPITarget[];
   buildings?: Building[];
   kpiTierTargets?: KPITierTarget[];
-  users: User[];
+  strictAuditorRule?: boolean;
 }
 
 function BarFill({ pct, className }: { pct: number; className: string }) {
@@ -46,7 +48,7 @@ function HeightFill({ pct, className }: { pct: number; className: string }) {
   return <div ref={ref} className={`h-(--h) ${className}`} />;
 }
 
-export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
+export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   schedules,
   config,
   onUpdateConfig,
@@ -57,10 +59,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   currentUser,
   auditGroups = [],
   maxAssetsPerDay = 500,
+  maxLocationsPerDay = 5,
   institutionKPIs = [],
   buildings = [],
   kpiTierTargets = [],
-  users = []
+  strictAuditorRule = false,
 }) => {
   const { t } = useLanguage();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
@@ -161,28 +164,15 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   const activeEntities = useMemo(() => {
     const groupedDepts: Record<string, Department[]> = {};
     
-    // Helper to count auditors in a department live from users list
-    const getAuditorCount = (deptId: string) => {
-      const today = new Date().toISOString().split('T')[0];
-      return users.filter(u => 
-        u.departmentId === deptId && 
-        u.status === 'Active' && 
-        u.certificationExpiry && 
-        u.certificationExpiry >= today
-      ).length;
-    };
-
     departments.filter(d => !d.isExempted).forEach(dept => {
       const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
-      groupedDepts[key].push({
-        ...dept,
-        auditorCount: getAuditorCount(dept.id) // Override with live count
-      });
+      groupedDepts[key].push(dept);
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
       const isUnassigned = groupId.startsWith('unassigned_');
+      const deptIds = depts.map(d => d.id);
       const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       
@@ -201,7 +191,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         members: depts
       };
     }).sort((a, b) => b.assets - a.assets);
-  }, [departments, auditGroups, users]); // Added users to dependencies
+  }, [departments, auditGroups, schedules]);
 
   const overallTotalAssets = useMemo(() => {
      return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
@@ -218,54 +208,46 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     });
   }, [phases]);
 
-  const hasUploadedUninspectedData = useMemo(() => 
-    locations.some(l => (l.uninspectedAssetCount ?? 0) > 0),
-    [locations]
-  );
-
   const inspectionStats = useMemo(() => {
-    const stats: Record<string, { total: number; inspected: number; uninspected: number; progress: number }> = {};
-    
+    const stats: Record<string, { total: number; inspected: number; uninspected: number; progress: number; locations: number }> = {};
+
     departments.forEach(dept => {
       const deptLocs = locations.filter(l => l.departmentId === dept.id && l.isActive);
       const total = deptLocs.reduce((sum, l) => sum + (l.totalAssets || 0), 0);
-      
+
       const inspected = deptLocs.reduce((sum, l) => {
         const isCompleted = schedules.some(s => s.locationId === l.id && s.status === 'Completed');
         return sum + (isCompleted ? (l.totalAssets || 0) : 0);
       }, 0);
 
       const uninspected = deptLocs.reduce((sum, l) => sum + (l.uninspectedAssetCount || 0), 0);
-      
-      // If user has uploaded uninspected data, use it. 
-      // Otherwise, ONLY show uninspected if they haven't uploaded the file yet but we want to show the remainder?
-      // User says: "i not yet upload uninspected file but i already show" -> they don't want the fallback.
-      const finalUninspected = hasUploadedUninspectedData ? uninspected : 0;
+
+      // Use explicit uninspected count if available (>0), otherwise fallback to (total - inspected)
+      const finalUninspected = uninspected > 0 ? uninspected : Math.max(0, total - inspected);
 
       stats[dept.name] = {
         total,
         inspected,
         uninspected: finalUninspected,
-        progress: total > 0 ? (inspected / total) * 100 : 0
+        progress: total > 0 ? (inspected / total) * 100 : 0,
+        locations: deptLocs.length
       };
     });
 
     return stats;
-  }, [departments, locations, schedules, hasUploadedUninspectedData]);
+  }, [departments, locations, schedules]);
 
   const overallStats = useMemo(() => {
-    const values = Object.values(inspectionStats) as { total: number; inspected: number; uninspected: number; progress: number }[];
+    const values = Object.values(inspectionStats) as { total: number; inspected: number; uninspected: number; progress: number; locations: number }[];
     const total = values.reduce((sum, s) => sum + s.total, 0);
     const inspected = values.reduce((sum, s) => sum + s.inspected, 0);
-    const uninspected = values.reduce((sum, s) => sum + s.uninspected, 0);
-    
     return {
       total,
       inspected,
-      uninspected: hasUploadedUninspectedData ? uninspected : 0,
+      uninspected: total - inspected,
       progress: total > 0 ? (inspected / total) * 100 : 0
     };
-  }, [inspectionStats, hasUploadedUninspectedData]);
+  }, [inspectionStats]);
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 pb-20">
@@ -395,12 +377,12 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                 <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
                 <th className="py-5 px-6 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Total Assets</th>
                 <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-emerald-600">Inspected</th>
-                <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-rose-500">Uninspected</th>
+                <th className="py-5 px-6 text-[10px] font-black uppercase tracking-widest text-center text-slate-500">Locations</th>
                 <th className="py-5 px-8 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Progress (%)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(Object.entries(inspectionStats) as [string, { total: number; inspected: number; uninspected: number; progress: number }][]).map(([deptName, stats]) => (
+              {(Object.entries(inspectionStats) as [string, { total: number; inspected: number; uninspected: number; progress: number; locations: number }][]).map(([deptName, stats]) => (
                 <tr key={deptName} className="hover:bg-slate-50/50 transition-colors">
                   <td className="py-5 px-8">
                     <span className="text-sm font-bold text-slate-800">{deptName}</span>
@@ -412,7 +394,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
                     <span className="text-sm font-bold text-emerald-600">{stats.inspected.toLocaleString()}</span>
                   </td>
                   <td className="py-5 px-6 text-center">
-                    <span className="text-sm font-bold text-rose-500">{stats.uninspected.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-slate-700">{stats.locations}</span>
                   </td>
                   <td className="py-5 px-8">
                     <div className="flex items-center justify-end gap-3">
@@ -510,13 +492,15 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
 
         <div className="space-y-8">
-            <ActiveEntitiesList 
-              entities={activeEntities} 
+            <ActiveEntitiesList
+              entities={activeEntities}
               selectedEntity=""
               onSelect={() => {}}
               megaTargetThreshold={3000}
-              minAuditors={2}
+              minAuditors={strictAuditorRule ? 2 : 1}
               overallTotal={overallTotalAssets}
+              threshold={maxAssetsPerDay}
+              strictAuditorRule={strictAuditorRule}
             />
           
           {config.showUpcoming && (

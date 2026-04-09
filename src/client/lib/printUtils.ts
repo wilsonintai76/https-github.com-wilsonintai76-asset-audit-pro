@@ -361,6 +361,7 @@ interface GroupedDept {
   name: string;
   abbr?: string;
   totalAssets?: number;
+  auditorCount?: number;
 }
 
 interface AuditGroupData {
@@ -369,6 +370,7 @@ interface AuditGroupData {
   color?: string;
   departments: GroupedDept[];
   subTotal: number;
+  subAuditors: number;
 }
 
 interface GroupedData {
@@ -380,18 +382,23 @@ export function printUnitConsolidation(
   groupedData: GroupedData,
   overallTotal: number,
 ): void {
+  const overallAuditors = groupedData.groups.reduce((s, g) => s + g.subAuditors, 0)
+    + groupedData.unassignedDepts.reduce((s, d) => s + (d.auditorCount || 0), 0);
+
   const groupRows = groupedData.groups.map(group => {
     const deptRows = group.departments.map(d =>
       `<tr class="subrow">
         <td style="padding-left:20pt;">${d.name}</td>
         <td>${d.abbr || ''}</td>
         <td class="right">${fmt(d.totalAssets || 0)}</td>
+        <td class="right">${d.auditorCount || 0}</td>
       </tr>`
     ).join('');
     return `
       <tr style="background:#eff6ff;" class="no-break">
         <td colspan="2"><strong>${group.name}</strong></td>
         <td class="right"><strong>${fmt(group.subTotal)}</strong></td>
+        <td class="right"><strong>${group.subAuditors}</strong></td>
       </tr>
       ${deptRows}`;
   }).join('');
@@ -400,12 +407,14 @@ export function printUnitConsolidation(
     ? `<tr style="background:#fef9c3;" class="no-break">
         <td colspan="2"><strong>Unassigned (Standalone Units)</strong></td>
         <td class="right"><strong>${fmt(groupedData.unassignedDepts.reduce((s, d) => s + (d.totalAssets || 0), 0))}</strong></td>
+        <td class="right"><strong>${groupedData.unassignedDepts.reduce((s, d) => s + (d.auditorCount || 0), 0)}</strong></td>
       </tr>` +
       groupedData.unassignedDepts.map(d =>
         `<tr class="subrow">
           <td style="padding-left:20pt;">${d.name}</td>
           <td>${d.abbr || ''}</td>
           <td class="right">${fmt(d.totalAssets || 0)}</td>
+          <td class="right">${d.auditorCount || 0}</td>
         </tr>`
       ).join('')
     : '';
@@ -429,6 +438,10 @@ export function printUnitConsolidation(
     <div class="stat-label">Institution Total Assets</div>
     <div class="stat-value">${fmt(overallTotal)}</div>
   </div>
+  <div class="stat-box">
+    <div class="stat-label">Total Auditors (Certified)</div>
+    <div class="stat-value">${overallAuditors}</div>
+  </div>
 </div>
 
 <table>
@@ -437,6 +450,7 @@ export function printUnitConsolidation(
       <th>Group / Department</th>
       <th>Abbr.</th>
       <th class="right">Assets</th>
+      <th class="right">Auditors</th>
     </tr>
   </thead>
   <tbody>
@@ -445,6 +459,7 @@ export function printUnitConsolidation(
     <tr style="border-top:2pt solid #111;">
       <td colspan="2"><strong>Grand Total</strong></td>
       <td class="right"><strong>${fmt(overallTotal)}</strong></td>
+      <td class="right"><strong>${overallAuditors}</strong></td>
     </tr>
   </tbody>
 </table>`;
@@ -599,6 +614,7 @@ interface PrintSchedule {
   departmentId: string;
   phaseId: string;
   status: string;
+  supervisorId?: string;
   auditor1Id?: string;
   auditor2Id?: string;
 }
@@ -673,6 +689,7 @@ export function printInspectionSchedule(
 
     const tableRows = rows.map(s => {
       const loc = getLoc(s.locationId);
+      const sup = getUser(s.supervisorId);
       const a1 = getUser(s.auditor1Id);
       const a2 = getUser(s.auditor2Id);
       const officers = [a1?.name, a2?.name].filter(Boolean).join(', ') || '—';
@@ -684,6 +701,7 @@ export function printInspectionSchedule(
         <td>${loc?.level || '—'}</td>
         <td class="right">${fmt(loc?.totalAssets || 0)}</td>
         <td>${getPhaseName(s.phaseId)}</td>
+        <td>${sup?.name || '—'}</td>
         <td>${officers}</td>
         <td class="center">${statusBadge(s.status)}</td>
       </tr>`;
@@ -712,6 +730,7 @@ export function printInspectionSchedule(
             <th>Level</th>
             <th class="right" style="width:55pt;">Assets</th>
             <th style="width:65pt;">Phase</th>
+            <th style="width:70pt;">Supervisor</th>
             <th>Inspecting Officers</th>
             <th class="center" style="width:70pt;">Status</th>
           </tr>
@@ -734,4 +753,88 @@ export function printInspectionSchedule(
 ${deptSections.join('\n')}`;
 
   openPrint(`Inspection Schedule — ${filterLabel}`, html);
+}
+
+// ─── EXPORT: Inspection Schedule to Excel (one sheet per department) ──────────
+
+import * as XLSX from 'xlsx';
+
+export function exportInspectionSchedule(
+  schedules: PrintSchedule[],
+  allDepartments: PrintDept[],
+  allLocations: PrintLocation[],
+  users: PrintUser[],
+  phases: PrintPhase[],
+  selectedDept: string,
+): void {
+  if (schedules.length === 0) {
+    alert('No schedules to export for the current selection.');
+    return;
+  }
+
+  const getDept = (id: string) => allDepartments.find(d => d.id === id);
+  const getLoc = (id: string) => allLocations.find(l => l.id === id);
+  const getUser = (id?: string) => id ? users.find(u => u.id === id) : null;
+  const getPhaseName = (id: string) => phases.find(p => p.id === id)?.name || id;
+
+  // Group schedules by department
+  const byDept = new Map<string, PrintSchedule[]>();
+  schedules.forEach(s => {
+    const key = s.departmentId || 'unknown';
+    if (!byDept.has(key)) byDept.set(key, []);
+    byDept.get(key)!.push(s);
+  });
+
+  // Sort within each dept by date
+  byDept.forEach(rows => rows.sort((a, b) => (a.date || '').localeCompare(b.date || '')));
+
+  const wb = XLSX.utils.book_new();
+
+  byDept.forEach((rows, deptId) => {
+    const dept = getDept(deptId);
+    const sheetName = (dept?.abbr || dept?.name || deptId).substring(0, 31); // Excel sheet name limit
+
+    const headerRow = ['Date', 'Asset Location', 'Block', 'Level', 'Assets', 'Phase', 'Supervisor', 'Inspecting Officers', 'Status'];
+
+    const dataRows = rows.map(s => {
+      const loc = getLoc(s.locationId);
+      const sup = getUser(s.supervisorId);
+      const a1 = getUser(s.auditor1Id);
+      const a2 = getUser(s.auditor2Id);
+      const officers = [a1?.name, a2?.name].filter(Boolean).join(', ') || '';
+
+      return [
+        s.date || '',
+        loc?.name || s.locationId,
+        loc?.building || '',
+        loc?.level || '',
+        loc?.totalAssets || 0,
+        getPhaseName(s.phaseId),
+        sup?.name || '',
+        officers,
+        s.status
+      ];
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 12 }, // Date
+      { wch: 30 }, // Asset Location
+      { wch: 20 }, // Block
+      { wch: 10 }, // Level
+      { wch: 8 },  // Assets
+      { wch: 15 }, // Phase
+      { wch: 20 }, // Supervisor
+      { wch: 35 }, // Officers
+      { wch: 12 }, // Status
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  const filterLabel = selectedDept === 'All' ? 'AllDepartments' : (allDepartments.find(d => d.name === selectedDept)?.abbr || selectedDept);
+  const fileName = `Inspection_Schedule_${filterLabel}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(wb, fileName);
 }

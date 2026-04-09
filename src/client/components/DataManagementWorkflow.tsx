@@ -465,8 +465,8 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   // Staff: Optional
   // ────────────────────────────────────────────────────────────
   const handleDownloadStaffTemplate = () => {
-    const headers = ['Name', 'Email', 'department', 'Designation', 'Role'];
-    const sample = ['SHAHRIZAL BIN SHABUDDIN', 'shahrizal@example.com', 'JABATAN KEJURUTERAAN AWAM', 'Head Of Department', 'Staff'];
+    const headers = ['Name', 'Email'];
+    const sample = ['SHAHRIZAL BIN SHABUDDIN', 'shahrizal@example.com'];
     const csv = [headers.join(','), sample.join(',')].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -482,28 +482,25 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
       header: true, skipEmptyLines: true,
       complete: (results) => {
         const allowedDomain = 'poliku.edu.my';
-        const entries: { name: string; email: string; department?: string; designation?: string; role?: string }[] = [];
+        const entries: { name: string; email: string }[] = [];
         let skippedCount = 0;
 
         results.data.forEach((row: any) => {
           const name = (row['Name'] || row['name'] || row['NAME'] || '').trim();
           const email = (row['Email'] || row['email'] || row['EMAIL'] || '').trim();
-          const department = (row['department'] || row['Department'] || row['DEPARTMENT'] || '').trim();
-          const designation = (row['Designation'] || row['designation'] || row['DESIGNATION'] || '').trim();
-          const role = (row['Role'] || row['role'] || row['ROLE'] || '').trim();
-          
+
           if (email && !email.toLowerCase().endsWith(`@${allowedDomain}`)) {
             skippedCount++;
             return;
           }
 
-          if (name || email) entries.push({ name, email, department: department || undefined, designation: designation || undefined, role: role || undefined });
+          if (name || email) entries.push({ name, email });
         });
 
         if (entries.length > 0) {
           onBulkActivateStaff(entries);
           if (skippedCount > 0) {
-            alert(`Imported ${entries.length} members. Skipped ${skippedCount} entries because they did not use the @${allowedDomain} domain.`);
+            alert(`Processed ${entries.length} entries. Skipped ${skippedCount} entries because they did not use the @${allowedDomain} domain.`);
           }
         }
         else alert(`No valid entries found. Ensure 'Name' and 'Email' columns exist, and all emails use the @${allowedDomain} domain.`);

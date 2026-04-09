@@ -1,6 +1,14 @@
 
 import { AuditSchedule, User, AppNotification, Department, Location } from './types';
 
+// ─── System Exclusions ─────────────────────────────────────────────
+// Software Development is a superadmin internal department — excluded from
+// consolidation, pairing, printing, and institutional counts.
+export const SOFTWARE_DEV_DEPT_NAME = 'Software Development';
+
+// Superadmin email — excluded from auditor counts, pairing, and printing.
+export const SUPERADMIN_EMAIL = 'admin@poliku.edu.my';
+
 // New Department List based on user provided data
 export const INITIAL_DEPARTMENTS: Omit<Department, 'id'>[] = [
   { name: 'Unit Kamsis', abbr: 'KAMSIS', headOfDeptId: 'dummy-user-id', description: 'Student Accommodation Unit', auditGroupId: null },
@@ -158,16 +166,4 @@ fortyFiveDaysLater.setDate(fortyFiveDaysLater.getDate() + 45);
 export const BRANDING = {
   logoHorizontal: 'https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/A%20horizontal%20logo.png',
   logoSquare: 'https://qwhkrbcvbqqclqdpigzw.supabase.co/storage/v1/object/public/branding/Sidebar%20Icon.png'
-};
-
-export const CURRENT_USER: User = {
-  id: 'b887fa1e-7613-4cc6-b7dd-a690ebe8ea72',
-  name: 'SysAdmin',
-  email: 'wilson@poliku.edu.my',
-  roles: ['Admin', 'Coordinator', 'Supervisor', 'Staff'], 
-  departmentId: '00000000-0000-0000-0000-000000000000', // System Management ID
-  contactNumber: '+60 12-345 6789',
-  certificationExpiry: fortyFiveDaysLater.toISOString().split('T')[0],
-  status: 'Active',
-  isVerified: true
 };

@@ -213,35 +213,36 @@ export const bulkManagement = {
 
   /**
    * Processes a batch of staff members for activation.
+   * Only requires: Name, Email.
+   * Skips existing emails — never overwrites or creates duplicates.
+   * Defaults: Designation='Supervisor', Role='Staff', no department assigned.
    */
   async activateStaff(
-    entries: { name: string; email: string; department?: string; designation?: string; role?: string }[],
-    currentUsers: User[],
-    currentDepartments: Department[]
+    entries: { name: string; email: string }[],
+    currentUsers: User[]
   ) {
     const userEmailToObj = new Map(currentUsers.map(u => [u.email.toLowerCase().trim(), u]));
-    const deptNameToId = new Map(currentDepartments.map(d => [d.name.toUpperCase().trim(), d.id]));
     let createdCount = 0;
     let skippedCount = 0;
 
     for (const entry of entries) {
-      if (entry.email && userEmailToObj.has(entry.email.toLowerCase().trim())) {
+      if (!entry.email) { skippedCount++; continue; }
+      const emailKey = entry.email.toLowerCase().trim();
+      if (userEmailToObj.has(emailKey)) {
         skippedCount++;
         continue;
       }
-      const deptId = entry.department ? (deptNameToId.get(entry.department.toUpperCase().trim())) : undefined;
       const newUser: User = {
         id: crypto.randomUUID(),
         name: entry.name,
-        email: entry.email || `${entry.name.replace(/\s+/g, '').toLowerCase()}@poliku.edu.my`,
-        roles: entry.role ? [entry.role as any] : ['Staff'],
-        designation: entry.designation as any || 'Supervisor',
+        email: emailKey,
+        roles: ['Staff'],
+        designation: 'Supervisor',
         status: 'Active',
         isVerified: true,
-        departmentId: deptId,
       };
       await gateway.addUser(newUser);
-      userEmailToObj.set(newUser.email.toLowerCase().trim(), newUser);
+      userEmailToObj.set(emailKey, newUser);
       createdCount++;
     }
 

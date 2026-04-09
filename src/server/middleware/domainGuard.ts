@@ -30,7 +30,7 @@ export const domainGuard = async (
   const allowedDomain = c.env.ALLOWED_DOMAIN?.trim().toLowerCase() || 'poliku.edu.my';
   const emailDomain = user.email.split('@')[1]?.toLowerCase();
 
-  const isWhitelisted = user.email.toLowerCase() === 'wilsonintai76@gmail.com';
+  const isWhitelisted = user.email.toLowerCase() === 'admin@poliku.edu.my';
 
   if (emailDomain !== allowedDomain && !isWhitelisted) {
     return c.json(

@@ -270,11 +270,12 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         </div>
       )}
 
-      <GroupBuilderTab 
+      <GroupBuilderTab
         departments={departments}
         auditGroups={auditGroups}
         onAddAuditGroup={onAddAuditGroup}
         onDeleteAuditGroup={onDeleteAuditGroup}
+        onBulkDeleteAuditGroups={onBulkDeleteAuditGroups}
         onBulkUpdateDepartments={onBulkUpdateDepartments}
         onAutoConsolidate={onAutoConsolidate}
         isProcessing={isProcessing}
@@ -375,7 +376,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 </div>
                 <div>
                   <h4 className={`text-sm font-bold ${isSystemLocked ? 'text-slate-400' : 'text-slate-900'}`}>Reset Departments</h4>
-                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Clears departments, locations, mappings, schedules &amp; users</p>
+                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Clears depts, locs, mappings, schedules & groups (Users kept)</p>
                 </div>
               </div>
               <button
@@ -433,7 +434,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
                 </div>
                 <div>
                   <h4 className={`text-sm font-bold ${isSystemLocked ? 'text-slate-400' : 'text-slate-900'}`}>Reset Locations & Audits</h4>
-                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Clears locations &amp; audit schedules only</p>
+                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Clears locs & groups (Depts stay with 0 assets)</p>
                 </div>
               </div>
               <button

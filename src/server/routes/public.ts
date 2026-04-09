@@ -24,7 +24,11 @@ pub.get('/stats', async (c) => {
       deptAuditsResult,
     ] = await db.batch([
       // Total assets across all non-exempted departments
-      db.prepare(`SELECT COALESCE(SUM(total_assets), 0) AS total FROM departments WHERE is_exempted = 0`),
+      db.prepare(`
+        SELECT COALESCE(SUM(l.total_assets), 0) AS total 
+        FROM locations l
+        JOIN departments d ON l.department_id = d.id
+      `),
       // Audit compliance counts
       db.prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed FROM audit_schedules`),
       // All phases ordered by start date
@@ -35,12 +39,13 @@ pub.get('/stats', async (c) => {
       db.prepare(`
         SELECT d.name,
                COUNT(a.id)                                                         AS total,
-               SUM(CASE WHEN a.status = 'Completed' THEN 1 ELSE 0 END)            AS completed
+               SUM(CASE WHEN a.status = 'Completed' THEN 1 ELSE 0 END)            AS completed,
+               (SELECT COALESCE(SUM(l.total_assets), 0) FROM locations l WHERE l.department_id = d.id) AS real_total_assets
         FROM departments d
         LEFT JOIN audit_schedules a ON a.department_id = d.id
-        WHERE d.is_exempted = 0 AND d.total_assets > 0
+        WHERE d.is_exempted = 0 
         GROUP BY d.id, d.name
-        HAVING total > 0
+        HAVING total > 0 AND real_total_assets > 0
         ORDER BY (CAST(completed AS REAL) / total) DESC, total DESC
         LIMIT 3
       `),

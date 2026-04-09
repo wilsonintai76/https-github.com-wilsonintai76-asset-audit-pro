@@ -58,7 +58,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [tourStep, setTourStep] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot-password'>('login');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -90,6 +90,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
+    setAuthError(null);
+
+    if (authMode === 'forgot-password') {
+      try {
+        const { gateway } = await import('../services/dataGateway');
+        await gateway.requestPasswordReset(email);
+        setAuthError(null);
+        setAuthMode('login');
+        // We use a temporary hack to show success in error box or just a toast if we had access to props
+        alert("Reset Request Sent. If your email is registered, the institutional admin will be notified to reset your password.");
+      } catch (err: any) {
+        setAuthError(err.message || 'Request failed.');
+      } finally {
+        setAuthLoading(false);
+      }
+      return;
+    }
+
     if (authMode === 'register' && password !== confirmPassword) {
       setAuthError('Passwords do not match.');
       setAuthLoading(false);
@@ -403,8 +421,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="p-8">
               <div className="flex justify-between items-center mb-8">
                 <div>
-                  <h3 className="text-2xl font-black text-slate-900">{authMode === 'login' ? 'Enterprise Login' : 'Staff Registration'}</h3>
-                  <p className="text-slate-500 text-sm">{authMode === 'login' ? 'Welcome back, Auditor.' : 'Request your digital identity.'}</p>
+                  <h3 className="text-2xl font-black text-slate-900">
+                    {authMode === 'login' ? 'Enterprise Login' : authMode === 'register' ? 'Staff Registration' : 'Recover Access'}
+                  </h3>
+                  <p className="text-slate-500 text-sm">
+                    {authMode === 'login' ? 'Welcome back, Auditor.' : authMode === 'register' ? 'Request your digital identity.' : 'Notify admin to reset your credentials.'}
+                  </p>
                 </div>
                 <button onClick={() => setIsAuthModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400">
                   <X className="w-6 h-6" />
@@ -451,22 +473,35 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">
-                    {authMode === 'login' ? 'Access Password' : 'Create Password'}
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input 
-                      type="password" 
-                      required
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                    />
+                {authMode !== 'forgot-password' && (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center px-1">
+                      <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                        {authMode === 'login' ? 'Access Password' : 'Create Password'}
+                      </label>
+                      {authMode === 'login' && (
+                        <button 
+                          type="button"
+                          onClick={() => setAuthMode('forgot-password')}
+                          className="text-[10px] font-bold text-blue-600 hover:text-blue-700"
+                        >
+                          Forgot Password?
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        type="password" 
+                        required={authMode !== 'forgot-password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {authMode === 'register' && (
                   <div className="space-y-1.5">
@@ -494,20 +529,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      {authMode === 'login' ? 'Authenticate' : 'Request Access'}
+                      {authMode === 'login' ? 'Authenticate' : authMode === 'register' ? 'Request Access' : 'Send Reset Request'}
                       <ArrowRight className="w-5 h-5" />
                     </>
                   )}
                 </button>
               </form>
 
-              <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              <div className="mt-8 pt-6 border-t border-slate-100 text-center flex flex-col gap-3">
                 <button 
                   onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
                   className="text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors"
                 >
                   {authMode === 'login' ? "Don't have an account? Request Access" : "Already have an account? Sign In"}
                 </button>
+                {authMode === 'forgot-password' && (
+                  <button 
+                    onClick={() => setAuthMode('login')}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    Back to Login
+                  </button>
+                )}
               </div>
             </div>
           </div>

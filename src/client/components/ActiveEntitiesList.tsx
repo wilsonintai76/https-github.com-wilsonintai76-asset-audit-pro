@@ -22,6 +22,7 @@ interface ActiveEntitiesListProps {
   overallTotal?: number;
   threshold: number;
   strictAuditorRule: boolean;
+  maxLocationsPerDay?: number;
 }
 
 export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
@@ -32,7 +33,8 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
   minAuditors,
   overallTotal,
   threshold,
-  strictAuditorRule
+  strictAuditorRule,
+  maxLocationsPerDay = 5,
 }) => {
   return (
     <Card className="rounded-[32px] border-slate-200 shadow-sm overflow-hidden mt-12">
@@ -99,13 +101,8 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
                     </div>
                     <div className="flex flex-col">
                       <span className="text-[9px] uppercase opacity-70">Auditors</span>
-                      <span className={`text-xs ${!isSafe && !isSelected ? 'text-red-500' : ''}`}>
-                        {entity.auditors} 
-                        {(!isSafe && !strictAuditorRule) && (
-                          <span className="text-[8px] text-amber-500 ml-1">
-                            (Rec: {Math.max(2, Math.ceil(entity.assets / threshold) * 2)})
-                          </span>
-                        )}
+                      <span className={`text-xs ${entity.auditors < minAuditors && !isSelected ? 'text-red-500' : ''}`}>
+                        {entity.auditors}
                       </span>
                     </div>
                   </div>

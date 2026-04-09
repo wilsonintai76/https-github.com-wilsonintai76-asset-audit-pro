@@ -64,7 +64,7 @@ auth.post(
     const normalizedEmail = email.toLowerCase();
 
     // 1. Domain Check (with explicit whitelist for the primary admin)
-    const isWhitelisted = normalizedEmail === 'wilsonintai76@gmail.com';
+    const isWhitelisted = normalizedEmail === 'admin@poliku.edu.my';
     if (c.env.ALLOWED_DOMAIN && !normalizedEmail.endsWith(`@${c.env.ALLOWED_DOMAIN.toLowerCase()}`) && !isWhitelisted) {
       return c.json({ success: false, message: `Only accounts with @${c.env.ALLOWED_DOMAIN} are allowed.` }, 403);
     }
@@ -87,7 +87,7 @@ auth.post(
 
     // Auto-grant Admin roles if this is the very first user (bootstrapping)
     const { count } = (await c.env.DB.prepare('SELECT COUNT(*) as count FROM users WHERE password_hash IS NOT NULL').first() as any) || { count: 0 };
-    const shouldBeAdmin = count === 0 || normalizedEmail.includes('wilsonintai') || normalizedEmail.includes('admin');
+    const shouldBeAdmin = count === 0 || normalizedEmail === 'admin@poliku.edu.my' || normalizedEmail.startsWith('admin@');
     
     const roles = shouldBeAdmin 
       ? ['Admin', 'Coordinator', 'Supervisor', 'Staff'] 
@@ -284,5 +284,45 @@ auth.get('/me', async (c) => {
 
   return c.json({ success: true, user });
 });
+
+/**
+ * POST /api/auth/request-reset
+ * Public reset request (Forgot Password).
+ */
+auth.post(
+  '/request-reset',
+  zValidator('json', z.object({ email: z.string().email() })),
+  async (c) => {
+    const { email } = c.req.valid('json');
+    try {
+      const user = await c.env.DB
+        .prepare('SELECT id, name FROM users WHERE email = ?')
+        .bind(email.toLowerCase())
+        .first<{ id: string; name: string }>();
+
+      if (!user) {
+        // Don't leak exists status
+        return c.json({ success: true, message: 'If account exists, admin will be notified.' });
+      }
+
+      // Create a password reset request activity
+      const activityId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO system_activities (id, type, user_id, message, timestamp, metadata) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(
+        activityId,
+        'PASSWORD_RESET_REQUEST',
+        user.id,
+        `${user.name} requested a password reset.`,
+        new Date().toISOString(),
+        JSON.stringify({ email: email.toLowerCase() })
+      ).run();
+
+      return c.json({ success: true, message: 'Notification sent to administrators.' });
+    } catch (err: any) {
+      return c.json({ error: err.message }, 500);
+    }
+  }
+);
 
 export { auth as authRoutes };

@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS departments (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_departments_unique_name ON departments(name, abbr);
+
 -- Buildings Table
 CREATE TABLE IF NOT EXISTS buildings (
   id TEXT PRIMARY KEY,
@@ -65,6 +67,8 @@ CREATE TABLE IF NOT EXISTS locations (
   FOREIGN KEY (department_id) REFERENCES departments(id),
   FOREIGN KEY (building_id) REFERENCES buildings(id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_locations_unique_name ON locations(name, department_id, level, building_id);
 
 -- Cross Audit Permissions Table
 CREATE TABLE IF NOT EXISTS cross_audit_permissions (

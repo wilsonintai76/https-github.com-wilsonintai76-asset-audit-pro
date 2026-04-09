@@ -23,12 +23,11 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
 }) => {
   // Group departments by their audit group
   const { groupedData, overallTotal } = React.useMemo(() => {
-    let total = 0;
+    let internalTotal = 0;
     const groups = auditGroups.map(group => {
       const groupDepts = departments.filter(d => d.auditGroupId === group.id || d.auditGroup === group.name);
       const subTotal = groupDepts.reduce((sum, d) => {
         const val = (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0));
-        total += val;
         return sum + val;
       }, 0);
       return {
@@ -40,16 +39,19 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
 
     // Also include departments not in any group
     const unassignedDepts = departments.filter(d => !d.auditGroupId && !d.auditGroup);
-    unassignedDepts.forEach(d => {
-      total += (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0));
-    });
+
+    // Grand total should be sum of ALL departments (grouped or not, exempted or not)
+    internalTotal = departments.reduce((sum, d) => {
+      const val = (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0));
+      return sum + val;
+    }, 0);
     
     return {
       groupedData: {
         groups,
         unassignedDepts
       },
-      overallTotal: total
+      overallTotal: internalTotal
     };
   }, [departments, auditGroups]);
 
@@ -66,7 +68,7 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
             label="Print"
             title="Print Unit Consolidation"
           />
-          <div className="bg-slate-900 px-6 py-4 rounded-3xl border-2 border-slate-700 shadow-lg">
+          <div className="bg-slate-900 px-6 py-4 rounded-3xl border-2 border-slate-700 shadow-xl ring-4 ring-blue-500/10">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Institutional Grand Total</p>
             <p className="text-2xl font-mono font-black text-white">{overallTotal.toLocaleString()}</p>
           </div>
