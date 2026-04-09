@@ -525,6 +525,19 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
 db.delete('/users/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
+    // Step 1: Clear all foreign key references before deleting the user
+    // Clear from system_activities (FK: user_id)
+    await c.env.DB.prepare('UPDATE system_activities SET user_id = NULL WHERE user_id = ?').bind(id).run();
+    // Clear from departments (head_of_dept_id)
+    await c.env.DB.prepare('UPDATE departments SET head_of_dept_id = NULL WHERE head_of_dept_id = ?').bind(id).run();
+    // Clear from locations (supervisor_id)
+    await c.env.DB.prepare('UPDATE locations SET supervisor_id = NULL WHERE supervisor_id = ?').bind(id).run();
+    // Clear from audit_schedules (supervisor_id, auditor1_id, auditor2_id)
+    await c.env.DB.prepare('UPDATE audit_schedules SET supervisor_id = NULL, auditor1_id = NULL, auditor2_id = NULL WHERE supervisor_id = ? OR auditor1_id = ? OR auditor2_id = ?').bind(id, id, id).run();
+    // Clear from users (department_id — unassign from department)
+    await c.env.DB.prepare('UPDATE users SET department_id = NULL WHERE department_id = ?').bind(id).run();
+
+    // Step 2: Now safe to delete the user
     await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
     // Evict roles cache + force-out active session
     await Promise.allSettled([
