@@ -324,8 +324,16 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db['institution-kpi-targets'][':id'].$patch({ param: { id }, json: updates as any }, { headers: h }));
   }
 
-  async autoCalculateTierTargets(tierId?: string): Promise<{ tierTargets: any[] }> {
+  async autoCalculateTierTargets(tierId?: string): Promise<{ tierTargets: any[], capacityWarnings: string[] }> {
     return this.rpc(h => (api as any).compute['auto-tier-targets'].$post({ json: { tierId } }, { headers: h }));
+  }
+
+  async autoConsolidateAuditGroups(threshold: number, excludedDeptIds: string[], minAuditors: number, useAI: boolean) {
+    return this.rpc(h => (api as any).compute.consolidate.$post({ json: { threshold, excludedDeptIds, minAuditors, useAI } }, { headers: h }));
+  }
+
+  async generateStrategicPairings(payload: { mode: string; minAuditors: number; strictAuditorRule: boolean; autoPairingMutual: boolean; respectManualPairings: boolean; simulate: boolean; useAI: boolean }) {
+    return this.rpc(h => (api as any).compute['cross-audit'].generate.$post({ json: payload }, { headers: h }));
   }
 
   // --- BUILDINGS ---
@@ -355,10 +363,6 @@ class DataGateway {
 
   async updateSystemSetting(id: string, value: any): Promise<void> {
     await this.rpc<unknown>(h => (api as any).db['system-settings'][':id'].$post({ param: { id }, json: { value } }, { headers: h }));
-  }
-
-  async autoConsolidateAuditGroups() {
-    await this.rpc<unknown>(h => (api as any).db['audit-groups'].consolidate.$post({}, { headers: h }));
   }
 
   async setDeptTotalsFromMapping() {

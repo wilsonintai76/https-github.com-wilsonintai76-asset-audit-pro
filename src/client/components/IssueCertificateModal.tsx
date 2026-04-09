@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User } from '@shared/types';
 import { Award, Stamp, Calendar, CalendarCheck } from 'lucide-react';
 import { BRANDING } from '../constants';
 

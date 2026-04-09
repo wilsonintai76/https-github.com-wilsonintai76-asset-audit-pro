@@ -8,7 +8,7 @@ function GoalBar({ value, color }: { value: number; color: string }) {
   }, [value]);
   return <div ref={ref} className={`h-full ${color} w-(--w)`} />;
 }
-import { AuditSchedule, User, AuditPhase, KPITier, Department, Location, InstitutionKPITarget } from '../types';
+import { AuditSchedule, User, AuditPhase, KPITier, Department, Location, InstitutionKPITarget } from '@shared/types';
 import { 
   Calendar, 
   CheckCircle2, 

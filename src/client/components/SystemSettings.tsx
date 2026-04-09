@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { CrossAuditPermission, Department, User, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup } from '../types';
+import { CrossAuditPermission, Department, User, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
 import { CrossAuditManagement } from './CrossAuditManagement';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
@@ -68,7 +68,8 @@ interface SystemSettingsProps {
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup: (id: string) => Promise<void>;
   onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
-  onAutoConsolidate: (threshold: number, excludedIds: string[]) => Promise<void>;
+  onAutoConsolidate: (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => Promise<void>;
+  onRunStrategicPairing?: (payload: any) => Promise<{ pairings: any[] }>;
   onBulkAddPermissions: (auditorDept: string, targetDept: string, isMutual: boolean) => Promise<void>;
   onBulkRemovePermissions: (ids: string[]) => Promise<void>;
   pairingLocked?: boolean;
@@ -76,6 +77,7 @@ interface SystemSettingsProps {
   onLockPairing?: (pairingCount: number) => Promise<void>;
   onUnlockPairing?: () => Promise<void>;
   showToast?: (message: string, type?: any) => void;
+  feasibilityReport?: any;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -132,6 +134,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onAutoConsolidate,
   onBulkAddPermissions,
   onBulkRemovePermissions,
+  onRunStrategicPairing,
   pairingLocked,
   pairingLockInfo,
   onLockPairing,
@@ -141,7 +144,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onUpdateInstitutionKPI,
   onAutoCalculateTierTargets,
   showToast,
-  locations
+  locations,
+  feasibilityReport
 }) => {
   const isAdmin = (userRoles || []).includes('Admin');
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -221,6 +225,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           onUpdateTarget={onUpdateKPITierTarget}
           onUpdateInstitutionKPI={onUpdateInstitutionKPI}
           onAutoCalculateTierTargets={onAutoCalculateTierTargets}
+          onUpdateFeasibility={onRunStrategicPairing}
         />
         {isAdmin && (
           <div className="flex justify-end mt-2 pr-2">
@@ -303,8 +308,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onDeleteAuditGroup={onDeleteAuditGroup}
         onBulkDeleteAuditGroups={onBulkDeleteAuditGroups}
         onAutoConsolidate={onAutoConsolidate}
+        onRunStrategicPairing={onRunStrategicPairing}
         onBulkAddPermissions={onBulkAddPermissions}
         onBulkRemovePermissions={onBulkRemovePermissions}
+        feasibilityReport={feasibilityReport}
         pairingLocked={pairingLocked}
         pairingLockInfo={pairingLockInfo}
         onLockPairing={onLockPairing}

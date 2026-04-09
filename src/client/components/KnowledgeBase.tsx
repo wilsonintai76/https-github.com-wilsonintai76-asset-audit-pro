@@ -5,7 +5,7 @@ import { SetupGuide } from './docs/SetupGuide';
 import { Network, Shield, Rocket, Headset, Route, Flag, Building, BookOpen } from 'lucide-react';
 
 import { PageHeader } from './PageHeader';
-import { AuditPhase } from '../types';
+import { AuditPhase } from '@shared/types';
 
 type Section = 'workflow' | 'permissions' | 'setup';
 

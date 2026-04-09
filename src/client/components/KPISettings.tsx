@@ -1,8 +1,9 @@
 
 import React, { useMemo, useState } from 'react';
-import { KPITier, AuditPhase, KPITierTarget, Department, InstitutionKPITarget } from '../types';
+import { KPITier, AuditPhase, KPITierTarget, Department, InstitutionKPITarget } from '@shared/types';
 import { ConfirmationModal } from './ConfirmationModal';
-import { Lock, Plus, Check, X, Pencil, Trash2, Boxes, Building2, Sparkles } from 'lucide-react';
+import { Lock, Plus, Check, X, Pencil, Trash2, Boxes, Building2, Sparkles, BrainCircuit, AlertTriangle, TrendingUp, Info, Loader2 } from 'lucide-react';
+import { api, getAuthHeaders } from '../services/honoClient';
 
 interface KPISettingsProps {
   tiers: KPITier[];
@@ -16,6 +17,7 @@ interface KPISettingsProps {
   onUpdateInstitutionKPI: (phaseId: string, percentage: number) => void;
   onAutoCalculateTierTargets?: () => Promise<void>;
   departments: Department[];
+  onUpdateFeasibility?: (report: any) => void;
 }
 
 export const KPISettings: React.FC<KPISettingsProps> = ({
@@ -29,16 +31,23 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
   onDeleteTier,
   onUpdateTarget,
   onUpdateInstitutionKPI,
-  onAutoCalculateTierTargets
+  onAutoCalculateTierTargets,
+  onUpdateFeasibility
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tierToDelete, setTierToDelete] = useState<string | null>(null);
   const [isAutoCalcRunning, setIsAutoCalcRunning] = useState(false);
   const [formData, setFormData] = useState<{ name: string; minAssets: number; targets: Record<string, number> }>({
-    name: '',
-    minAssets: 0,
     targets: {}
   });
+  const [feasibilityReport, setFeasibilityReport] = useState<{
+    score: number;
+    riskLevel: string;
+    bottlenecks: string[];
+    recommendations: string[];
+    projections: Record<string, string>;
+  } | null>(null);
+  const [isFeasibilityLoading, setIsFeasibilityLoading] = useState(false);
 
   const sortedPhases = [...phases].sort((a,b) => a.startDate.localeCompare(b.startDate));
   const sortedTiers = [...tiers].sort((a, b) => {
@@ -132,6 +141,39 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
     setTierToDelete(id);
   };
 
+  const handleCheckFeasibility = async () => {
+    setIsFeasibilityLoading(true);
+    try {
+      const response = await (api as any).compute.feasibility.$post({}, { headers: getAuthHeaders() });
+      if (response.ok) {
+        const report = await response.json();
+        setFeasibilityReport(report);
+        onUpdateFeasibility?.(report);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsFeasibilityLoading(false);
+    }
+  };
+
+  const fetchFeasibility = async () => {
+    setIsFeasibilityLoading(true);
+    try {
+      const res = await (api as any).compute.feasibility.$post(
+        {},
+        { headers: await getAuthHeaders() }
+      );
+      if (res.ok) {
+        setFeasibilityReport(await res.json());
+      }
+    } catch (err) {
+      console.error('Feasibility fetch failed:', err);
+    } finally {
+      setIsFeasibilityLoading(false);
+    }
+  };
+
   const confirmDelete = () => {
     if (tierToDelete) {
       onDeleteTier(tierToDelete);
@@ -219,6 +261,112 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
               </div>
             );
           })}
+        </div>
+
+        {/* AI Feasibility Insight */}
+        <div className="mt-8 bg-linear-to-br from-slate-900 to-slate-800 rounded-[28px] p-8 text-white relative overflow-hidden shadow-xl shadow-slate-200">
+           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[100px] pointer-events-none"></div>
+           <div className="relative z-10">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20 backdrop-blur-sm">
+                    <BrainCircuit className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black tracking-tight">AI Strategy Assessment</h4>
+                    <p className="text-slate-400 text-sm font-medium">Predicting target feasibility based on headcount & complexity.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={fetchFeasibility}
+                  disabled={isFeasibilityLoading}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-blue-500/30 flex items-center gap-2 active:scale-95 disabled:opacity-50"
+                >
+                  {isFeasibilityLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <TrendingUp className="w-4 h-4" />}
+                  {feasibilityReport ? 'Refresh Strategy' : 'Run Resource Projection'}
+                </button>
+              </div>
+
+              {feasibilityReport ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in zoom-in-95 duration-500">
+                   <div className="lg:col-span-1 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
+                      <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Feasibility Score</div>
+                      <div className="flex items-baseline gap-2 mb-1">
+                        <span className={`text-6xl font-black ${feasibilityReport.score > 70 ? 'text-emerald-400' : feasibilityReport.score > 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                          {feasibilityReport.score}
+                        </span>
+                        <span className="text-xl font-bold text-slate-500">%</span>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-full text-[10px] font-black uppercase tracking-wider mb-6">
+                        <AlertTriangle className="w-3 h-3" />
+                        Risk Level: {feasibilityReport.riskLevel}
+                      </div>
+
+                      <div className="space-y-4">
+                         {Object.entries(feasibilityReport.projections).map(([phase, prediction]) => (
+                            <div key={phase} className="flex items-center justify-between text-xs">
+                               <span className="text-slate-400 font-bold">{phase}</span>
+                               <span className="text-white font-black">{prediction} completion</span>
+                            </div>
+                         ))}
+                      </div>
+                   </div>
+
+                   <div className="lg:col-span-2 space-y-6">
+                       <div>
+                         <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                            AI Recommendations & Policy Proposals
+                         </div>
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {feasibilityReport.recommendations.map((r, i) => (
+                              <div key={i} className="bg-blue-500/10 border border-blue-500/20 text-blue-100 p-3 rounded-2xl text-[11px] font-medium leading-relaxed italic">
+                                 "{r}"
+                              </div>
+                            ))}
+                            {(feasibilityReport as any).exemptionRecommendations?.map((ex: any, i: number) => (
+                              <div key={`ex-${i}`} className="bg-amber-500/10 border border-amber-500/20 text-amber-100 p-3 rounded-2xl text-[11px] font-medium leading-relaxed">
+                                 <span className="font-black text-amber-400 uppercase text-[9px] block mb-1">PROPOSED EXEMPTION: {ex.unit}</span>
+                                 {ex.reason}
+                              </div>
+                            ))}
+                         </div>
+                       </div>
+                      <div>
+                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                           <Info className="w-3.5 h-3.5 text-blue-400" />
+                           Strategic Bottlenecks
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                           {feasibilityReport.bottlenecks.map((b, i) => (
+                             <div key={i} className="bg-red-500/10 border border-red-500/20 text-red-200 p-3 rounded-2xl text-[11px] font-medium leading-relaxed">
+                                {b}
+                             </div>
+                           ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                           <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                           AI Recommendations
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                           {feasibilityReport.recommendations.map((r, i) => (
+                             <div key={i} className="bg-blue-500/10 border border-blue-500/20 text-blue-100 p-3 rounded-2xl text-[11px] font-medium leading-relaxed italic">
+                                "{r}"
+                             </div>
+                           ))}
+                        </div>
+                      </div>
+                   </div>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-white/10 rounded-3xl p-12 text-center">
+                   <p className="text-slate-400 font-medium italic">Run the strategy projection to see how your targets align with actual headcount capacity.</p>
+                </div>
+              )}
+           </div>
         </div>
       </div>
 
@@ -380,6 +528,81 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-12 pt-12 border-t border-slate-100">
+        <div className="flex items-center justify-between mb-8 px-2">
+          <div>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase flex items-center gap-2">
+              <BrainCircuit className="w-5 h-5 text-indigo-500" />
+              Strategic AI Feasibility
+            </h3>
+            <p className="text-xs font-medium text-slate-500 mt-1 uppercase tracking-widest">
+              Project audit success probability based on current workforce.
+            </p>
+          </div>
+          <button 
+            onClick={handleCheckFeasibility}
+            disabled={isFeasibilityLoading}
+            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-500/20 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50"
+          >
+            {isFeasibilityLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Run Strategic Projection
+          </button>
+        </div>
+
+        {feasibilityReport && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="lg:col-span-1 bg-white border border-slate-200 rounded-[32px] p-8 flex flex-col items-center justify-center text-center shadow-sm">
+               <div className="relative mb-6">
+                 <svg className="w-32 h-32 transform -rotate-90">
+                   <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-100" />
+                   <circle cx="64" cy="64" r="58" stroke="currentColor" strokeWidth="12" fill="transparent" strokeDasharray={364.4} strokeDashoffset={364.4 * (1 - feasibilityReport.score / 100)} className={`${feasibilityReport.score > 70 ? 'text-emerald-500' : feasibilityReport.score > 40 ? 'text-amber-500' : 'text-rose-500'} transition-all duration-1000`} strokeLinecap="round" />
+                 </svg>
+                 <div className="absolute inset-0 flex flex-col items-center justify-center">
+                   <span className="text-3xl font-black text-slate-900 tracking-tighter">{feasibilityReport.score}%</span>
+                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Score</span>
+                 </div>
+               </div>
+               <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                 feasibilityReport.riskLevel === 'Low' ? 'bg-emerald-50 text-emerald-600' : 
+                 feasibilityReport.riskLevel === 'Medium' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+               }`}>
+                 {feasibilityReport.riskLevel} Risk
+               </div>
+            </div>
+
+            <div className="lg:col-span-2 space-y-4">
+               <div className="bg-slate-50 border border-slate-100 rounded-[32px] p-6">
+                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                   <AlertTriangle className="w-3.5 h-3.5" /> Bottleneck Analysis
+                 </h4>
+                 <div className="space-y-3">
+                   {feasibilityReport.bottlenecks.map((b, i) => (
+                     <div key={i} className="flex items-start gap-3 bg-white p-3 rounded-2xl border border-slate-200">
+                       <div className="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5" />
+                       <p className="text-xs font-bold text-slate-700">{b}</p>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+
+               <div className="bg-indigo-50/50 border border-indigo-100 rounded-[32px] p-6">
+                 <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                   <TrendingUp className="w-3.5 h-3.5" /> AI Recommendations
+                 </h4>
+                 <div className="space-y-2">
+                   {feasibilityReport.recommendations.map((r, i) => (
+                     <div key={i} className="flex items-center gap-2">
+                       <Check className="w-3.5 h-3.5 text-indigo-500" />
+                       <p className="text-xs font-bold text-indigo-900">{r}</p>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <ConfirmationModal 

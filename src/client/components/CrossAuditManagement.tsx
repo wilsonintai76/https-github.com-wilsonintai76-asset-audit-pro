@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '@shared/types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowLeftRight, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown, ShieldOff, Lock, Calendar } from 'lucide-react';
+import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowLeftRight, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown, ShieldOff, Lock, Calendar, Sparkles } from 'lucide-react';
 import { ActiveEntitiesList } from './ActiveEntitiesList';
 import { ConfirmationModal } from './ConfirmationModal';
 import { MatrixCard } from './MatrixCard';
@@ -9,7 +9,7 @@ import { InstitutionalConsolidationView } from './InstitutionalConsolidationView
 import { GroupBuilderTab } from './GroupBuilderTab';
 import { AuditConstraints } from './AuditConstraints';
 import { PrintButton } from './PrintButton';
-import { printCrossAuditAssignments } from '../lib/printUtils';
+import { printCrossAuditAssignments, printStrategicInspectionPlanApproval } from '../lib/printUtils';
 
 interface StrategicPair {
   target: { id: string; name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
@@ -52,6 +52,13 @@ interface CrossAuditManagementProps {
   pairingLockInfo?: { lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null;
   onLockPairing?: (pairingCount: number) => Promise<void>;
   onUnlockPairing?: () => Promise<void>;
+  onRunStrategicPairing?: (payload: any) => Promise<{ pairings: any[] }>;
+  feasibilityReport?: {
+    score: number;
+    riskLevel: string;
+    bottlenecks: string[];
+    recommendations: string[];
+  } | null;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -85,7 +92,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   pairingLocked = false,
   pairingLockInfo = null,
   onLockPairing,
-  onUnlockPairing
+  onUnlockPairing,
+  onRunStrategicPairing,
+  feasibilityReport
 }) => {
   // --- STATE ---
   const [manualViewMode, setManualViewMode] = useState<ManualViewMode>('grid');
@@ -138,6 +147,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   // Filtering for Pairings List
   const [auditorFilter, setAuditorFilter] = useState('');
   const [targetFilter, setTargetFilter] = useState('');
+  const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('cross_audit_use_ai') === 'true');
 
   // KPI bar ref — used to set CSS custom properties imperatively (no inline style)
   const kpiBarRef = useRef<HTMLDivElement>(null);
@@ -150,12 +160,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   // 1. Get Non-Exempted Departments
   const activeDepts = useMemo(() => {
-    return departments.filter(d => !d.isExempted);
+    return departments.filter(d => !d.isExempted && !d.isSystemExempted);
   }, [departments]);
 
-  // Exempted departments (for informational banner)
+  // Exempted/Inactive departments (for informational banner)
   const exemptedDepts = useMemo(() => {
-    return departments.filter(d => d.isExempted);
+    return departments.filter(d => d.isExempted || d.isSystemExempted);
   }, [departments]);
 
   const entities = useMemo(() => {
@@ -434,22 +444,35 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   useEffect(() => { localStorage.setItem('cross_audit_respect_manual', respectManualPairings ? 'true' : 'false'); }, [respectManualPairings]);
   useEffect(() => { localStorage.setItem('cross_audit_simulate_staff', simulateIdealStaffing ? 'true' : 'false'); }, [simulateIdealStaffing]);
   useEffect(() => { localStorage.setItem('cross_audit_mutual', autoPairingMutual ? 'true' : 'false'); }, [autoPairingMutual]);
-  
-  const targetKPIPercentage = useMemo(() => {
+    const targetKPIPercentage = useMemo(() => {
     if (!institutionKPIs || institutionKPIs.length === 0) return 30;
     return Math.max(...institutionKPIs.map(k => k.targetPercentage || 0));
   }, [institutionKPIs]);
 
-  const projectedAssetsMet = useMemo(() => {
-    const activeList = isSimulatorActive ? simulatedPairings : permissions;
-    const auditedTargets = new Set(activeList.filter(p => p.isActive).map(p => p.targetDeptId));
-    return Array.from(auditedTargets).reduce((sum, targetId) => {
-       const entity = entities.find(e => e.id === targetId);
-       return sum + (entity?.assets || 0);
-    }, 0);
-  }, [simulatedPairings, permissions, entities, isSimulatorActive]);
+  // Unified data source for reporting/stats: Simulated if active, else Persisted
+  const activePairingsForStats = useMemo(() => {
+    if (isSimulatorActive) {
+      return simulatedPairings.map(p => ({ auditorDeptId: p.auditorDeptId, targetDeptId: p.targetDeptId }));
+    }
+    return permissions
+      .filter(p => p.isActive)
+      .map(p => ({ auditorDeptId: p.auditor_dept_id, targetDeptId: p.target_dept_id }));
+  }, [isSimulatorActive, simulatedPairings, permissions]);
 
-  const projectedKPIPercentage = overallTotalAssets > 0 ? (projectedAssetsMet / overallTotalAssets) * 100 : 0;
+  const projectedAssetsMet = useMemo(() => {
+    const auditedTargets = new Set(activePairingsForStats.map(p => p.targetDeptId));
+    return Array.from(auditedTargets).reduce((sum, tid) => {
+      const e = entities.find(e => e.id === tid);
+      return sum + (e?.totalAssets || 0);
+    }, 0);
+  }, [activePairingsForStats, entities]);
+
+  const projectedKPIPercentage = useMemo(() => {
+    if (overallTotalAssets === 0) return 0;
+    const pct = (projectedAssetsMet / overallTotalAssets) * 100;
+    return Math.round(pct * 10) / 10;
+  }, [projectedAssetsMet, overallTotalAssets]);
+
   const isKPIMet = projectedKPIPercentage >= targetKPIPercentage;
 
   // Update KPI progress bar CSS custom properties whenever values change
@@ -602,6 +625,76 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     setIsSimulatorActive(true);
     setIsApplied(false);
     setIsProcessing(false);
+  };
+
+  const handleRunStrategicAI = async () => {
+    if (!onRunStrategicPairing) return;
+    setIsProcessing(true);
+    try {
+      const payload = {
+        mode: pairingMode,
+        minAuditors: strictAuditorRule ? 2 : 1,
+        strictAuditorRule,
+        autoPairingMutual,
+        respectManualPairings,
+        simulate: simulateIdealStaffing,
+        useAI: true
+      };
+      
+      const result = await onRunStrategicPairing(payload);
+      
+      if (result.pairings && result.pairings.length > 0) {
+        // Convert flat pairings to strategic plan for visualization
+        const newSimPairings = result.pairings.map(p => ({
+          auditorDeptId: p.auditorDeptId,
+          targetDeptId: p.targetDeptId,
+          isActive: true,
+          isMutual: p.isMutual,
+          aiReason: p.reason
+        }));
+        
+        // Re-construct the strategic plan visualization (simulating what handleRunSimulator does)
+        const newPlan: StrategicPair[] = [];
+        const targetsInOutput = Array.from(new Set(result.pairings.map(p => p.targetDeptId)));
+        
+        for (const targetId of targetsInOutput) {
+          const targetEntity = entities.find(e => e.id === targetId);
+          if (!targetEntity) continue;
+          
+          const pairingDepts = result.pairings.filter(p => p.targetDeptId === targetId);
+          const auditors: any[] = [];
+          
+          for (const p of pairingDepts) {
+             const audEntity = entities.find(e => e.id === p.auditorDeptId);
+             if (!audEntity) continue;
+             
+             auditors.push({
+               ...audEntity,
+               members: audEntity.members?.slice(0, 2) || [],
+               aiReason: p.reason
+             });
+          }
+          
+          newPlan.push({
+            target: targetEntity as any,
+            auditors,
+            totalAuditorsInGroup: auditors.reduce((sum, a) => sum + a.auditors, 0),
+            auditorSideAssets: auditors.reduce((sum, a) => sum + a.assets, 0)
+          });
+        }
+        
+        setStrategicPlan(newPlan);
+        setSimulatedPairings(newSimPairings);
+        setIsSimulatorActive(true);
+        setIsApplied(false);
+        showToast?.(`AI Strategic Matchmaking generated ${result.pairings.length} compatibility-optimized links.`, 'success');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast?.('AI Strategic Matchmaking failed. Falling back to mathematical mode.', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleAddOverride = async () => {
@@ -820,6 +913,38 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 label="Print"
                 title="Print Active Cross-Audit Assignments"
               />
+              <button 
+                onClick={() => printStrategicInspectionPlanApproval(
+                  'Institution',
+                  new Date().getFullYear(),
+                  { 
+                    totalInstitutionAssets: overallTotalAssets,
+                    inspectedAssets: projectedAssetsMet,
+                    targetAssets: overallTotalAssets * (targetKPIPercentage/100),
+                    actualPercentage: projectedKPIPercentage,
+                    targetPercentage: targetKPIPercentage,
+                    isOnTrack: isKPIMet
+                  },
+                  feasibilityReport || null,
+                  entities,
+                  isSimulatorActive 
+                    ? simulatedPairings 
+                    : permissions.filter(p => p.isActive).map(p => ({ 
+                        auditorDeptId: p.auditor_dept_id, 
+                        targetDeptId: p.target_dept_id, 
+                        isMutual: !!p.is_mutual 
+                      })),
+                  { approver: 'PENGARAH', supporter: 'TIMBALAN PENGARAH (AKADEMIK) / KETUA UNIT' },
+                  auditGroups,
+                  departments
+                )}
+                disabled={!isSimulatorActive && permissions.filter(p => p.isActive).length === 0}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border bg-indigo-50 border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-all active:scale-95 disabled:opacity-50"
+                title={isSimulatorActive ? 'Generate Simulation Report' : 'Print Final Approval Memo'}
+              >
+                <Sparkles className="w-4 h-4 text-indigo-400" />
+                Memo
+              </button>
               <button
                 onClick={() => setShowConstraints(!showConstraints)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all ${
@@ -972,22 +1097,42 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                   </div>
                 )}
 
-                {/* CTA buttons */}
-                {isSimulatorActive ? (
+                {/* CTA buttons removed and moved to Header */}
+                  
+                  {isSimulatorActive && (
+                    <>
+                      <button onClick={handleCommitSimulation} disabled={isProcessing} className="w-full px-6 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
+                        {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCheck className="w-5 h-5" />}
+                        Lock In Pairings
+                      </button>
+                      <button onClick={() => { setIsSimulatorActive(false); setStrategicPlan([]); setSimulatedPairings([]); }} disabled={isProcessing} className="w-full px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
+                        Cancel Simulation
+                      </button>
+                    </>
+                  )}
+
+                {!isSimulatorActive && (
                   <div className="space-y-3">
-                    <button onClick={handleCommitSimulation} disabled={isProcessing} className="w-full px-6 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCheck className="w-5 h-5" />}
-                      Lock In Pairings
+                    <button 
+                      onClick={() => { setUseAI(!useAI); localStorage.setItem('cross_audit_use_ai', (!useAI).toString()); }}
+                      className={`w-full px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${useAI ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'}`}
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${useAI ? 'text-indigo-200' : 'text-slate-300'}`} />
+                      AI Strategic Mode {useAI ? 'ON' : 'OFF'}
                     </button>
-                    <button onClick={() => setIsSimulatorActive(false)} disabled={isProcessing} className="w-full px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
-                      Cancel Simulation
+                    
+                    <button 
+                      onClick={useAI ? handleRunStrategicAI : handleRunSimulator} 
+                      disabled={isProcessing} 
+                      className={`w-full px-6 py-4 rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all ${useAI ? 'bg-indigo-900 hover:bg-black text-white shadow-indigo-900/20' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'}`}
+                    >
+                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (useAI ? <Sparkles className="w-5 h-5" /> : <Wand2 className="w-5 h-5" />)}
+                      {useAI ? 'Run Strategic Matchmaking' : 'Run Auto-Pairing'}
                     </button>
+                    {useAI && (
+                      <p className="text-[10px] font-medium text-indigo-500 italic text-center animate-pulse">Analyzing technical affinity & compatibility...</p>
+                    )}
                   </div>
-                ) : (
-                  <button onClick={handleRunSimulator} disabled={isProcessing} className="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-3 active:scale-95 transition-all">
-                    {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
-                    Run Auto-Pairing
-                  </button>
                 )}
                   </>
                 )}

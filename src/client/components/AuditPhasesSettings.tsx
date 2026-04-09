@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { AuditPhase } from '../types';
+import { AuditPhase } from '@shared/types';
 import { CalendarX, Pencil, CalendarCheck, ChevronRight, Zap, History } from 'lucide-react';
 
 interface AuditPhasesSettingsProps {

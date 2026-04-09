@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { AuditSchedule } from '../types';
-import { generateAuditReport } from '../services/geminiService';
+import { AuditSchedule } from '@shared/types';
+import { generateAuditReport } from '../services/aiService';
 import { FileText, X, Stamp, Check, Copy } from 'lucide-react';
 
 interface AuditReportModalProps {

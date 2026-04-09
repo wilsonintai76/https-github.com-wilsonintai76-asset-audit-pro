@@ -9,7 +9,7 @@ import {
 import { 
   User, Location, AuditSchedule, SystemActivity, 
   Department, Building, AuditPhase 
-} from '../types';
+} from '@shared/types';
 import { PageHeader } from './PageHeader';
 
 interface AdminDashboardProps {

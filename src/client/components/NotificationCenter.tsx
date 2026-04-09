@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AppNotification } from '../types';
+import { AppNotification } from '@shared/types';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, Bell, BellOff } from 'lucide-react';
 
 interface NotificationCenterProps {

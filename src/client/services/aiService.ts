@@ -1,4 +1,4 @@
-import { AuditSchedule, AuditInsight } from '../types';
+import { AuditSchedule, AuditInsight } from '@shared/types';
 import { api, getAuthHeaders } from './honoClient';
 
 export const analyzeSchedule = async (schedules: AuditSchedule[]): Promise<AuditInsight> => {

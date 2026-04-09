@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AuditSchedule } from '../types';
+import { AuditSchedule } from '@shared/types';
 import { ClipboardList, Clock, UserPlus, CheckCircle } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 

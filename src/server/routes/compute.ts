@@ -8,6 +8,8 @@ const compute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const stripFences = (text: string) => text.trim().replace(/^```json\n?|\n?```$/g, '').trim();
+
 /** Resolves the KPI tier for a department by its % share of institution total assets. */
 function resolveTier(
   deptTotalAssets: number,
@@ -318,6 +320,7 @@ const consolidateSchema = z.object({
   threshold: z.number().int().positive(),
   excludedDeptIds: z.array(z.string()).default([]),
   minAuditors: z.number().int().min(0).default(2),
+  useAI: z.boolean().default(false),
 });
 
 compute.post(
@@ -325,7 +328,7 @@ compute.post(
   requirePermission('manage:system'),
   zValidator('json', consolidateSchema),
   async (c) => {
-    const { threshold, excludedDeptIds, minAuditors } = c.req.valid('json');
+    const { threshold, excludedDeptIds, minAuditors, useAI } = c.req.valid('json');
     const db = c.env.DB;
 
     // 1. Purge existing auto-generated groups (names that start with 'Group ')
@@ -353,8 +356,34 @@ compute.post(
       .filter(
         (d: any) =>
           !excludedDeptIds.includes(d.id) && d.is_exempted !== 1 && (d.total_assets || 0) > 0,
-      )
-      .sort((a: any, b: any) => (a.total_assets || 0) - (b.total_assets || 0));
+      );
+
+    // 4. AI-Categorization (Optional)
+    let aiCategories: Record<string, string> = {};
+    if (useAI && eligible.length > 0) {
+      const MODEL = '@cf/meta/llama-3.1-8b-instruct';
+      const prompt = `Categorize these departments into semantic clusters (e.g. Clinical, Technical, Admin, Support). 
+Departments: ${eligible.map(d => d.name).join(', ')}
+
+Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
+
+      try {
+        const result = await c.env.AI.run(MODEL, {
+          messages: [{ role: 'user', content: prompt }]
+        }) as { response: string };
+        aiCategories = JSON.parse(stripFences(result.response));
+      } catch (err) {
+        console.error('AI Categorization failed:', err);
+      }
+    }
+
+    // Sort by cluster first (if available), then by assets
+    eligible.sort((a: any, b: any) => {
+      const catA = aiCategories[a.name] || 'Other';
+      const catB = aiCategories[b.name] || 'Other';
+      if (catA !== catB) return catA.localeCompare(catB);
+      return (a.total_assets || 0) - (b.total_assets || 0);
+    });
 
     if (eligible.length === 0) {
       return c.json({ groups: [], ungrouped: [], standaloneCount: excludedDeptIds.length, createdCount: 0 });
@@ -448,6 +477,7 @@ const crossAuditSchema = z.object({
   autoPairingMutual: z.boolean().default(false),
   respectManualPairings: z.boolean().default(false),
   simulate: z.boolean().default(true),
+  useAI: z.boolean().default(false),
 });
 
 compute.post(
@@ -455,7 +485,7 @@ compute.post(
   requirePermission('manage:system'),
   zValidator('json', crossAuditSchema),
   async (c) => {
-    const { mode, minAuditors, strictAuditorRule, autoPairingMutual, respectManualPairings, simulate } =
+    const { mode, minAuditors, strictAuditorRule, autoPairingMutual, respectManualPairings, simulate, useAI } =
       c.req.valid('json');
     const db = c.env.DB;
 
@@ -503,6 +533,44 @@ compute.post(
       }))
       .sort((a, b) => b.assets - a.assets);
 
+    // 4. AI Strategic Insights (Optional)
+    let aiPairingSuggestions: { auditorId: string; targetId: string }[] = [];
+    if (useAI && entities.length > 2) {
+       const MODEL = '@cf/meta/llama-3.1-8b-instruct';
+       const prompt = `Task: Strategic Cross-Audit Matchmaking (Resource-Aware)
+Analyze these departments and suggest the 5 most "Logically Compatible" pairings.
+
+Rules:
+1. Technical Affinity: Pair Dept A and B if they have similar equipment or technical processes.
+2. Resource Equity: Detect "High-Strain" departments (Assets/Auditors > 500:1).
+3. Asymmetric Delegation: If a department is "High-Strain", prioritize a ONE-WAY delegation where a stable department audits them to reduce their pressure. Avoid mutual swaps for these bottlenecks.
+4. Social Sensitivity: If a department involves Hostels/Kediaman, add a recommendation to prioritize gender-appropriate officer assignments (e.g., Siswi hostels inspected by female officers).
+
+Available Depts:
+${entities.map((e, idx) => `${idx}. ${e.name}: ${e.assets} units, ${e.auditors} certified auditors`).join('\n')}
+
+Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (avoid self-auditing):
+[ { "auditorIdx": 0, "targetIdx": 1 }, ... ]`;
+
+        try {
+          const result = await c.env.AI.run(MODEL, {
+             messages: [
+               { role: 'system', content: 'You are an Audit Strategy AI. You optimize pairs for technical affinity and resource feasibility. Respond with valid JSON only.' },
+               { role: 'user', content: prompt }
+             ]
+          }) as { response: string };
+          const suggestions = JSON.parse(stripFences(result.response)) as { auditorIdx: number; targetIdx: number }[];
+          aiPairingSuggestions = suggestions
+            .map(s => ({ 
+              auditorId: entities[s.auditorIdx]?.id, 
+              targetId: entities[s.targetIdx]?.id 
+            }))
+            .filter(s => s.auditorId && s.targetId && s.auditorId !== s.targetId);
+        } catch (err) {
+          console.error('AI Strategic Pairing failed:', err);
+        }
+    }
+
     const overallTotalAssets = entities.reduce((s, e) => s + e.assets, 0);
     const targetKPIPct = instKPIs.length > 0
       ? Math.max(...instKPIs.map((k: any) => k.target_percentage || 0))
@@ -525,6 +593,19 @@ compute.post(
       const finalTargets = respectManualPairings
         ? entities.filter((e) => e.assets > 0 && !existingPerms.some((p: any) => p.target_dept_id === e.id))
         : entities.filter((e) => e.assets > 0);
+
+      // Pre-process AI Suggestions first
+      for (const suggestion of aiPairingSuggestions) {
+          if (usedTargetIds.has(suggestion.targetId)) continue;
+          const auditor = auditorPool.find(a => a.id === suggestion.auditorId);
+          const target = finalTargets.find(t => t.id === suggestion.targetId);
+          if (auditor && target && auditor.id !== target.id) {
+             newPairings.push({ auditorDeptId: auditor.id, targetDeptId: target.id, isMutual: autoPairingMutual });
+             if (autoPairingMutual) newPairings.push({ auditorDeptId: target.id, targetDeptId: auditor.id, isMutual: true });
+             strategicPlan.push({ targetId: target.id, targetName: target.name, auditorId: auditor.id, auditorName: auditor.name, auditorDeptAssets: auditor.assets });
+             usedTargetIds.add(target.id);
+          }
+      }
 
       let poolIdx = 0;
       for (const target of finalTargets) {
@@ -870,6 +951,113 @@ compute.post(
       message: 'Tier targets auto-calculated and saved',
     });
   },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/compute/feasibility
+// AI-Driven Strategic Check for KPI targets based on actual staff headcount.
+// ─────────────────────────────────────────────────────────────────────────────
+compute.post(
+  '/feasibility',
+  requirePermission('manage:system'),
+  async (c) => {
+    const db = c.env.DB;
+    const MODEL = '@cf/meta/llama-3.1-8b-instruct';
+
+    const [deptsRes, usersRes, phasesRes, instKPIsRes, settingRes] = await Promise.all([
+      db.prepare('SELECT id, name, total_assets FROM departments WHERE is_exempted = 0').all(),
+      db.prepare("SELECT id, department_id, certification_expiry FROM users WHERE status = 'Active'").all(),
+      db.prepare('SELECT id, name, start_date, end_date FROM audit_phases ORDER BY start_date ASC').all(),
+      db.prepare('SELECT phase_id, target_percentage FROM institution_kpi_targets').all(),
+      db.prepare("SELECT value FROM system_settings WHERE id = 'audit_constraints'").first<{ value: string }>(),
+    ]);
+
+    const depts = (deptsRes.results || []) as any[];
+    const users = (usersRes.results || []) as any[];
+    const phases = (phasesRes.results || []) as any[];
+    const instKPIs = (instKPIsRes.results || []) as any[];
+    const constraints = settingRes ? JSON.parse(settingRes.value) : {};
+
+    const today = new Date().toISOString().split('T')[0];
+    const auditorCountByDept: Record<string, number> = {};
+    users.forEach(u => {
+      // Broad definition: anyone with a certification record is an auditor
+      if (u.certification_expiry || u.certification_issued) {
+        auditorCountByDept[u.department_id] = (auditorCountByDept[u.department_id] || 0) + 1;
+      }
+    });
+
+    const certifiedAuditors = Object.values(auditorCountByDept).reduce((a, b) => a + b, 0);
+
+    const institutionTotalAssets = depts.reduce((sum, d) => sum + (d.total_assets || 0), 0);
+    
+    const phaseData = phases.map(p => {
+      const target = instKPIs.find(k => k.phase_id === p.id)?.target_percentage || 0;
+      const start = new Date(p.start_date);
+      const end = new Date(p.end_date);
+      const workDays = Math.round(Math.max(1, (end.getTime() - start.getTime()) / 86400000) * 5 / 7);
+      return { name: p.name, target, workDays };
+    });
+
+    // Only analyze departments that are NOT naturally exempted (0 assets AND 0 auditors)
+    const activeUnits = depts.filter(d => (d.total_assets || 0) > 0 || (auditorCountByDept[d.id] || 0) > 0);
+
+    const aiPrompt = `Analyze the feasibility of this audit plan:
+Total Certified Auditors: ${certifiedAuditors}
+Total Assets: ${institutionTotalAssets}
+
+Active Units Analysis:
+${activeUnits.length > 40 ? '(Large Dataset: Focusing on high-impact units)' : ''}
+${activeUnits.slice(0, 40).map(d => `- ${d.name}: ${d.total_assets || 0} assets, ${auditorCountByDept[d.id] || 0} auditors`).join('\n')}
+
+Rules:
+1. Fragile Unit: < 2 auditors. Recommend consolidation.
+2. Resource Gap: High asset count vs low auditors.
+
+CRITICAL: Return ONLY a raw JSON object. Do not include introductory text.
+{
+  "score": <0-100>,
+  "riskLevel": "Low"|"Medium"|"High"|"Critical",
+  "bottlenecks": ["..."],
+  "recommendations": ["..."],
+  "exemptionRecommendations": [],
+  "projections": {}
+}
+`;
+
+    try {
+      const result = await c.env.AI.run(MODEL, {
+        messages: [
+          { role: 'system', content: 'You are an Audit Strategy AI. You analyze resource constraints vs goals. Respond with valid JSON only.' },
+          { role: 'user', content: aiPrompt }
+        ]
+      }) as { response: string };
+
+      // Better JSON extraction: find the first { and last }
+      const text = result.response || '';
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      const rawResponse = result.response || '';
+      const firstBrace = rawResponse.indexOf('{');
+      const lastBrace = rawResponse.lastIndexOf('}');
+      
+      if (firstBrace === -1 || lastBrace === -1) {
+        throw new Error('AI response did not contain a valid JSON block.');
+      }
+
+      const jsonStr = rawResponse.substring(firstBrace, lastBrace + 1);
+      return c.json(JSON.parse(jsonStr));
+    } catch (err: any) {
+      console.error('AI Feasibility failed:', err);
+      return c.json({ 
+        score: 0, 
+        riskLevel: 'System Error', 
+        bottlenecks: [`Analysis failed: ${err.message}`], 
+        recommendations: ['Check Cloudflare AI quota/binding', 'Ensure all departments have asset data'], 
+        projections: {} 
+      });
+    }
+  }
 );
 
 export const computeRoutes = compute;

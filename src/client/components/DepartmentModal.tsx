@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Department, User, AuditGroup } from '../types';
+import { Department, User, AuditGroup } from '@shared/types';
 import { X, Building2, User as UserIcon, FileText, Search, ChevronDown, Boxes, Layers, Ban, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';

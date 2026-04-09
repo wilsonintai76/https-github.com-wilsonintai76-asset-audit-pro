@@ -1,6 +1,6 @@
 import React from 'react';
 import { Phone, UserCheck, Plus, X } from 'lucide-react';
-import { AuditSchedule, User } from '../types';
+import { AuditSchedule, User } from '@shared/types';
 
 interface AuditorAssignmentSlotProps {
   slotNum: 1 | 2;
@@ -104,7 +104,10 @@ export const AuditorAssignmentSlot: React.FC<AuditorAssignmentSlotProps> = ({
       const targetEntityId = getEntityName(audit.departmentId);
       if (myEntityId === targetEntityId) return false;
 
-      // 3. Already in this audit?
+      // 3. ABSOLUTE LOCK: Supervisor cannot be the Auditor for the same location
+      if (officer.id === audit.supervisorId) return false;
+
+      // 4. Already in this audit?
       if (audit.auditor1Id === officer.id || audit.auditor2Id === officer.id) return false;
 
       // 4. Limit Check

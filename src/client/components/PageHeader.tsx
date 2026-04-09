@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { LucideIcon } from 'lucide-react';
-import { AuditPhase } from '../types';
+import { AuditPhase } from '@shared/types';
 import { Zap, ArrowRight } from 'lucide-react';
 
 interface PageHeaderProps {

@@ -1,13 +1,13 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
-import { User, UserRole, Department } from '../types';
+import { User, UserRole, Department } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
 import { IssueCertificateModal } from './IssueCertificateModal';
 import { gateway } from '../services/dataGateway';
 import { Filter, Plus, User as UserIcon, Check, X, Award, Stamp, Pencil, Trash2, Key, ChevronDown } from 'lucide-react';
 import { PageHeader } from './PageHeader';
-import { AuditPhase } from '../types';
+import { AuditPhase } from '@shared/types';
 interface UserManagementProps {
   users: User[];
   onAddMember: (user: User) => void;

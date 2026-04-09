@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Building, Location } from '../types';
+import { Building, Location } from '@shared/types';
 import { Plus, Building2, Pencil, Trash2, MapPin, FileText, Upload, Filter, Loader2 } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { BuildingModal } from './BuildingModal';

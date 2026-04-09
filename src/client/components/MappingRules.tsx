@@ -1,7 +1,7 @@
 
 import React, { useRef } from 'react';
 import Papa from 'papaparse';
-import { Department, DepartmentMapping } from '../types';
+import { Department, DepartmentMapping } from '@shared/types';
 import { Sliders, RefreshCw, Upload, ArrowRight, ChevronDown } from 'lucide-react';
 
 interface MappingRulesProps {

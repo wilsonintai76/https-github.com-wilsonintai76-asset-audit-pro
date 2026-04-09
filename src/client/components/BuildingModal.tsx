@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Building } from '../types';
+import { Building } from '@shared/types';
 import { X, Building2, FileText, Check } from 'lucide-react';
 
 interface BuildingModalProps {

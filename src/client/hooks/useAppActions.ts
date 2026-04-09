@@ -572,9 +572,17 @@ export const useAppActions = (props: AppActionsProps) => {
     catch (e) { showError(e); }
   };
 
-  const handleAutoConsolidate = async () => {
-    try { await gateway.autoConsolidateAuditGroups(); setAuditGroups(await gateway.getAuditGroups()); showToast('Consolidated'); }
-    catch (e) { showError(e); }
+  const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => {
+    try { 
+      await gateway.autoConsolidateAuditGroups(threshold, excludedIds, minAuditors, useAI); 
+      setAuditGroups(await gateway.getAuditGroups()); 
+      setDepartments(await gateway.getDepartments());
+      showToast(useAI ? 'Thematic consolidation complete' : 'Mathematical consolidation complete'); 
+    } catch (e) { showError(e); }
+  };
+
+  const handleRunStrategicPairing = async (payload: any) => {
+    return await gateway.generateStrategicPairings(payload);
   };
 
   const handleSetDeptTotalsFromMapping = async () => {
@@ -629,7 +637,7 @@ export const useAppActions = (props: AppActionsProps) => {
     handleUpdateKPITier, handleUpdateKPITierTarget, handleUpdateInstitutionKPI, handleAutoCalculateTierTargets,
     handleDeleteKPITier, handleAddDepartmentMapping, handleDeleteDepartmentMapping, handleAddAuditGroup,
     handleUpdateAuditGroup, handleUpdateBuilding, handleDeleteBuilding, handleBulkAddBuildings,
-    handleDeleteAuditGroup, handleBulkDeleteAuditGroups, handleAutoConsolidate, handleSetDeptTotalsFromMapping,
+    handleDeleteAuditGroup, handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleSetDeptTotalsFromMapping,
     handleUpsertLocations, handleSyncLocationMappings, handleAddMember, handleBulkAddMembers, handleUpdateMember,
     handleRequestRenewal, handleApproveCert, handleIssueCertForRenewal, handleUpdateDashboardConfig,
     handleUpdateUserStatus, handleUpdateUserRoles, handleResetUserPassword, handleBulkActivateStaff,

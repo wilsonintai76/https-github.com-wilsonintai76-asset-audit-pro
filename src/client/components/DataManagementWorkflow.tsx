@@ -3,7 +3,7 @@ import React, { useRef } from 'react';
 import { Button } from './ui/button';
 import Papa from 'papaparse';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
-import type { Department, Location, DepartmentMapping } from '../types';
+import type { Department, Location, DepartmentMapping } from '@shared/types';
 import { MappingRules } from './MappingRules';
 import { FileSpreadsheet, UserCheck, RefreshCw, CheckCircle, AlertCircle, ArrowRight, Info } from 'lucide-react';
 

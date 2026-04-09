@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget, Location } from '../types';
+import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget, Location } from '@shared/types';
 import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printKPIPhasePlan } from '../lib/printUtils';

@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { AuditPhase, KPITier, KPITierTarget, Department, Location, AuditSchedule, InstitutionKPITarget } from '../types';
+import { AuditPhase, KPITier, KPITierTarget, Department, Location, AuditSchedule, InstitutionKPITarget } from '@shared/types';
 import { ChevronDown, Building2, TrendingUp, AlertCircle, CheckCircle2, Trophy } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { PrintButton } from './PrintButton';

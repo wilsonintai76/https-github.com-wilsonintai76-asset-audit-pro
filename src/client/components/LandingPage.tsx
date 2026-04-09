@@ -21,7 +21,7 @@ import {
   User as UserIcon,
   Loader2
 } from 'lucide-react';
-import { AuditPhase, SystemActivity, UserRole, AppView } from '../types';
+import { AuditPhase, SystemActivity, UserRole, AppView } from '@shared/types';
 import { BRANDING } from '../constants';
 import { authService } from '../services/auth';
 

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { UserRole, AppView } from '../types';
+import { UserRole, AppView } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
 import { BRANDING } from '../constants';
 import { 
@@ -237,3 +237,5 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </>
   );
 };
+
+export default Sidebar;

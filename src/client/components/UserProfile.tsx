@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { User, Department, UserRole } from '../types';
+import { User, Department, UserRole } from '@shared/types';
 import { Mail, CheckCircle2, User as UserIcon, Phone, Info, Loader2, Award, AlertCircle, RotateCw, Shield, KeyRound } from 'lucide-react';
 
 interface UserProfileProps {

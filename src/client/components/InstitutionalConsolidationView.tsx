@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Department, AuditGroup } from '../types';
+import { Department, AuditGroup } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PrintButton } from './PrintButton';

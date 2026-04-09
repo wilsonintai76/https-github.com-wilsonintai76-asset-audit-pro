@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '../types';
+import { AuditSchedule, DashboardConfig, AuditPhase, KPITier, KPITierTarget, Department, Location, User, AuditGroup, SystemActivity, InstitutionKPITarget, Building } from '@shared/types';
 import { StatsCards } from './StatsCards';
 import { CustomizeDashboardModal } from './CustomizeDashboardModal';
 import { KPIStatsWidget } from './KPIStatsWidget';

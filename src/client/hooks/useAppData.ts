@@ -64,6 +64,7 @@ export const useAppData = () => {
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>('All');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<any>(null);
+  const [feasibilityReport, setFeasibilityReport] = useState<any>(null);
 
   const dataLoadedRef = useRef(false);
 
@@ -130,8 +131,27 @@ export const useAppData = () => {
   const departmentsWithAssets = useMemo(() => {
     const deptTotals: Record<string, number> = {};
     locations.forEach(l => { if (l.departmentId) deptTotals[l.departmentId] = (deptTotals[l.departmentId] || 0) + (l.totalAssets || 0); });
-    return departments.map(d => ({ ...d, totalAssets: deptTotals[d.id] || 0 }));
-  }, [departments, locations]);
+
+    // Broad Auditor Definition: Anyone with a certification record who isn't suspended
+    const deptAuditors: Record<string, number> = {};
+    users.forEach(u => {
+      if (u.departmentId && (u.certificationExpiry || u.certificationIssued) && u.status !== 'Suspended') {
+        deptAuditors[u.departmentId] = (deptAuditors[u.departmentId] || 0) + 1;
+      }
+    });
+
+    return departments.map(d => {
+      const totalAssets = deptTotals[d.id] || 0;
+      const auditorCount = deptAuditors[d.id] || 0;
+      return { 
+        ...d, 
+        totalAssets,
+        auditorCount,
+        // Natural Exemption: 0 assets AND 0 certified auditors
+        isSystemExempted: totalAssets === 0 && auditorCount === 0
+      };
+    });
+  }, [departments, locations, users]);
 
   const filteredSchedules = useMemo(() => {
     return schedules.filter(s => {
@@ -170,7 +190,7 @@ export const useAppData = () => {
     toasts, setToasts, activities, setActivities, crossAuditPermissions, setCrossAuditPermissions,
     publicStats, setPublicStats, selectedDept, setSelectedDept, selectedStatus, setSelectedStatus,
     selectedPhaseId, setSelectedPhaseId, isSidebarOpen, setIsSidebarOpen,
-    confirmState, setConfirmState, loadAllData, loadPublicStats, initSession,
+    confirmState, setConfirmState, feasibilityReport, setFeasibilityReport, loadAllData, loadPublicStats, initSession,
     departmentNames, departmentsWithAssets, filteredSchedules, topDepartments
   };
 };

@@ -1,5 +1,5 @@
 
-import { AuditSchedule, User, AppNotification, Department, Location } from './types';
+import { AuditSchedule, User, AppNotification, Department, Location } from '@shared/types';
 
 // ─── System Exclusions ─────────────────────────────────────────────
 // Software Development is a superadmin internal department — excluded from

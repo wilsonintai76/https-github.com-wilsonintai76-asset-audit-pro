@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Location, UserRole, Department, User, AuditPhase, Building, AuditSchedule } from '../types';
+import { Location, UserRole, Department, User, AuditPhase, Building, AuditSchedule } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
 import { Network, ChevronDown, MapPin, Landmark, User as UserIcon, Phone, Pencil, Trash2, MapPinned, Building2, Layers, Plus } from 'lucide-react';
 import { LocationModal } from './LocationModal';

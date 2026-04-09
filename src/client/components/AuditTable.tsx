@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase, Building as BuildingType } from '../types';
+import { AuditSchedule, User, UserRole, Department, Location, CrossAuditPermission, AuditPhase, Building as BuildingType } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
 import { AuditReportModal } from './AuditReportModal';
 import {
@@ -253,6 +253,12 @@ export const AuditTable: React.FC<AuditTableProps> = ({
       return;
     }
 
+    // 2. ABSOLUTE LOCK: Supervisor cannot be the Auditor for the same location
+    if (assignUserId === audit.supervisorId) {
+      alert(`CONFLICT OF INTEREST: ${isSelf ? 'You are' : 'The selected officer is'} the designated Site Supervisor for this location and cannot act as its inspector.`);
+      return;
+    }
+
     const hasCrossPerm = isAdmin || crossAuditPermissions.some(p => 
       p.auditorDeptId === myEntityId && 
       p.targetDeptId === targetEntityId && 
@@ -322,6 +328,9 @@ export const AuditTable: React.FC<AuditTableProps> = ({
             p.isActive
           );
           if (!hasCrossPerm) return false;
+
+          // 3. ABSOLUTE LOCK: Supervisor cannot be the Auditor for the same location
+          if (officer.id === audit.supervisorId) return false;
 
           const auditsOnDate = schedules.filter(s => s.date === audit.date && (s.auditor1Id === officer.id || s.auditor2Id === officer.id));
           const totalAssetsOnDate = auditsOnDate.reduce((sum, s) => {

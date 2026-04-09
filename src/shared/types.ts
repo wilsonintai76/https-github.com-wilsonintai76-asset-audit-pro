@@ -51,6 +51,7 @@ export interface Department {
   uninspectedAssetCount?: number;
   auditorCount?: number;
   isExempted?: boolean;
+  isSystemExempted?: boolean;
 }
 
 export interface AuditGroup {

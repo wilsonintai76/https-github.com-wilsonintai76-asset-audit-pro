@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { DashboardConfig } from '../types';
+import { DashboardConfig } from '@shared/types';
 import { BarChart3, LineChart, CalendarDays, Network, Award, X, Sliders } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';

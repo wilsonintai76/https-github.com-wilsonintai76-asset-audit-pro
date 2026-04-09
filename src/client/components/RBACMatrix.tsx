@@ -1,7 +1,7 @@
 import React from 'react';
 import { Lock, ShieldCheck, Eye, Calendar, UserCheck, Users, UserPlus, Edit, ShieldAlert, Network, CheckCircle2, XCircle, Info } from 'lucide-react';
 import { useRBAC } from '../contexts/RBACContext';
-import { UserRole } from '../types';
+import { UserRole } from '@shared/types';
 
 interface RBACMatrixProps {
   showToast?: (message: string, type?: 'success' | 'warning' | 'error' | 'info') => void;

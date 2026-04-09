@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { RBACMatrix, UserRole } from '../types';
+import { RBACMatrix, UserRole } from '@shared/types';
 import { gateway } from '../services/dataGateway';
 
 // Source of truth: RBAC_ROLE_MATRIX.md

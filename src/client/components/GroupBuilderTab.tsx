@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Department, AuditGroup } from '../types';
+import { Department, AuditGroup } from '@shared/types';
 import { Boxes, Check, Loader2, Sparkles, Trash2, Pencil, Users, RotateCcw, Lock, AlertTriangle } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printUnitConsolidation } from '../lib/printUtils';
@@ -23,7 +23,7 @@ function saveStandaloneCutoff(t: number) {
 interface GroupBuilderTabProps {
   departments: Department[];
   auditGroups: AuditGroup[];
-  onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors: number) => Promise<void>;
+  onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => Promise<void>;
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<AuditGroup | null>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
   onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
@@ -58,6 +58,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   const [builderTab, setBuilderTab] = useState<1 | 2>(() => auditGroups.length > 0 ? 2 : 1);
   const [threshold, setThreshold] = useState<number>(() => loadThreshold());
   const [standaloneCutoff, setStandaloneCutoff] = useState<number>(() => loadStandaloneCutoff());
+  const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('group_builder_use_ai') === 'true');
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
 
   // Auto-switch to Unit Inventory whenever groups become non-empty (e.g. after initialisation)
@@ -111,7 +112,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
         .map(d => d.id);
 
       const minAuditors = strictAuditorRule ? 2 : 1;
-      await onAutoConsolidate(threshold, standaloneExemptIds, minAuditors);
+      await onAutoConsolidate(threshold, standaloneExemptIds, minAuditors, useAI);
       setBuilderTab(2);
     } finally {
       setIsProcessing(false);
@@ -333,6 +334,18 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                  </div>
                )}
                <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight mb-2 px-2">Auto-Generate Groups</h4>
+               <div className="flex items-center gap-3 mb-8 px-2 mt-4">
+                 <button 
+                   onClick={() => { setUseAI(!useAI); localStorage.setItem('group_builder_use_ai', (!useAI).toString()); }}
+                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${useAI ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'}`}
+                 >
+                   <Sparkles className={`w-3.5 h-3.5 ${useAI ? 'text-indigo-200' : 'text-slate-300'}`} />
+                   AI Thematic Mode {useAI ? 'ON' : 'OFF'}
+                 </button>
+                 {useAI && (
+                   <span className="text-[10px] font-medium text-blue-500 animate-pulse italic">Thinking semantically...</span>
+                 )}
+               </div>
                <p className="text-xs font-medium text-slate-500 mb-8 max-w-lg px-2">
                  Set an asset threshold. The system will bundle standalone departments together until they exceed this threshold.
                </p>

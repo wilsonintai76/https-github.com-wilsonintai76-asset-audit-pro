@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Location, Department, User, Building } from '../types';
+import { Location, Department, User, Building } from '@shared/types';
 import { X, MapPin, Building2, Layers, User as UserIcon, Phone, FileText, Search, ChevronDown } from 'lucide-react';
 
 interface LocationModalProps {
