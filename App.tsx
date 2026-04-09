@@ -266,10 +266,13 @@ const App: React.FC = () => {
       // weren't matched during the granular asset sync (unresolved Bahagian values).
       const finalAssets = Math.max(computedAssets, dept.totalAssets || 0);
       
+      // Auditor/Officer count: anyone with valid certification can be an officer,
+      // regardless of role. Must have certification_expiry >= today and Active status.
+      const today = new Date().toISOString().split('T')[0];
       const auditors = users.filter(u =>
         u.departmentId && u.departmentId === dept.id &&
-        ['Staff', 'Auditor', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
-        u.status === 'Active'
+        u.status === 'Active' &&
+        u.certificationExpiry && u.certificationExpiry >= today
       ).length;
 
       // Manual setting takes precedence. 
@@ -294,6 +297,7 @@ const App: React.FC = () => {
       const allLocs = await gateway.getLocations();
       const allDepts = await gateway.getDepartments();
       const allUsers = await gateway.getUsers();
+      const today = new Date().toISOString().split('T')[0];
 
       const deptTotals: Record<string, number> = {};
       allLocs.forEach(loc => {
@@ -309,8 +313,8 @@ const App: React.FC = () => {
         const totalAssets = Math.max(calculatedAssets, d.totalAssets || 0);
         const auditors = allUsers.filter(u =>
           u.departmentId && u.departmentId === d.id &&
-          ['Staff', 'Auditor', 'Supervisor', 'Coordinator', 'Admin'].some(role => u.roles?.includes(role as any)) &&
-          u.status === 'Active'
+          u.status === 'Active' &&
+          u.certificationExpiry && u.certificationExpiry >= today
         ).length;
         
         // Only automatically EXEMPT if it's completely empty AND not part of a consolidation unit.
