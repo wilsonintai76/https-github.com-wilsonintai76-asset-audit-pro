@@ -73,7 +73,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       return `
         <tr>
           <td><strong>${dept.abbr}</strong><br/><span class="sub">${dept.name}</span></td>
-          <td>${headUser ? `${headUser.name}<br/><span class="sub">${headUser.id}</span>` : '<span class="na">Not Assigned</span>'}</td>
+          <td>${headUser ? headUser.name : '<span class="na">Not Assigned</span>'}</td>
           <td class="center">${dept.auditorCount || 0}</td>
           <td class="center">${(dept.totalAssets || 0).toLocaleString()}</td>
           <td class="center">${(dept.uninspectedAssetCount || 0) > 0 ? `<span class="badge-red">${(dept.uninspectedAssetCount || 0).toLocaleString()}</span>` : '—'}</td>
@@ -252,10 +252,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                       <div className="flex items-center gap-2 text-sm text-slate-600 font-medium">
                         <UserRound className="w-4 h-4 opacity-40" />
                         {headUser ? (
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-900">{headUser.name}</span>
-                            <span className="text-[10px] text-slate-400 font-medium">{headUser.id}</span>
-                          </div>
+                          <span className="font-bold text-slate-900">{headUser.name}</span>
                         ) : (
                           <span className="text-slate-400 italic">Not Assigned</span>
                         )}
