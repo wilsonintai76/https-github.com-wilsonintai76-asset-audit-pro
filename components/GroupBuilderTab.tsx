@@ -221,12 +221,15 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     let total = 0;
     const groups = auditGroups.map(group => {
       const groupDepts = departments.filter(d => d.auditGroupId === group.id || d.auditGroup === group.name);
-      const subTotal = groupDepts.reduce((sum, d) => {
+      let subTotal = 0;
+      let subAuditors = 0;
+      groupDepts.forEach(d => {
         const val = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
         total += val;
-        return sum + val;
-      }, 0);
-      return { ...group, departments: groupDepts, subTotal };
+        subTotal += val;
+        subAuditors += d.auditorCount || 0;
+      });
+      return { ...group, departments: groupDepts, subTotal, subAuditors };
     });
     const unassignedDepts = departments.filter(d => !d.auditGroupId && !d.auditGroup);
     unassignedDepts.forEach(d => {

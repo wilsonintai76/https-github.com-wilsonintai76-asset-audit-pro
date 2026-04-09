@@ -361,6 +361,7 @@ interface GroupedDept {
   name: string;
   abbr?: string;
   totalAssets?: number;
+  auditorCount?: number;
 }
 
 interface AuditGroupData {
@@ -369,6 +370,7 @@ interface AuditGroupData {
   color?: string;
   departments: GroupedDept[];
   subTotal: number;
+  subAuditors: number;
 }
 
 interface GroupedData {
@@ -380,18 +382,23 @@ export function printUnitConsolidation(
   groupedData: GroupedData,
   overallTotal: number,
 ): void {
+  const overallAuditors = groupedData.groups.reduce((s, g) => s + g.subAuditors, 0)
+    + groupedData.unassignedDepts.reduce((s, d) => s + (d.auditorCount || 0), 0);
+
   const groupRows = groupedData.groups.map(group => {
     const deptRows = group.departments.map(d =>
       `<tr class="subrow">
         <td style="padding-left:20pt;">${d.name}</td>
         <td>${d.abbr || ''}</td>
         <td class="right">${fmt(d.totalAssets || 0)}</td>
+        <td class="right">${d.auditorCount || 0}</td>
       </tr>`
     ).join('');
     return `
       <tr style="background:#eff6ff;" class="no-break">
         <td colspan="2"><strong>${group.name}</strong></td>
         <td class="right"><strong>${fmt(group.subTotal)}</strong></td>
+        <td class="right"><strong>${group.subAuditors}</strong></td>
       </tr>
       ${deptRows}`;
   }).join('');
@@ -400,12 +407,14 @@ export function printUnitConsolidation(
     ? `<tr style="background:#fef9c3;" class="no-break">
         <td colspan="2"><strong>Unassigned (Standalone Units)</strong></td>
         <td class="right"><strong>${fmt(groupedData.unassignedDepts.reduce((s, d) => s + (d.totalAssets || 0), 0))}</strong></td>
+        <td class="right"><strong>${groupedData.unassignedDepts.reduce((s, d) => s + (d.auditorCount || 0), 0)}</strong></td>
       </tr>` +
       groupedData.unassignedDepts.map(d =>
         `<tr class="subrow">
           <td style="padding-left:20pt;">${d.name}</td>
           <td>${d.abbr || ''}</td>
           <td class="right">${fmt(d.totalAssets || 0)}</td>
+          <td class="right">${d.auditorCount || 0}</td>
         </tr>`
       ).join('')
     : '';
@@ -429,6 +438,10 @@ export function printUnitConsolidation(
     <div class="stat-label">Institution Total Assets</div>
     <div class="stat-value">${fmt(overallTotal)}</div>
   </div>
+  <div class="stat-box">
+    <div class="stat-label">Total Officers (Certified)</div>
+    <div class="stat-value">${overallAuditors}</div>
+  </div>
 </div>
 
 <table>
@@ -437,6 +450,7 @@ export function printUnitConsolidation(
       <th>Group / Department</th>
       <th>Abbr.</th>
       <th class="right">Assets</th>
+      <th class="right">Officers</th>
     </tr>
   </thead>
   <tbody>
@@ -445,6 +459,7 @@ export function printUnitConsolidation(
     <tr style="border-top:2pt solid #111;">
       <td colspan="2"><strong>Grand Total</strong></td>
       <td class="right"><strong>${fmt(overallTotal)}</strong></td>
+      <td class="right"><strong>${overallAuditors}</strong></td>
     </tr>
   </tbody>
 </table>`;
