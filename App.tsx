@@ -2374,6 +2374,7 @@ const App: React.FC = () => {
               currentUser={currentUser}
               activities={activities}
               maxAssetsPerDay={maxAssetsPerDay}
+              maxLocationsPerDay={maxLocationsPerDay}
               auditGroups={auditGroups}
               institutionKPIs={institutionKPIs}
               buildings={buildings}

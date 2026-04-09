@@ -25,9 +25,11 @@ interface OverviewDashboardProps {
   currentUser: User;
   auditGroups?: AuditGroup[];
   maxAssetsPerDay?: number;
+  maxLocationsPerDay?: number;
   institutionKPIs?: InstitutionKPITarget[];
   buildings?: Building[];
   kpiTierTargets?: KPITierTarget[];
+  strictAuditorRule?: boolean;
 }
 
 function BarFill({ pct, className }: { pct: number; className: string }) {
@@ -46,7 +48,7 @@ function HeightFill({ pct, className }: { pct: number; className: string }) {
   return <div ref={ref} className={`h-(--h) ${className}`} />;
 }
 
-export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({ 
+export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   schedules,
   config,
   onUpdateConfig,
@@ -57,9 +59,11 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   currentUser,
   auditGroups = [],
   maxAssetsPerDay = 500,
+  maxLocationsPerDay = 5,
   institutionKPIs = [],
   buildings = [],
-  kpiTierTargets = []
+  kpiTierTargets = [],
+  strictAuditorRule = false,
 }) => {
   const { t } = useLanguage();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
@@ -487,13 +491,15 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         </div>
 
         <div className="space-y-8">
-            <ActiveEntitiesList 
-              entities={activeEntities} 
+            <ActiveEntitiesList
+              entities={activeEntities}
               selectedEntity=""
               onSelect={() => {}}
               megaTargetThreshold={3000}
-              minAuditors={2}
+              minAuditors={strictAuditorRule ? 2 : 1}
               overallTotal={overallTotalAssets}
+              threshold={maxAssetsPerDay}
+              strictAuditorRule={strictAuditorRule}
             />
           
           {config.showUpcoming && (
