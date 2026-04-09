@@ -439,7 +439,7 @@ export function printUnitConsolidation(
     <div class="stat-value">${fmt(overallTotal)}</div>
   </div>
   <div class="stat-box">
-    <div class="stat-label">Total Officers (Certified)</div>
+    <div class="stat-label">Total Auditors (Certified)</div>
     <div class="stat-value">${overallAuditors}</div>
   </div>
 </div>
@@ -450,7 +450,7 @@ export function printUnitConsolidation(
       <th>Group / Department</th>
       <th>Abbr.</th>
       <th class="right">Assets</th>
-      <th class="right">Officers</th>
+      <th class="right">Auditors</th>
     </tr>
   </thead>
   <tbody>

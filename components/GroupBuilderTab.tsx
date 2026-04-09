@@ -543,7 +543,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                                    </span>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
-                                   <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Officers</span>
+                                   <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Auditors</span>
                                    <div className="flex flex-col items-end">
                                       <div className={`text-xl font-black tabular-nums transition-colors tracking-tighter flex items-center gap-1.5 ${e.auditors < recAuditors ? 'text-amber-500' : 'text-slate-800'}`}>
                                         {e.auditors}

@@ -103,11 +103,6 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
                       <span className="text-[9px] uppercase opacity-70">Auditors</span>
                       <span className={`text-xs ${entity.auditors < minAuditors && !isSelected ? 'text-red-500' : ''}`}>
                         {entity.auditors}
-                        {!strictAuditorRule && entity.auditors < Math.max(2, Math.ceil(entity.assets / (threshold || 1)), Math.ceil(entity.memberCount / (maxLocationsPerDay || 1))) && (
-                          <span className="text-[8px] text-amber-500 ml-1">
-                            (Rec: {Math.max(2, Math.ceil(entity.assets / (threshold || 1)), Math.ceil(entity.memberCount / (maxLocationsPerDay || 1)))})
-                          </span>
-                        )}
                       </span>
                     </div>
                   </div>
