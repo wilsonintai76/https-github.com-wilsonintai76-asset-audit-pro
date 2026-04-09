@@ -213,9 +213,11 @@ export const bulkManagement = {
 
   /**
    * Processes a batch of staff members for activation.
+   * Only requires: Name, Email, Department (optional).
+   * Defaults: Designation='Supervisor', Role='Staff'.
    */
   async activateStaff(
-    entries: { name: string; email: string; department?: string; designation?: string; role?: string }[],
+    entries: { name: string; email: string; department?: string }[],
     currentUsers: User[],
     currentDepartments: Department[]
   ) {
@@ -234,8 +236,8 @@ export const bulkManagement = {
         id: crypto.randomUUID(),
         name: entry.name,
         email: entry.email || `${entry.name.replace(/\s+/g, '').toLowerCase()}@poliku.edu.my`,
-        roles: entry.role ? [entry.role as any] : ['Staff'],
-        designation: entry.designation as any || 'Supervisor',
+        roles: ['Staff'],
+        designation: 'Supervisor',
         status: 'Active',
         isVerified: true,
         departmentId: deptId,
