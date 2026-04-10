@@ -6,7 +6,7 @@ import { printUnitConsolidation } from '../lib/printUtils';
 
 
 interface GroupBuilderTabProps {
-  departments: Department[];
+  departments: (Department & { locationCount?: number, auditorCount?: number })[];
   auditGroups: AuditGroup[];
   onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => Promise<void>;
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<AuditGroup | null>;
@@ -18,6 +18,7 @@ interface GroupBuilderTabProps {
   strictAuditorRule: boolean;
   setStrictAuditorRule: (val: boolean) => void;
   maxAssetsPerDay: number;
+  standaloneThresholdAssets: number;
   maxLocationsPerDay?: number;
   minAuditorsPerLocation?: number;
   isSystemLocked?: boolean;
@@ -36,6 +37,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   strictAuditorRule,
   setStrictAuditorRule,
   maxAssetsPerDay,
+  standaloneThresholdAssets,
   minAuditorsPerLocation = 2,
   isSystemLocked = false,
   pairingLocked = false,
@@ -68,8 +70,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     setIsProcessing(true);
     try {
       // The server handles the logic of large standalone units based on the threshold.
-      // We only pass the global maxAssetsPerDay as the target threshold.
-      const threshold = maxAssetsPerDay;
+      const threshold = standaloneThresholdAssets;
       const minAuditors = minAuditorsPerLocation;
       
       // Pass empty array for excludedIds to let server logic prevail by default
@@ -124,12 +125,27 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
       const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       const name = isUnassigned ? depts[0].name : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
-      const isStandaloneExempt = isUnassigned && totalAssets >= maxAssetsPerDay;
-
+      const totalLocations = depts.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
       const constitutesGroup = !isUnassigned;
+      const isStandalone = !constitutesGroup && totalAssets >= standaloneThresholdAssets;
+      
+      // BBI Formula (Matched with backend): (Assets * 0.5) + (Locations * 100) + (Staff * 300)
+      const bbi = (totalAssets * 0.5) + (totalLocations * 100) + (totalAuditors * 300);
 
-      return { name, assets: totalAssets, auditors: totalAuditors, memberCount: depts.length, isJoint: constitutesGroup, isGroup: constitutesGroup, id: groupId, members: depts };
-    }).sort((a, b) => b.assets - a.assets);
+      return { 
+        name, 
+        assets: totalAssets, 
+        auditors: totalAuditors, 
+        locations: totalLocations,
+        bbi: Math.round(bbi),
+        memberCount: depts.length, 
+        isJoint: constitutesGroup, 
+        isGroup: constitutesGroup, 
+        isStandalone,
+        id: groupId, 
+        members: depts 
+      };
+    }).sort((a, b) => b.bbi - a.bbi);
   }, [departments, auditGroups, maxAssetsPerDay]);
 
   const grandTotalAssets = useMemo(() => {
@@ -248,8 +264,8 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                      <div className="flex items-center gap-4 bg-slate-50 p-6 border border-slate-100 rounded-[28px] opacity-60">
                        <Boxes className="w-7 h-7 text-indigo-400" />
                        <div className="flex flex-col">
-                         <span className="text-3xl font-black text-slate-800 tabular-nums italic">{maxAssetsPerDay.toLocaleString()}</span>
-                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Inherited from Global Strategy</span>
+                         <span className="text-3xl font-black text-slate-800 tabular-nums italic">{standaloneThresholdAssets.toLocaleString()}</span>
+                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Consolidation Cutoff</span>
                        </div>
                      </div>
                   </div>
@@ -271,7 +287,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                     <div className="space-y-1">
                       <p className="text-[11px] font-black text-indigo-900 uppercase tracking-widest">Consolidation Rules</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
-                        <p className="text-[10px] text-indigo-700 font-medium">• Standalone: Assets ≥ {maxAssetsPerDay.toLocaleString()} or Locations ≥ 15</p>
+                        <p className="text-[10px] text-indigo-700 font-medium">• Standalone: Assets ≥ {standaloneThresholdAssets.toLocaleString()} or Locations ≥ 15</p>
                         <p className="text-[10px] text-indigo-700 font-medium">• Combined: Units below threshold will form groups of ~1,000 burden units</p>
                       </div>
                     </div>
@@ -326,11 +342,13 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500/10"></div>
                          <div className="flex justify-between items-start mb-8">
                             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-400">Rank #{idx + 1}</span>
-                            {e.isConsolidated ? (
-                              <div className="px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[8px] font-black uppercase">Group</div>
-                            ) : (
-                              <div className="px-2.5 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-lg text-[8px] font-black uppercase">Standalone</div>
-                            )}
+                             {e.isGroup ? (
+                               <div className="px-2.5 py-1 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-lg text-[8px] font-black uppercase">Group</div>
+                             ) : e.isStandalone ? (
+                               <div className="px-2.5 py-1 bg-slate-900 text-white rounded-lg text-[8px] font-black uppercase shadow-sm">Standalone</div>
+                             ) : (
+                               <div className="px-2.5 py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-lg text-[8px] font-black uppercase">Candidate</div>
+                             )}
                          </div>
                          <h5 className="font-black text-lg text-slate-900 mb-6 tracking-tight line-clamp-2 h-11">{e.name}</h5>
                          <div className="flex flex-wrap gap-2 mb-8 grow content-start min-h-16">
@@ -338,19 +356,55 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                               <span key={m.id} className="px-3 py-1 bg-slate-50 text-slate-500 border border-slate-200/50 rounded-xl text-[8px] font-bold uppercase">{m.abbr}</span>
                             ))}
                          </div>
+                         <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl mb-4">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Complexity (BBI)</span>
+                              <span className="text-sm font-black text-indigo-600 italic tabular-nums">{e.bbi.toLocaleString()}</span>
+                            </div>
+                            <div className="w-full bg-indigo-200/30 h-1 rounded-full overflow-hidden">
+                              <div className="bg-indigo-500 h-full transition-all duration-1000" style={{ width: `${Math.min(100, (e.bbi / 2000) * 100)}%` }}></div>
+                            </div>
+                         </div>
+
                          <div className="mt-auto pt-6 border-t border-slate-100 grid grid-cols-2 gap-4 shrink-0">
                             <div className="flex flex-col gap-1">
                                <span className="text-[8px] font-black uppercase text-slate-400">Assets</span>
                                <span className="text-xl font-black text-slate-800 tabular-nums italic">{e.assets.toLocaleString()}</span>
                             </div>
                             <div className="flex flex-col items-end gap-1">
-                               <span className="text-[8px] font-black uppercase text-slate-400">Auditors</span>
-                               <div className="text-xl font-black tabular-nums text-slate-800 flex items-center gap-1.5">{e.auditors}<Users className="w-3.5 h-3.5 opacity-20" /></div>
+                               <span className="text-[8px] font-black uppercase text-slate-400">Density</span>
+                               <span className={`text-xl font-black tabular-nums flex items-center gap-1.5 ${e.auditors > 0 && (e.assets / e.auditors) > 1000 ? 'text-rose-600' : 'text-slate-800'}`}>
+                                 {e.auditors > 0 ? (e.assets / e.auditors).toFixed(0) : '∞'}
+                               </span>
                             </div>
                          </div>
-                      </div>
+                       </div>
                     ))}
                   </div>
+               </div>
+               
+               <div className="p-6 bg-slate-50 border border-slate-100 rounded-[32px] space-y-6">
+                 <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                   <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs italic">?</span>
+                   Consolidation Rules (BBI)
+                 </h4>
+                 <div className="space-y-4">
+                   <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                     <span className="text-[10px] font-black text-indigo-500 uppercase block mb-2 tracking-widest">Rule 1: Balanced Resource Density</span>
+                     <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                       Groups are balanced by <b>Magnitude</b> (BBI): 
+                       <code className="block mt-1 p-1.5 bg-slate-50 rounded italic text-[9px] text-indigo-600 border border-indigo-100">(Assets × 0.5) + (Locations × 100) + (Staff × 300)</code>
+                       This mixes high-workload pools with certified staff to ensure fair audits.
+                     </p>
+                   </div>
+                   
+                   <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                     <span className="text-[10px] font-black text-emerald-500 uppercase block mb-2 tracking-widest">Rule 2: Strategic Standalone Trigger</span>
+                     <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
+                       Units ≥ <b>{standaloneThresholdAssets} assets</b> remain Standalone if they have ≥ <b>2 auditors</b>. Otherwise, they are merged into the pool for resource support.
+                     </p>
+                   </div>
+                 </div>
                </div>
              </div>
            )}

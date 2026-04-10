@@ -148,32 +148,53 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const entities = useMemo(() => {
     const groupedDepts: Record<string, Department[]> = {};
-    const getAuditorCount = (deptId: string) => {
+    
+    // Use enriched departments with counts from useAppData if available
+    // Otherwise calculate locally
+    const getStats = (deptId: string) => {
       const today = new Date().toISOString().split('T')[0];
-      return users.filter(u => 
-        u.departmentId === deptId && 
-        u.status === 'Active' && 
-        u.certificationExpiry && 
-        u.certificationExpiry >= today
+      const deptUsers = users.filter(u => u.departmentId === deptId);
+      const auditors = deptUsers.filter(u => 
+        u.status === 'Active' && u.certificationExpiry && u.certificationExpiry >= today
       ).length;
+      
+      const locs = (departments.find(d => d.id === deptId) as any)?.locationCount || 0;
+      return { auditors, locs };
     };
 
     activeDepts.forEach(dept => {
       const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
       const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
-      groupedDepts[key].push({ ...dept, auditorCount: getAuditorCount(dept.id) });
+      const stats = getStats(dept.id);
+      groupedDepts[key].push({ ...dept, auditorCount: stats.auditors, locationCount: stats.locs });
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
       const isUnassigned = groupId.startsWith('unassigned_');
       const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+      const totalLocations = depts.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
       const name = isUnassigned ? depts[0].name : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
       const constitutesGroup = !isUnassigned;
-      return { name, assets: totalAssets, auditors: totalAuditors, memberCount: depts.length, isJoint: constitutesGroup, isGroup: constitutesGroup, id: groupId, members: depts };
-    }).sort((a, b) => b.assets - a.assets);
-  }, [activeDepts, auditGroups, users]);
+
+      // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
+      const bbi = (totalAssets * 0.5) + (totalLocations * 100) + (totalAuditors * 300);
+
+      return { 
+        name, 
+        assets: totalAssets, 
+        auditors: totalAuditors, 
+        locations: totalLocations,
+        bbi: Math.round(bbi),
+        memberCount: depts.length, 
+        isJoint: constitutesGroup, 
+        isGroup: constitutesGroup, 
+        id: groupId, 
+        members: depts 
+      };
+    }).sort((a, b) => b.bbi - a.bbi);
+  }, [activeDepts, auditGroups, users, departments]);
 
   useEffect(() => { localStorage.setItem(SIMULATOR_ACTIVE_KEY, isSimulatorActive ? 'true' : 'false'); }, [isSimulatorActive]);
   useEffect(() => { localStorage.setItem(SIMULATOR_PAIRINGS_KEY, JSON.stringify(simulatedPairings)); }, [simulatedPairings]);
@@ -613,13 +634,26 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                          return (
                            <tr key={idx} className="hover:bg-slate-50/50 transition-all group">
                              <td className="px-6 py-4">
-                                <span className="text-sm font-black text-slate-800">{aud?.name || 'Unknown'}</span>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-black text-slate-800">{aud?.name || 'Unknown'}</span>
+                                  {aud && <span className="text-[10px] font-bold text-indigo-400">BBI: {aud.bbi?.toLocaleString()}</span>}
+                                </div>
                              </td>
                              <td className="px-6 py-4 text-center">
-                                <div className="inline-flex p-1.5 bg-slate-100 rounded-lg text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-500 transition-all">{p.isMutual ? <ArrowRightLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}</div>
+                                <div className="flex flex-col items-center gap-1">
+                                  <div className="inline-flex p-1.5 bg-slate-100 rounded-lg text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-500 transition-all">{p.isMutual ? <ArrowRightLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}</div>
+                                  {aud && tgt && (
+                                    <span className={`text-[8px] font-black uppercase ${Math.abs((aud.bbi || 0) / (tgt.bbi || 1) - 1) < 0.3 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                      {Math.abs((aud.bbi || 0) / (tgt.bbi || 1) - 1) < 0.3 ? 'Stable' : 'Strain'}
+                                    </span>
+                                  )}
+                                </div>
                              </td>
                              <td className="px-6 py-4">
-                                <span className="text-sm font-black text-slate-800">{tgt?.name || 'Unknown'}</span>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-black text-slate-800">{tgt?.name || 'Unknown'}</span>
+                                  {tgt && <span className="text-[10px] font-bold text-emerald-500">BBI: {tgt.bbi?.toLocaleString()}</span>}
+                                </div>
                              </td>
                              <td className="px-6 py-4 text-right">
                                 {isSimulatorActive ? (

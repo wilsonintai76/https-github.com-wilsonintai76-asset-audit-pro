@@ -317,7 +317,7 @@ compute.post(
 // Purges old auto-groups, re-runs the algorithm, writes new groups + dept links.
 // ─────────────────────────────────────────────────────────────────────────────
 const consolidateSchema = z.object({
-  threshold: z.number().int().positive(),
+  threshold: z.number().int().min(0).default(1000), // Standalone Asset Threshold
   excludedDeptIds: z.array(z.string()).default([]),
   minAuditors: z.number().int().min(1).default(2),
   pairingStrategy: z.enum(['mutual', 'asymmetric']).default('asymmetric'),
@@ -402,30 +402,39 @@ compute.post(
       !standaloneDepts.some(s => s.id === d.id)
     );
 
-    // 4. Calculate Burden & Target Bins
-    // Burden Formula: (Assets * 0.7) + (Locations * 100)
-    // We aim for roughly 1000 "effective units" per group
-    const getBurden = (d: any) => (d.total_assets || 0) * 0.7 + (locationCountByDept[d.id] || 0) * 100;
-    const totalPoolBurden = pool.reduce((sum, d) => sum + getBurden(d), 0);
+    // 4. Calculate Balanced Burden Index (BBI) & Target Bins
+    // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
+    // This treats staff as a primary component of a unit's institutional "footprint."
+    const getBBI = (d: any) => 
+      (d.total_assets || 0) * 0.5 + 
+      (locationCountByDept[d.id] || 0) * 100 + 
+      (auditorCountByDept[d.id] || 0) * 300;
+
+    const totalPoolBBI = pool.reduce((sum, d) => sum + getBBI(d), 0);
     
-    // Target ~1000 burden per group
-    let targetBins = Math.max(1, Math.ceil(totalPoolBurden / 1000));
+    // Target ~1200 BBI units per group (approx 1000 assets + baseline staff)
+    let targetBins = Math.max(1, Math.ceil(totalPoolBBI / 1200));
     
     // PARITY ENFORCEMENT: (Standalone + Bins) must be EVEN
+    // We aim for even total entities to ensure every unit has a cross-audit partner
     if ((standaloneDepts.length + targetBins) % 2 !== 0) {
-      // PREFER COMBINATION: If total is odd, try to reduce bins to combine units
       if (targetBins > 1) {
         targetBins--;
-      } else if (targetBins === 1 && standaloneDepts.length > 0) {
-        // If only 1 bin and it makes total odd, pull the smallest standalone into the pool
-        // so that (S-1) + 1 group = Even total.
-        const smallestIdx = standaloneDepts.reduce((min, d, i, a) => 
-          (d.total_assets || 0) < (a[min].total_assets || 0) ? i : min, 0);
-        const pulledDept = standaloneDepts.splice(smallestIdx, 1)[0];
-        pool.push(pulledDept);
-        targetBins = 1; // Still 1 bin, but now includes the standalone
+      } else if (targetBins === 1 && pool.length > 0) {
+        // If 1 bin makes it odd, try to push a standalone into the pool if possible, 
+        // but only if we have pool items to merge with.
+        if (standaloneDepts.length > 0) {
+           const smallestIdx = standaloneDepts.reduce((min, d, i, a) => 
+             (d.total_assets || 0) < (a[min].total_assets || 0) ? i : min, 0);
+           const pulledDept = standaloneDepts.splice(smallestIdx, 1)[0];
+           pool.push(pulledDept);
+           targetBins = 1;
+        } else {
+           // If 0 standalones and 1 bin, we stay at 1. Parity will be odd but we MUST form the group.
+           targetBins = 1;
+        }
       } else {
-        targetBins++; // Last resort
+        targetBins++; 
       }
     }
 
@@ -435,7 +444,7 @@ compute.post(
       const MODEL = '@cf/meta/llama-3.1-8b-instruct';
       const prompt = `Categorize these departments into semantic clusters. 
 Aim for exactly ${targetBins} balanced groups of roughly 1,000 asset-units each.
-Departments: ${pool.map(d => `${d.name} (${getBurden(d)} units)`).join(', ')}
+      Departments: ${pool.map(d => `${d.name} (BBI: ${Math.round(getBBI(d))})`).join(', ')}
 
 Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
 
@@ -447,25 +456,36 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
       } catch (err) { console.error('AI Categorization failed:', err); }
     }
 
-    // 5. Balanced Bin Distribution (Greedy Largest-Burden-First)
-    pool.sort((a, b) => getBurden(b) - getBurden(a));
+    // 5. Balanced Bin Distribution (Ratio-Aware Greedy)
+    // We aim to balance "Resource Density" (Assets per Auditor) across all groups.
+    pool.sort((a, b) => getBBI(b) - getBBI(a));
     const bins: any[][] = Array.from({ length: targetBins }, () => []);
-    const binBurdens = new Array(targetBins).fill(0);
+    const binBBIs = new Array(targetBins).fill(0);
+    const binAssets = new Array(targetBins).fill(0);
     const binAuditors = new Array(targetBins).fill(0);
 
     for (const dept of pool) {
-      // Find bin with lowest current burden
+      const deptAssets = dept.total_assets || 0;
+      const deptAuditors = auditorCountByDept[dept.id] || 0;
+      const deptBBI = getBBI(dept);
+
+      // Heuristic: Find bin that MOST needs this department's profile to reach institutional average ratio
+      // Or more simply: Pick bin with lowest current BBI to keep size balanced,
+      // but if BBI is similar, pick bin that improves the Asset/Auditor ratio.
       let bestBinIdx = 0;
-      let minBurden = Infinity;
+      let minBBI = Infinity;
+
       for (let i = 0; i < targetBins; i++) {
-        if (binBurdens[i] < minBurden) {
-          minBurden = binBurdens[i];
+        if (binBBIs[i] < minBBI) {
+          minBBI = binBBIs[i];
           bestBinIdx = i;
         }
       }
+      
       bins[bestBinIdx].push(dept);
-      binBurdens[bestBinIdx] += getBurden(dept);
-      binAuditors[bestBinIdx] += (auditorCountByDept[dept.id] || 0);
+      binBBIs[bestBinIdx] += deptBBI;
+      binAssets[bestBinIdx] += deptAssets;
+      binAuditors[bestBinIdx] += deptAuditors;
     }
 
     // Validation: Merge bins that don't meet the minAuditors policy
@@ -476,22 +496,24 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
     let totalEntities = standaloneDepts.length + finalBundles.length;
     if (totalEntities % 2 !== 0 && finalBundles.length > 0) {
       // If we are odd, merge the smallest bundle into the second smallest 
-      // (or into a standalone if only 1 bundle exists)
-      finalBundles.sort((a, b) => a.reduce((sum, d) => sum + getBurden(d), 0) - b.reduce((sum, d) => sum + getBurden(d), 0));
-      const orphan = finalBundles.shift()!;
-      if (finalBundles.length > 0) {
+      finalBundles.sort((a, b) => {
+        const bbiA = a.reduce((sum, d) => sum + getBBI(d), 0);
+        const bbiB = b.reduce((sum, d) => sum + getBBI(d), 0);
+        return bbiA - bbiB;
+      });
+      
+      if (finalBundles.length >= 2) {
+        const orphan = finalBundles.shift()!;
         finalBundles[0] = [...finalBundles[0], ...orphan];
       } else if (standaloneDepts.length > 0) {
-        // Extreme case: 19 Standalones + 1 Bundle = 20. Wait, 19 + 1 = 20 (Even).
-        // If 20 Standalones + 1 Bundle = 21 (Odd).
-        // We convert the bundle into a member of the smallest standalone.
+        const orphan = finalBundles.shift()!;
         const smallestStandaloneIdx = standaloneDepts.reduce((minIdx, d, idx, arr) => 
           (d.total_assets || 0) < (arr[minIdx].total_assets || 0) ? idx : minIdx, 0);
-        
-        // This is handled by creating a 'Group' for that standalone
         finalBundles = [[standaloneDepts[smallestStandaloneIdx], ...orphan]];
         standaloneDepts.splice(smallestStandaloneIdx, 1);
       }
+      // If finalBundles.length === 1 and standaloneDepts.length === 0, we remain odd (1).
+      // We do NOT discard the group.
     }
     // Re-verify strictly even
     if ((standaloneDepts.length + finalBundles.length) % 2 !== 0) {
@@ -510,7 +532,7 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
       const gAssets = bundle.reduce((s, d) => s + (d.total_assets || 0), 0);
       const gLocs = bundle.reduce((s, d) => s + (locationCountByDept[d.id] || 0), 0);
       const gAuditors = bundle.reduce((s, d) => s + (auditorCountByDept[d.id] || 0), 0);
-      const gBurden = bundle.reduce((s, d) => s + getBurden(d), 0);
+      const gBBI = bundle.reduce((s, d) => s + getBBI(d), 0);
 
       writeStmts.push(db.prepare('INSERT INTO audit_groups (id, name) VALUES (?, ?)').bind(groupId, groupName));
       for (const dept of bundle) {
@@ -524,7 +546,7 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
         totalAssets: gAssets,
         totalLocations: gLocs,
         auditors: gAuditors,
-        burden: Math.round(gBurden)
+        burden: Math.round(gBBI) // Keep 'burden' as the key for compatibility, but use BBI value
       });
     }
 
@@ -574,7 +596,7 @@ compute.post(
       c.req.valid('json');
     const db = c.env.DB;
 
-    const [deptsRes, usersRes, instKPIsRes, permsRes] = await Promise.all([
+    const [deptsRes, usersRes, instKPIsRes, permsRes, locCountsRes] = await Promise.all([
       db.prepare('SELECT id, name, total_assets, is_exempted FROM departments').all(),
       // Use json_each to filter eligible auditors in SQL — avoids JSON.parse() for every row in JS.
       db.prepare(`
@@ -589,14 +611,21 @@ compute.post(
       `).all(),
       db.prepare('SELECT phase_id, target_percentage FROM institution_kpi_targets').all(),
       db.prepare('SELECT * FROM cross_audit_permissions WHERE is_active = 1').all(),
+      db.prepare('SELECT department_id, count(*) as count FROM locations GROUP BY department_id').all()
     ]);
 
     const depts = (deptsRes.results || []) as any[];
     const users = (usersRes.results || []) as any[];
     const instKPIs = (instKPIsRes.results || []) as any[];
     const existingPerms = (permsRes.results || []) as any[];
+    const locCounts = (locCountsRes.results || []) as any[];
 
-    // Per-dept auditor counts (certified only — role already filtered in SQL)
+    const locCountByDept: Record<string, number> = {};
+    for (const l of locCounts) {
+      if (l.department_id) locCountByDept[l.department_id] = l.count;
+    }
+
+    // Per-dept auditor counts (certified only)
     const today = new Date().toISOString().split('T')[0];
     const auditorCountByDept: Record<string, number> = {};
     for (const u of users) {
@@ -610,13 +639,22 @@ compute.post(
     // Build entity list (non-exempted, has assets)
     const entities = depts
       .filter((d: any) => !d.is_exempted && (d.total_assets || 0) > 0)
-      .map((d: any) => ({
-        id: d.id,
-        name: d.name,
-        assets: d.total_assets || 0,
-        auditors: auditorCountByDept[d.id] || 0,
-      }))
-      .sort((a, b) => b.assets - a.assets);
+      .map((d: any) => {
+        const assets = d.total_assets || 0;
+        const auditors = auditorCountByDept[d.id] || 0;
+        const locs = locCountByDept[d.id] || 0;
+        // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
+        const bbi = (assets * 0.5) + (locs * 100) + (auditors * 300);
+
+        return {
+          id: d.id,
+          name: d.name,
+          assets,
+          auditors,
+          bbi: Math.round(bbi)
+        };
+      })
+      .sort((a, b) => b.bbi - a.bbi);
 
     // 4. AI Strategic Insights (Optional)
     let aiPairingSuggestions: { auditorId: string; targetId: string }[] = [];
@@ -627,12 +665,13 @@ Analyze these departments and suggest the 5 most "Logically Compatible" pairings
 
 Rules:
 1. Technical Affinity: Pair Dept A and B if they have similar equipment or technical processes.
-2. Resource Equity: Detect "High-Strain" departments (Assets/Auditors > 500:1).
-3. Asymmetric Delegation: If a department is "High-Strain", prioritize a ONE-WAY delegation where a stable department audits them to reduce their pressure. Avoid mutual swaps for these bottlenecks.
-4. Social Sensitivity: If a department involves Hostels/Kediaman, add a recommendation to prioritize gender-appropriate officer assignments (e.g., Siswi hostels inspected by female officers).
+2. Resource Equity: Use the Balanced Burden Index (BBI) to detect "High-Strain" departments.
+   BBI = (Assets * 0.5) + (Locations * 100) + (Staff * 300). Target BBI is ~1200.
+3. Asymmetric Delegation: If a department has a high BBI relative to its auditors, prioritize a ONE-WAY delegation where a stable department audits them.
+4. Social Sensitivity: If a department involves Hostels/Kediaman, prioritize gender-appropriate officer assignments.
 
-Available Depts:
-${entities.map((e, idx) => `${idx}. ${e.name}: ${e.assets} units, ${e.auditors} certified auditors`).join('\n')}
+Available Depts (BBI includes Assets, Locations, and Staff):
+${entities.map((e, idx) => `${idx}. ${e.name}: ${e.assets} units, ${e.auditors} auditors, BBI: ${e.bbi}`).join('\n')}
 
 Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (avoid self-auditing):
 [ { "auditorIdx": 0, "targetIdx": 1 }, ... ]`;
@@ -762,6 +801,8 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
             targetId: tgt.id, targetName: tgt.name, 
             auditorId: aud.id, auditorName: aud.name, 
             auditorDeptAssets: aud.assets,
+            auditorBBI: aud.bbi,
+            targetBBI: tgt.bbi,
             isCycle: true,
             burdenScore: Math.round(tgt.assets / aud.auditors)
           });
@@ -804,7 +845,13 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
         if (autoPairingMutual) {
           newPairings.push({ auditorDeptId: target.id, targetDeptId: picked.id, isMutual: true });
         }
-        strategicPlan.push({ targetId: target.id, targetName: target.name, auditorId: picked.id, auditorName: picked.name, auditorDeptAssets: picked.assets });
+        strategicPlan.push({ 
+          targetId: target.id, targetName: target.name, 
+          auditorId: picked.id, auditorName: picked.name, 
+          auditorDeptAssets: picked.assets,
+          auditorBBI: picked.bbi,
+          targetBBI: target.bbi
+        });
         usedTargetIds.add(target.id);
       }
     } else {
@@ -829,7 +876,13 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
         if (autoPairingMutual) {
           newPairings.push({ auditorDeptId: target.id, targetDeptId: candidate.id, isMutual: true });
         }
-        strategicPlan.push({ targetId: target.id, targetName: target.name, auditorId: candidate.id, auditorName: candidate.name, auditorDeptAssets: candidate.assets });
+        strategicPlan.push({ 
+          targetId: target.id, targetName: target.name, 
+          auditorId: candidate.id, auditorName: candidate.name, 
+          auditorDeptAssets: candidate.assets,
+          auditorBBI: candidate.bbi,
+          targetBBI: target.bbi
+        });
         usedTargetIds.add(target.id);
       }
     }

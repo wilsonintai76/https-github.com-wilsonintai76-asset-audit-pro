@@ -55,6 +55,8 @@ interface SystemSettingsProps {
   onUpdateMinAuditorsPerLocation: (val: number) => void;
   dailyInspectionCapacity: number;
   onUpdateDailyInspectionCapacity: (val: number) => void;
+  standaloneThresholdAssets: number;
+  onUpdateStandaloneThresholdAssets: (val: number) => void;
   onRebalanceSchedule: () => Promise<void>;
   schedules: AuditSchedule[];
   departmentMappings: DepartmentMapping[];
@@ -119,6 +121,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onUpdateMinAuditorsPerLocation,
   dailyInspectionCapacity,
   onUpdateDailyInspectionCapacity,
+  standaloneThresholdAssets,
+  onUpdateStandaloneThresholdAssets,
   onRebalanceSchedule,
   schedules,
   departmentMappings,
@@ -163,12 +167,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     maxLocationsPerDay: number;
     minAuditorsPerLocation: number;
     dailyInspectionCapacity: number;
+    standaloneThresholdAssets: number;
   } | null>(null);
 
   const currentMaxAssets = draftConstraints?.maxAssetsPerDay ?? maxAssetsPerDay;
   const currentMaxLocations = draftConstraints?.maxLocationsPerDay ?? maxLocationsPerDay;
   const currentMinAuditors = draftConstraints?.minAuditorsPerLocation ?? (strictAuditorRule ? 2 : minAuditorsPerLocation);
   const currentDailyCapacity = draftConstraints?.dailyInspectionCapacity ?? dailyInspectionCapacity;
+  const currentStandaloneThreshold = draftConstraints?.standaloneThresholdAssets ?? standaloneThresholdAssets;
 
   // Actual Resource Calculations
   const activeAuditorCount = React.useMemo(() => {
@@ -186,9 +192,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
       if (updates.maxLocationsPerDay !== undefined) onUpdateMaxLocationsPerDay(updates.maxLocationsPerDay);
       if (updates.minAuditorsPerLocation !== undefined) onUpdateMinAuditorsPerLocation(updates.minAuditorsPerLocation);
       if (updates.dailyInspectionCapacity !== undefined) onUpdateDailyInspectionCapacity(updates.dailyInspectionCapacity);
+      if (updates.standaloneThresholdAssets !== undefined) onUpdateStandaloneThresholdAssets(updates.standaloneThresholdAssets);
     } else {
       setDraftConstraints(prev => {
-        const base = prev || { maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, dailyInspectionCapacity };
+        const base = prev || { maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, dailyInspectionCapacity, standaloneThresholdAssets };
         return { ...base, ...updates } as any;
       });
     }
@@ -281,6 +288,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           onUpdateMinAuditorsPerLocation={(v) => handleUpdateDraftConstraints({ minAuditorsPerLocation: v })}
           dailyInspectionCapacity={currentDailyCapacity}
           onUpdateDailyInspectionCapacity={(v) => handleUpdateDraftConstraints({ dailyInspectionCapacity: v })}
+          standaloneThresholdAssets={currentStandaloneThreshold}
+          onUpdateStandaloneThresholdAssets={(v) => handleUpdateDraftConstraints({ standaloneThresholdAssets: v })}
           onAutoOptimize={handleAIAutoOptimize}
           isOptimizing={isSuggestingAI}
           activeAuditors={activeAuditorCount}
@@ -391,6 +400,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         strictAuditorRule={strictAuditorRule}
         setStrictAuditorRule={setStrictAuditorRule}
         maxAssetsPerDay={currentMaxAssets}
+        standaloneThresholdAssets={currentStandaloneThreshold}
         maxLocationsPerDay={currentMaxLocations}
         minAuditorsPerLocation={currentMinAuditors}
         isSystemLocked={isSystemLocked}

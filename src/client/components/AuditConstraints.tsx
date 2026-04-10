@@ -10,6 +10,8 @@ interface AuditConstraintsProps {
   onUpdateMinAuditorsPerLocation: (value: number) => void;
   dailyInspectionCapacity: number;
   onUpdateDailyInspectionCapacity: (value: number) => void;
+  standaloneThresholdAssets: number;
+  onUpdateStandaloneThresholdAssets: (value: number) => void;
   onAutoOptimize?: () => Promise<void>;
   isOptimizing?: boolean;
   activeAuditors?: number;
@@ -26,6 +28,8 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
   onUpdateMinAuditorsPerLocation,
   dailyInspectionCapacity,
   onUpdateDailyInspectionCapacity,
+  standaloneThresholdAssets,
+  onUpdateStandaloneThresholdAssets,
   onAutoOptimize,
   isOptimizing = false,
   activeAuditors = 0,
@@ -111,15 +115,16 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
           </div>
 
           <div className="space-y-4">
-            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Max Locations Per Day</label>
+            <label className="text-xs font-black uppercase text-indigo-500 tracking-widest block">Standalone Asset Threshold</label>
             <input 
               type="number"
-              min="1"
-              className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
-              value={maxLocationsPerDay}
-              onChange={(e) => onUpdateMaxLocationsPerDay(parseInt(e.target.value, 10) || 5)}
+              min="100"
+              step="100"
+              className="w-full px-4 py-4 bg-indigo-50/30 border-2 border-indigo-100/50 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+              value={standaloneThresholdAssets}
+              onChange={(e) => onUpdateStandaloneThresholdAssets(parseInt(e.target.value, 10) || 1000)}
             />
-            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">Travel Limit: Maximum number of distinct buildings permitted per shift.</p>
+            <p className="text-[10px] text-indigo-400 font-bold leading-relaxed">Consolidation Trigger: Units with total assets above this value will audit themselves autonomously.</p>
           </div>
         </div>
 

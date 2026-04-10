@@ -7,7 +7,7 @@ import { PrintButton } from './PrintButton';
 import { printUnitConsolidation } from '../lib/printUtils';
 
 interface InstitutionalConsolidationViewProps {
-  departments: Department[];
+  departments: (Department & { locationCount?: number, auditorCount?: number })[];
   auditGroups: AuditGroup[];
   title?: string;
   subtitle?: string;
@@ -22,36 +22,41 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
   isDark = false
 }) => {
   // Group departments by their audit group
-  const { groupedData, overallTotal } = React.useMemo(() => {
-    let internalTotal = 0;
+  const { groupedData, overallTotal, overallBBI } = React.useMemo(() => {
+    const unassignedDepts = departments.filter(d => !d.auditGroupId && !d.auditGroup);
+    
     const groups = auditGroups.map(group => {
       const groupDepts = departments.filter(d => d.auditGroupId === group.id || d.auditGroup === group.name);
-      const subTotal = groupDepts.reduce((sum, d) => {
-        const val = (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0));
-        return sum + val;
-      }, 0);
+      const subTotalAssets = groupDepts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+      const subTotalLocs = groupDepts.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
+      const subTotalAuditors = groupDepts.reduce((sum, d: any) => sum + (d.auditorCount || 0), 0);
+      
+      // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
+      const groupBBI = (subTotalAssets * 0.5) + (subTotalLocs * 100) + (subTotalAuditors * 300);
+
       return {
         ...group,
         departments: groupDepts,
-        subTotal
+        subTotalAssets,
+        subTotalLocs,
+        subTotalAuditors,
+        groupBBI: Math.round(groupBBI)
       };
     });
 
-    // Also include departments not in any group
-    const unassignedDepts = departments.filter(d => !d.auditGroupId && !d.auditGroup);
-
-    // Grand total should be sum of ALL departments (grouped or not, exempted or not)
-    internalTotal = departments.reduce((sum, d) => {
-      const val = (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0));
-      return sum + val;
-    }, 0);
+    // Grand total should be sum of ALL departments BBI
+    const totalInstAssets = departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+    const totalInstLocs = departments.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
+    const totalInstAuditors = departments.reduce((sum, d: any) => sum + (d.auditorCount || 0), 0);
+    const instBBI = (totalInstAssets * 0.5) + (totalInstLocs * 100) + (totalInstAuditors * 300);
     
     return {
       groupedData: {
         groups,
         unassignedDepts
       },
-      overallTotal: internalTotal
+      overallTotal: totalInstAssets,
+      overallBBI: Math.round(instBBI)
     };
   }, [departments, auditGroups]);
 
@@ -68,9 +73,9 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
             label="Print"
             title="Print Unit Consolidation"
           />
-          <div className="bg-slate-900 px-6 py-4 rounded-3xl border-2 border-slate-700 shadow-xl ring-4 ring-blue-500/10">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Institutional Grand Total</p>
-            <p className="text-2xl font-mono font-black text-white">{overallTotal.toLocaleString()}</p>
+          <div className="bg-slate-900 px-6 py-4 rounded-3xl border-2 border-slate-700 shadow-xl ring-4 ring-indigo-500/10">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Institutional Complexity (BBI)</p>
+            <p className="text-2xl font-mono font-black text-white italic">{overallBBI.toLocaleString()}</p>
           </div>
         </div>
       </div>
@@ -97,12 +102,12 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
           {/* Card Body: Assets Focus */}
           <div className="p-6 flex-1 flex flex-col space-y-4">
             <div className="flex flex-col">
-              <span className="text-[11px] font-black uppercase text-slate-400 tracking-widest mb-1">Consolidated Movable Assets</span>
+              <span className="text-[11px] font-black uppercase text-indigo-400 tracking-widest mb-1 italic">Strategic Complexity (BBI)</span>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-mono font-black text-slate-900 tracking-tighter">
-                  {group.subTotal.toLocaleString()}
+                <span className="text-3xl font-mono font-black text-slate-900 tracking-tighter italic">
+                  {group.groupBBI.toLocaleString()}
                 </span>
-                <span className="text-xs font-bold text-slate-400 uppercase">Unit Total</span>
+                <span className="text-xs font-bold text-slate-400 uppercase">Index Pool</span>
               </div>
             </div>
 
@@ -136,10 +141,10 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Active System</span>
              </div>
              <div className="flex items-center gap-3">
-                <div className="flex flex-col items-end">
-                  <span className="text-[8px] font-bold text-slate-500 uppercase">Status</span>
-                  <span className="text-xs font-black text-white italic">SYNCCED</span>
-                </div>
+                 <div className="flex flex-col items-end">
+                   <span className="text-[8px] font-bold text-slate-500 uppercase">Assets</span>
+                   <span className="text-xs font-black text-white tabular-nums italic">{group.subTotalAssets.toLocaleString()}</span>
+                 </div>
              </div>
           </div>
         </div>

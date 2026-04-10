@@ -37,6 +37,7 @@ export const useAppData = () => {
   const [maxLocationsPerDay, setMaxLocationsPerDay] = useState<number>(5);
   const [minAuditorsPerLocation, setMinAuditorsPerLocation] = useState<number>(2);
   const [dailyInspectionCapacity, setDailyInspectionCapacity] = useState<number>(150);
+  const [standaloneThresholdAssets, setStandaloneThresholdAssets] = useState<number>(1000);
   const [pairingLocked, setPairingLocked] = useState<boolean>(() => {
     try { return localStorage.getItem('pairing_lock_active') === 'true'; } catch { return false; }
   });
@@ -112,6 +113,7 @@ export const useAppData = () => {
           if (constraints.maxLocationsPerDay) setMaxLocationsPerDay(constraints.maxLocationsPerDay);
           if (constraints.minAuditorsPerLocation) setMinAuditorsPerLocation(constraints.minAuditorsPerLocation);
           if (constraints.dailyInspectionCapacity) setDailyInspectionCapacity(constraints.dailyInspectionCapacity);
+          if (constraints.standaloneThresholdAssets) setStandaloneThresholdAssets(constraints.standaloneThresholdAssets);
         }
         const pairingLock = settings.find(s => s.id === 'pairing_lock')?.value;
         if (pairingLock?.locked) { setPairingLocked(true); setPairingLockInfo(pairingLock); }
@@ -207,6 +209,7 @@ export const useAppData = () => {
     certRenewalModalUser, setCertRenewalModalUser, schedules, setSchedules,
     maxAssetsPerDay, setMaxAssetsPerDay, maxLocationsPerDay, setMaxLocationsPerDay,
     minAuditorsPerLocation, setMinAuditorsPerLocation, dailyInspectionCapacity, setDailyInspectionCapacity,
+    standaloneThresholdAssets, setStandaloneThresholdAssets,
     pairingLocked, setPairingLocked, pairingLockInfo, setPairingLockInfo,
     users, setUsers, departments, setDepartments, locations, setLocations,
     auditPhases, setAuditPhases, kpiTiers, setKpiTiers, kpiTierTargets, setKpiTierTargets,
