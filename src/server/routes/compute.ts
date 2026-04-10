@@ -1156,6 +1156,8 @@ compute.post(
       return { name: p.name, target, workDays };
     });
 
+    const activeUnits = depts.filter(d => (d.total_assets || 0) > 0 || (auditorCountByDept[d.id] || 0) > 0);
+
     // --- MATHEMATICAL PRE-CALCULATION ---
     const activeUnitStats = activeUnits.map(d => ({
       name: d.name,
@@ -1168,7 +1170,7 @@ compute.post(
         : 'INF'
     }));
 
-    const globalAvgBurden = Math.round(activeUnitStats.reduce((s, u) => s + (u.capacityRatio === 'INF' ? 0 : u.capacityRatio), 0) / activeUnits.length);
+    const globalAvgBurden = Math.round(activeUnitStats.reduce((s, u) => s + (typeof u.capacityRatio === 'number' ? u.capacityRatio : 0), 0) / activeUnits.length);
 
     const aiPrompt = `Analyze the Strategic Feasibility of this audit plan. Provide two distinct perspectives:
 
