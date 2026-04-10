@@ -3,7 +3,6 @@ import { Department, AuditGroup } from '@shared/types';
 import { Boxes, Loader2, Sparkles, Trash2, Users, RotateCcw, Lock, AlertTriangle } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printUnitConsolidation } from '../lib/printUtils';
-import { suggestThresholds } from '../services/aiService';
 
 
 interface GroupBuilderTabProps {
@@ -43,7 +42,6 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 }) => {
   const [builderTab, setBuilderTab] = useState<1 | 2>(() => auditGroups.length > 0 ? 2 : 1);
   const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('group_builder_use_ai') === 'true');
-  const [isSuggestingAI, setIsSuggestingAI] = useState(false);
 
   // Auto-switch to Unit Inventory whenever groups become non-empty
   useEffect(() => {
@@ -81,14 +79,13 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     if (!onAutoConsolidate) return;
     setIsProcessing(true);
     try {
-      // Use maxAssetsPerDay as both the threshold and the cutoff for what constitutes a "large" standalone unit
+      // The server handles the logic of large standalone units based on the threshold.
+      // We only pass the global maxAssetsPerDay as the target threshold.
       const threshold = maxAssetsPerDay;
-      const standaloneExemptIds = departments
-        .filter(d => (d.totalAssets || 0) >= threshold)
-        .map(d => d.id);
-
       const minAuditors = minAuditorsPerLocation;
-      await onAutoConsolidate(threshold, standaloneExemptIds, minAuditors, useAI);
+      
+      // Pass empty array for excludedIds to let server logic prevail by default
+      await onAutoConsolidate(threshold, [], minAuditors, useAI);
       setBuilderTab(2);
     } finally {
       setIsProcessing(false);
@@ -248,14 +245,6 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                       AI Thematic Mode {useAI ? 'ON' : 'OFF'}
                     </button>
                   </div>
-                  <button 
-                    onClick={handleAISuggestThresholds}
-                    disabled={isSuggestingAI || isProcessing}
-                    className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl text-[10px] font-black uppercase tracking-widest"
-                  >
-                    {isSuggestingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    AI Suggest Thresholds
-                  </button>
                 </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 px-2">
@@ -288,14 +277,27 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                   </div>
                </div>
 
-               <button 
-                 onClick={handleRunAutoConsolidate}
-                 disabled={isProcessing || !onAutoConsolidate || initLocked}
-                 className={`mx-2 w-[calc(100%-1rem)] py-5 rounded-[24px] text-xs font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all ${initLocked ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white'}`}
-               >
-                 {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 text-indigo-400" />}
-                 {initLocked ? 'Locked — Audit In Progress' : 'Initialize Consolidation'}
-               </button>
+                <div className="mb-8 px-2">
+                  <div className="p-6 bg-indigo-50/50 border border-indigo-100 rounded-[28px] flex items-start gap-4">
+                    <AlertTriangle className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-black text-indigo-900 uppercase tracking-widest">Consolidation Rules</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
+                        <p className="text-[10px] text-indigo-700 font-medium">• Standalone: Assets ≥ {maxAssetsPerDay.toLocaleString()} or Locations ≥ 15</p>
+                        <p className="text-[10px] text-indigo-700 font-medium">• Combined: Units below threshold will form groups of ~1,000 burden units</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={handleRunAutoConsolidate}
+                  disabled={isProcessing || !onAutoConsolidate || initLocked}
+                  className={`mx-2 w-[calc(100%-1rem)] py-5 rounded-[24px] text-xs font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all ${initLocked ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white'}`}
+                >
+                  {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 text-indigo-400" />}
+                  {initLocked ? 'Locked — Audit In Progress' : 'Initialize Consolidation'}
+                </button>
              </div>
            )}
 
