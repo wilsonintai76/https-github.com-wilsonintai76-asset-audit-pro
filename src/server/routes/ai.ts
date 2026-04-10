@@ -112,4 +112,37 @@ Format:
   }
 });
 
+ai.post('/suggest-thresholds', zValidator('json', z.object({ departments: z.array(z.any()) })), async (c) => {
+  const { departments } = c.req.valid('json');
+  const deptData = departments
+    .filter(d => !d.isExempted && (d.totalAssets || 0) > 0)
+    .map(d => `${d.name}: ${d.totalAssets} assets`)
+    .join('\n');
+
+  try {
+    const result = await c.env.AI.run(MODEL, {
+      messages: [
+        { role: 'system', content: 'You are an Audit Strategy AI. Analyze asset distribution and suggest optimal thresholds for standalone vs consolidated audits. Respond with valid JSON only.' },
+        { role: 'user', content: `Analyze this department asset distribution and suggest two values:
+1. assetThreshold: The minimum assets for a department to be "Standalone" (not consolidated).
+2. megaTargetThreshold: The maximum assets before a department is considered a "Mega Target" (needs extra auditors).
+
+Goal: Balance the workload so roughly 30-40% of departments are standalone, and only the top 5-10% are mega targets.
+
+Data:
+${deptData}
+
+Return ONLY: { "assetThreshold": number, "megaTargetThreshold": number, "reasoning": "string" }` }
+      ]
+    }) as { response: string };
+
+    const parsed = JSON.parse(stripFences(result.response));
+    return c.json(parsed);
+  } catch (err) {
+    console.error('Threshold suggestion failed:', err);
+    // Fallback to reasonable defaults if AI fails
+    return c.json({ assetThreshold: 500, megaTargetThreshold: 3000, reasoning: "Fallback defaults due to AI offline." });
+  }
+});
+
 export const aiRoutes = ai;

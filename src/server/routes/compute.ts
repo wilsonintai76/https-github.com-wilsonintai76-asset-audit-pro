@@ -319,7 +319,8 @@ compute.post(
 const consolidateSchema = z.object({
   threshold: z.number().int().positive(),
   excludedDeptIds: z.array(z.string()).default([]),
-  minAuditors: z.number().int().min(0).default(2),
+  minAuditors: z.number().int().min(1).default(2),
+  pairingStrategy: z.enum(['mutual', 'asymmetric']).default('asymmetric'),
   useAI: z.boolean().default(false),
 });
 
@@ -328,7 +329,7 @@ compute.post(
   requirePermission('manage:system'),
   zValidator('json', consolidateSchema),
   async (c) => {
-    const { threshold, excludedDeptIds, minAuditors, useAI } = c.req.valid('json');
+    const { threshold, excludedDeptIds, minAuditors, pairingStrategy, useAI } = c.req.valid('json');
     const db = c.env.DB;
 
     // 1. Purge existing auto-generated groups (names that start with 'Group ')
@@ -347,23 +348,51 @@ compute.post(
       await db.batch(deleteStmts);
     }
 
-    // 2. Fetch fresh department data
-    const { results: freshDepts } = await db.prepare('SELECT * FROM departments').all();
-    const depts = (freshDepts || []) as any[];
+    // 2. Fetch fresh department data and auditor counts
+    const [freshDeptsRes, usersRes] = await Promise.all([
+      db.prepare('SELECT * FROM departments').all(),
+      db.prepare(`
+        SELECT department_id, certification_expiry FROM users 
+        WHERE status = 'Active' 
+          AND JSON_EXTRACT(roles, '$') LIKE '%Auditor%'
+           OR JSON_EXTRACT(roles, '$') LIKE '%Supervisor%'
+           OR JSON_EXTRACT(roles, '$') LIKE '%Staff%'
+      `).all()
+    ]);
+    
+    const depts = (freshDeptsRes.results || []) as any[];
+    const users = (usersRes.results || []) as any[];
+    const today = new Date().toISOString().split('T')[0];
+    
+    const auditorCountByDept: Record<string, number> = {};
+    for (const u of users) {
+      if (!u.department_id) continue;
+      if (u.certification_expiry >= today) {
+        auditorCountByDept[u.department_id] = (auditorCountByDept[u.department_id] || 0) + 1;
+      }
+    }
 
-    // 3. Separate standalones (excluded) from pool (needs grouping)
-    const eligible = depts
-      .filter(
-        (d: any) =>
-          !excludedDeptIds.includes(d.id) && d.is_exempted !== 1 && (d.total_assets || 0) > 0,
-      );
+    // 3. Separate standalones from pool (needs grouping)
+    // STALONONES: Must be in excludedDeptIds AND meet the auditor threshold
+    // POOL: Everyone else who has assets and isn't exempted
+    const standaloneDepts = depts.filter(d => 
+      excludedDeptIds.includes(d.id) && 
+      !d.is_exempted && 
+      (auditorCountByDept[d.id] || 0) >= minAuditors
+    );
+
+    const pool = depts.filter(d => 
+      !d.is_exempted && 
+      (d.total_assets || 0) > 0 && 
+      !standaloneDepts.some(s => s.id === d.id)
+    );
 
     // 4. AI-Categorization (Optional)
     let aiCategories: Record<string, string> = {};
-    if (useAI && eligible.length > 0) {
+    if (useAI && pool.length > 0) {
       const MODEL = '@cf/meta/llama-3.1-8b-instruct';
       const prompt = `Categorize these departments into semantic clusters (e.g. Clinical, Technical, Admin, Support). 
-Departments: ${eligible.map(d => d.name).join(', ')}
+Departments: ${pool.map(d => d.name).join(', ')}
 
 Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
 
@@ -378,37 +407,41 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
     }
 
     // Sort by cluster first (if available), then by assets
-    eligible.sort((a: any, b: any) => {
+    pool.sort((a: any, b: any) => {
       const catA = aiCategories[a.name] || 'Other';
       const catB = aiCategories[b.name] || 'Other';
       if (catA !== catB) return catA.localeCompare(catB);
       return (a.total_assets || 0) - (b.total_assets || 0);
     });
 
-    if (eligible.length === 0) {
-      return c.json({ groups: [], ungrouped: [], standaloneCount: excludedDeptIds.length, createdCount: 0 });
+    if (pool.length === 0) {
+      return c.json({ groups: [], ungrouped: standaloneDepts.map(s => s.id), standaloneCount: standaloneDepts.length, createdCount: 0 });
     }
 
-    // 4. Greedy grouping: accumulate until threshold is met
-    const bundles: (typeof eligible)[] = [];
-    let current: typeof eligible = [];
+    // 4. Greedy grouping: accumulate until threshold AND minAuditors are met
+    const bundles: (typeof pool)[] = [];
+    let current: typeof pool = [];
     let runningAssets = 0;
+    let runningAuditors = 0;
 
-    for (const dept of eligible) {
+    for (const dept of pool) {
       current.push(dept);
       runningAssets += dept.total_assets || 0;
+      runningAuditors += auditorCountByDept[dept.id] || 0;
 
-      if (runningAssets >= threshold) {
-        // Check leftover: if next dept would produce a tiny final group, absorb it
-        const leftoverAssets = (eligible
-          .slice(eligible.indexOf(dept) + 1)
-          .reduce((s: number, d: any) => s + (d.total_assets || 0), 0));
-        if (leftoverAssets > 0 && leftoverAssets < threshold * 0.7) {
+      if (runningAssets >= threshold && runningAuditors >= minAuditors) {
+        // Check leftover: if next depts would produce a tiny final group, absorb them if they don't meet auditors
+        const remainingPool = pool.slice(pool.indexOf(dept) + 1);
+        const leftoverAssets = remainingPool.reduce((s: number, d: any) => s + (d.total_assets || 0), 0);
+        const leftoverAuditors = remainingPool.reduce((s: number, d: any) => s + (auditorCountByDept[d.id] || 0), 0);
+        
+        if (leftoverAssets > 0 && (leftoverAssets < threshold * 0.5 || leftoverAuditors < minAuditors)) {
           continue; // absorb remainder into this group
         }
         bundles.push([...current]);
         current = [];
         runningAssets = 0;
+        runningAuditors = 0;
       }
     }
     // Remaining departments: merge into last bundle or start new one
@@ -452,8 +485,8 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
 
     return c.json({
       groups: createdGroups,
-      ungrouped: excludedDeptIds,
-      standaloneCount: excludedDeptIds.length,
+      ungrouped: standaloneDepts.map(s => s.id),
+      standaloneCount: standaloneDepts.length,
       createdCount: createdGroups.length,
     });
   },
@@ -471,7 +504,7 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
 //           false → commits pairings to cross_audit_permissions
 // ─────────────────────────────────────────────────────────────────────────────
 const crossAuditSchema = z.object({
-  mode: z.enum(['assets', 'assets_auditors']).default('assets'),
+  mode: z.enum(['assets', 'assets_auditors', 'strict_mutual']).default('assets'),
   minAuditors: z.number().int().min(1).default(2),
   strictAuditorRule: z.boolean().default(false),
   autoPairingMutual: z.boolean().default(false),
@@ -580,14 +613,110 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
 
     // Determine effective mode
     const hasQualifiedAuditors = entities.some((e) => e.auditors >= minAuditorsRequired);
-    const effectiveMode = mode === 'assets_auditors' && !hasQualifiedAuditors ? 'assets' : mode;
-    const modeFallback = mode === 'assets_auditors' && !hasQualifiedAuditors;
+    const effectiveMode = (mode === 'assets_auditors' || mode === 'strict_mutual') && !hasQualifiedAuditors ? 'assets' : mode;
+    const modeFallback = (mode === 'assets_auditors' || mode === 'strict_mutual') && !hasQualifiedAuditors;
 
-    const newPairings: { auditorDeptId: string; targetDeptId: string; isMutual: boolean }[] = [];
-    const strategicPlan: { targetId: string; targetName: string; auditorId: string; auditorName: string; auditorDeptAssets: number }[] = [];
+    const newPairings: { auditorDeptId: string; targetDeptId: string; isMutual: boolean; burdenScore?: number }[] = [];
+    const strategicPlan: any[] = [];
     const usedTargetIds = new Set<string>();
+    const usedAuditorIds = new Set<string>();
 
-    if (effectiveMode === 'assets') {
+    if (effectiveMode === 'strict_mutual') {
+      // 1:1 Mutual Pairing Logic
+      const pool = entities.filter(e => e.assets > 0 && (e.auditors >= minAuditorsRequired || !strictAuditorRule));
+      const poolIds = pool.map(e => e.id);
+      
+      // Separate already paired if respectManualPairings is true
+      const availableIds = respectManualPairings 
+        ? poolIds.filter(id => !existingPerms.some((p: any) => p.target_dept_id === id || p.auditor_dept_id === id))
+        : [...poolIds];
+      
+      // Sort available by assets to pair similar sizes
+      const sortedAvailable = pool.filter(e => availableIds.includes(e.id)).sort((a,b) => b.assets - a.assets);
+      
+      const pairs: [string, string][] = [];
+      let cycle3: [string, string, string] | null = null;
+      
+      const workList = [...sortedAvailable];
+      
+      // If odd, extract a 3-way cycle from the end (smallest entities)
+      if (workList.length % 2 !== 0 && workList.length >= 3) {
+        const c1 = workList.pop()!;
+        const c2 = workList.pop()!;
+        const c3 = workList.pop()!;
+        cycle3 = [c1.id, c2.id, c3.id];
+      }
+      
+      // Pair the rest 1:1
+      while (workList.length >= 2) {
+        const a = workList.shift()!;
+        const b = workList.shift()!;
+        pairs.push([a.id, b.id]);
+      }
+      
+      // Apply pairs
+      for (const [idA, idB] of pairs) {
+        const entA = pool.find(e => e.id === idA);
+        const entB = pool.find(e => e.id === idB);
+        if (!entA || !entB) continue;
+        
+        // A audits B
+        newPairings.push({ 
+          auditorDeptId: idA, 
+          targetDeptId: idB, 
+          isMutual: true, 
+          burdenScore: Math.round(entB.assets / entA.auditors) 
+        });
+        // B audits A
+        newPairings.push({ 
+          auditorDeptId: idB, 
+          targetDeptId: idA, 
+          isMutual: true, 
+          burdenScore: Math.round(entA.assets / entB.auditors) 
+        });
+        
+        strategicPlan.push({ 
+          targetId: idB, targetName: entB.name, 
+          auditorId: idA, auditorName: entA.name, 
+          auditorDeptAssets: entA.assets,
+          isMutual: true,
+          burdenScore: Math.round(entB.assets / entA.auditors)
+        });
+        strategicPlan.push({ 
+          targetId: idA, targetName: entA.name, 
+          auditorId: idB, auditorName: entB.name, 
+          auditorDeptAssets: entB.assets,
+          isMutual: true,
+          burdenScore: Math.round(entA.assets / entB.auditors)
+        });
+      }
+      
+      // Apply 3-way cycle: A -> B, B -> C, C -> A
+      if (cycle3) {
+        const [idA, idB, idC] = cycle3;
+        const entA = pool.find(e => e.id === idA)!;
+        const entB = pool.find(e => e.id === idB)!;
+        const entC = pool.find(e => e.id === idC)!;
+        
+        const cycle = [[entA, entB], [entB, entC], [entC, entA]];
+        for (const [aud, tgt] of cycle) {
+          newPairings.push({ 
+            auditorDeptId: aud.id, 
+            targetDeptId: tgt.id, 
+            isMutual: false, // In a cycle it's not mutual 1:1
+            burdenScore: Math.round(tgt.assets / aud.auditors) 
+          });
+          strategicPlan.push({ 
+            targetId: tgt.id, targetName: tgt.name, 
+            auditorId: aud.id, auditorName: aud.name, 
+            auditorDeptAssets: aud.assets,
+            isCycle: true,
+            burdenScore: Math.round(tgt.assets / aud.auditors)
+          });
+        }
+      }
+      
+    } else if (effectiveMode === 'assets') {
       // Round-robin asset-based pairing
       const auditorPool = entities.filter((e) => e.assets > 0);
       const finalTargets = respectManualPairings

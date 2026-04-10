@@ -1,15 +1,11 @@
-
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '@shared/types';
-import { Wand2, UserPen, Zap, Boxes, Loader2, Layers, Network, Check, CheckCheck, RotateCcw, Link, Grid, List, ArrowRightLeft, ArrowLeftRight, ArrowRight, Ban, Users, Building2, Trash2, Link2Off, Plus, X, ShieldCheck, ChevronDown, ShieldOff, Lock, Calendar, Sparkles } from 'lucide-react';
-import { ActiveEntitiesList } from './ActiveEntitiesList';
-import { ConfirmationModal } from './ConfirmationModal';
-import { MatrixCard } from './MatrixCard';
-import { InstitutionalConsolidationView } from './InstitutionalConsolidationView';
-import { GroupBuilderTab } from './GroupBuilderTab';
-import { AuditConstraints } from './AuditConstraints';
+import { Wand2, Zap, Boxes, Loader2, Layers, Network, CheckCheck, RotateCcw, Link, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, X, ShieldCheck, ChevronDown, Lock, Calendar, Sparkles } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printCrossAuditAssignments, printStrategicInspectionPlanApproval } from '../lib/printUtils';
+import { suggestThresholds } from '../services/aiService';
+import { AuditConstraints } from './AuditConstraints';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface StrategicPair {
   target: { id: string; name: string; assets: number; auditors: number; members?: any[]; isJoint?: boolean };
@@ -17,10 +13,6 @@ interface StrategicPair {
   totalAuditorsInGroup: number;
   auditorSideAssets: number;
 }
-
-type WorkflowStep = 'grouping' | 'pairing' | 'results';
-type ManagementMode = 'auto' | 'manual';
-type ManualViewMode = 'list' | 'grid';
 
 interface CrossAuditManagementProps {
   departments: Department[];
@@ -42,6 +34,8 @@ interface CrossAuditManagementProps {
   phases?: any[];
   institutionKPIs?: any[];
   showToast?: (message: string, type?: any) => void;
+  maxAssetsPerDay?: number;
+  maxLocationsPerDay?: number;
   onUpdateMaxAssetsPerDay?: (value: number) => void;
   onUpdateMaxLocationsPerDay?: (value: number) => void;
   minAuditorsPerLocation?: number;
@@ -65,21 +59,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   departments, 
   users,
   permissions, 
-  onTogglePermission,
-  onAddPermission,
   onRemovePermission,
-  onUpdateDepartment,
   onBulkUpdateDepartments,
   auditGroups = [],
-  onAddAuditGroup,
-  onUpdateAuditGroup,
   onDeleteAuditGroup,
   onBulkDeleteAuditGroups,
-  onAutoConsolidate,
   onBulkAddPermissions,
   onBulkRemovePermissions,
-  phases = [],
-  institutionKPIs = [],
   maxAssetsPerDay = 1000,
   maxLocationsPerDay = 5,
   minAuditorsPerLocation: minAuditorsPerLocationProp = 2,
@@ -96,327 +82,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onRunStrategicPairing,
   feasibilityReport
 }) => {
-  // --- STATE ---
-  const [manualViewMode, setManualViewMode] = useState<ManualViewMode>('grid');
-  const [assetThreshold, setAssetThreshold] = useState<number>(500);
-  const [minAuditors, setMinAuditors] = useState<number>(2);
-  const [megaTargetThreshold, setMegaTargetThreshold] = useState<number>(3000);
-  const [burdenCapacity, setBurdenCapacity] = useState<number>(1000); 
-
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedAuditor, setSelectedAuditor] = useState<string>('');
-  const [respectManualPairings, setRespectManualPairings] = useState<boolean>(() => {
-    const s = localStorage.getItem('cross_audit_respect_manual'); return s === null ? true : s === 'true';
-  });
-  
-  // Manual Mode State
-  const [manualAuditor, setManualAuditor] = useState('');
-  const [manualTarget, setManualTarget] = useState('');
-  const [isMutual, setIsMutual] = useState(false);
-  const [overrideIsMutual, setOverrideIsMutual] = useState(false);
-
-  // Workflow Control
-  const [workflowStep, setWorkflowStep] = useState<WorkflowStep>('grouping');
-  const [simulateIdealStaffing, setSimulateIdealStaffing] = useState<boolean>(() => {
-    return localStorage.getItem('cross_audit_simulate_staff') === 'true';
-  });
-  
-  // Pairing Strategy Mode
-  const [pairingMode, setPairingMode] = useState<'assets' | 'assets_auditors'>(() => {
-    const s = localStorage.getItem('cross_audit_pairing_mode');
-    return (s === 'assets' || s === 'assets_auditors') ? s : 'assets_auditors';
-  });
-
-  // State for Auditor Strictness (Min 2 Auditors rule)
-  const [strictAuditorRule, setStrictAuditorRule] = useState<boolean>(true);
-
-  // Auto-pairing mutual toggle
-  const [autoPairingMutual, setAutoPairingMutual] = useState<boolean>(() => {
-    return localStorage.getItem('cross_audit_mutual') === 'true';
-  });
-
-  // Tab mode
-  const [managementMode, setManagementMode] = useState<ManagementMode>('auto');
-  
-  // Confirmation & State Control
-  const [isApplied, setIsApplied] = useState(false);
-  const [activeModal, setActiveModal] = useState<'apply' | 'reset' | null>(null);
+  const [activeModal, setActiveModal] = useState<'reset' | null>(null);
   const [showConstraints, setShowConstraints] = useState(false);
-  
-  // Filtering for Pairings List
   const [auditorFilter, setAuditorFilter] = useState('');
   const [targetFilter, setTargetFilter] = useState('');
-  const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('cross_audit_use_ai') === 'true');
 
-  // KPI bar ref — used to set CSS custom properties imperatively (no inline style)
-  const kpiBarRef = useRef<HTMLDivElement>(null);
-
-  // 0. Compute Institutional Grand Total
-  const overallTotalAssets = useMemo(() => {
-    if (!departments) return 0;
-    return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
-  }, [departments]);
-
-  // 1. Get Non-Exempted Departments
-  const activeDepts = useMemo(() => {
-    return departments.filter(d => !d.isExempted && !d.isSystemExempted);
-  }, [departments]);
-
-  // Exempted/Inactive departments (for informational banner)
-  const exemptedDepts = useMemo(() => {
-    return departments.filter(d => d.isExempted || d.isSystemExempted);
-  }, [departments]);
-
-  const entities = useMemo(() => {
-    const groupedDepts: Record<string, Department[]> = {};
-    
-    // Helper to count auditors in a department live from users list
-    const getAuditorCount = (deptId: string) => {
-      const today = new Date().toISOString().split('T')[0];
-      return users.filter(u => 
-        u.departmentId === deptId && 
-        u.status === 'Active' && 
-        u.certificationExpiry && 
-        u.certificationExpiry >= today
-      ).length;
-    };
-
-    activeDepts.forEach(dept => {
-      const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
-      const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
-      if (!groupedDepts[key]) groupedDepts[key] = [];
-      groupedDepts[key].push({
-        ...dept,
-        auditorCount: getAuditorCount(dept.id) // Override with live count
-      });
-    });
-
-    return Object.entries(groupedDepts).map(([groupId, depts]) => {
-      const isUnassigned = groupId.startsWith('unassigned_');
-      
-      const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
-      const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
-      
-      const name = isUnassigned 
-        ? depts[0].name 
-        : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
-      
-      const constitutesGroup = !isUnassigned;
-      
-      return {
-        name,
-        assets: totalAssets,
-        auditors: totalAuditors,
-        memberCount: depts.length,
-        isJoint: constitutesGroup,
-        isGroup: constitutesGroup,
-        isConsolidated: constitutesGroup,
-        id: groupId,
-        members: depts
-      };
-    }).sort((a, b) => b.assets - a.assets);
-  }, [activeDepts, auditGroups]);
-
-  // Group manual permissions by auditor for the table view
-  const groupedPermissions = useMemo(() => {
-    const groups: Record<string, CrossAuditPermission[]> = {};
-    permissions.forEach(p => {
-      const auditorId = p.auditorDeptId;
-      if (!groups[auditorId]) groups[auditorId] = [];
-      groups[auditorId].push(p);
-    });
-    return groups;
-  }, [permissions]);
-
-  React.useEffect(() => {
-    if (!selectedAuditor && entities?.length > 0) {
-      setSelectedAuditor(entities[0].name);
-    }
-  }, [entities, selectedAuditor]);
-
-  const handleResetClick = () => {
-    setActiveModal('reset');
-  };
-
-  const executeReset = async () => {
-    setActiveModal(null);
-    setIsProcessing(true);
-
-    try {
-      setStrategicPlan([]);
-      setWorkflowStep('grouping');
-      setIsApplied(false);
-      setIsSimulatorActive(false);
-      setSimulatedPairings([]);
-      localStorage.removeItem('cross_audit_simulator_active');
-      localStorage.removeItem('cross_audit_simulator_pairings');
-
-      const updates = departments
-        .filter(d => d.auditGroupId)
-        .map(d => ({ id: d.id, data: { auditGroupId: null } }));
-
-      if (updates?.length > 0) {
-        await onBulkUpdateDepartments(updates);
-      }
-
-      // Delete all audit groups from DB so they don't accumulate across resets
-      if (onBulkDeleteAuditGroups && auditGroups.length > 0) {
-        await onBulkDeleteAuditGroups(auditGroups.map(g => g.id));
-      } else if (onDeleteAuditGroup && auditGroups.length > 0) {
-        for (const group of auditGroups) {
-          await onDeleteAuditGroup(group.id);
-        }
-      }
-
-      if (onBulkRemovePermissions && permissions.length > 0) {
-        await onBulkRemovePermissions(permissions.map(p => p.id));
-      }
-      await onUnlockPairing?.();
-
-    } catch (error) {
-      console.error("Reset failed:", error);
-      alert("Failed to fully reset system configuration.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleApplyClick = () => {
-    if (isApplied) return;
-    setActiveModal('apply');
-  };
-
-  const executeApply = async () => {
-    setActiveModal(null);
-    setIsProcessing(true);
-
-    try {
-      if (onRemovePermission && permissions.length > 0) {
-        await Promise.all(permissions.map(p => onRemovePermission(p.id)));
-      }
-
-      await new Promise(r => setTimeout(r, 1000));
-
-      const newPerms: Omit<CrossAuditPermission, 'id'>[] = [];
-      for (const pair of strategicPlan) {
-        for (const auditor of pair.auditors) {
-          if ((auditor as any).isVirtual) continue;
-          newPerms.push({
-            auditorDeptId: auditor.id,
-            targetDeptId: pair.target.id,
-            isActive: true,
-            isMutual: false
-          });
-        }
-      }
-
-      if (newPerms.length > 0 && onBulkAddPermissions) {
-        await onBulkAddPermissions(newPerms);
-      }
-
-      setIsApplied(true);
-    } catch (e) {
-      console.error(e);
-      alert("Permission sync failed.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleAddManualPair = async () => {
-    if (!manualAuditor || !manualTarget) return;
-    if (manualAuditor === manualTarget) {
-      alert("Conflict Detected: A unit cannot audit its own assets.");
-      return;
-    }
-    
-    setIsProcessing(true);
-    try {
-      await onAddPermission(manualAuditor, manualTarget, isMutual);
-      if (isMutual) {
-        const reverseExists = permissions.some(p => p.auditorDeptId === manualTarget && p.targetDeptId === manualAuditor);
-        if (!reverseExists) {
-            await onAddPermission(manualTarget, manualAuditor, isMutual);
-        }
-      }
-      setManualAuditor('');
-      setManualTarget('');
-    } catch (e) {
-      alert("Failed to save pairing.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleGridToggle = async (auditorId: string, targetId: string) => {
-    if (auditorId === targetId) return;
-    const perm = permissions.find(p => p.auditorDeptId === auditorId && p.targetDeptId === targetId);
-    if (perm) {
-      if (onRemovePermission) await onRemovePermission(perm.id);
-    } else {
-      await onAddPermission(auditorId, targetId, false);
-    }
-  };
-
-  const handleAnalyzeAndGroup = async () => {
-    setIsProcessing(true);
-    const standalones: typeof activeDepts = [];
-    const pool: typeof activeDepts = [];
-    
-    activeDepts.forEach(d => {
-        const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
-        if (safeAssets >= assetThreshold && d.auditorCount >= minAuditors) {
-            standalones.push(d);
-        } else {
-            pool.push(d);
-        }
-    });
-
-    const updates: { id: string, data: Partial<Department> }[] = [];
-    standalones.forEach(d => updates.push({ id: d.id, data: { auditGroupId: null } }));
-
-    pool.sort((a, b) => {
-        const assetsA = typeof a.totalAssets === 'string' ? parseInt(a.totalAssets) : (a.totalAssets || 0);
-        const assetsB = typeof b.totalAssets === 'string' ? parseInt(b.totalAssets) : (b.totalAssets || 0);
-        return assetsA - assetsB;
-    });
-    
-    let currentGroup: typeof activeDepts = [];
-    let currentAssets = 0;
-    let currentAuditors = 0;
-    let groupIndex = 1;
-
-    pool.forEach(d => {
-        const safeAssets = typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0);
-        currentGroup.push(d);
-        currentAssets += safeAssets;
-        currentAuditors += d.auditorCount;
-
-        if (currentAssets >= assetThreshold && currentAuditors >= minAuditors) {
-             const groupName = `Group ${String.fromCharCode(64 + groupIndex)}`;
-             const group = auditGroups.find(g => g.name === groupName);
-             currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroupId: group ? group.id : null } }));
-             currentGroup = [];
-             currentAssets = 0;
-             currentAuditors = 0;
-             groupIndex++;
-        }
-    });
-    if (currentGroup?.length > 0) {
-        const targetName = groupIndex > 1 
-            ? `Group ${String.fromCharCode(64 + groupIndex - 1)}`
-            : `Group A`;
-        const group = auditGroups.find(g => g.name === targetName);
-        currentGroup.forEach(m => updates.push({ id: m.id, data: { auditGroupId: group ? group.id : null } }));
-    }
-
-    await onBulkUpdateDepartments(updates);
-    setIsProcessing(false);
-    setWorkflowStep('pairing');
-  };
-
-  // --- SIMULATOR LOGIC ---
   const SIMULATOR_ACTIVE_KEY = 'cross_audit_simulator_active';
   const SIMULATOR_PAIRINGS_KEY = 'cross_audit_simulator_pairings';
 
@@ -429,69 +101,99 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [isSimulatorActive, setIsSimulatorActive] = useState<boolean>(() => {
     return localStorage.getItem(SIMULATOR_ACTIVE_KEY) === 'true';
   });
+  const [simulateIdealStaffing, setSimulateIdealStaffing] = useState<boolean>(() => {
+    return localStorage.getItem('cross_audit_simulate_staff') === 'true';
+  });
+  const [pairingMode, setPairingMode] = useState<'assets' | 'assets_auditors'>(() => {
+    const s = localStorage.getItem('cross_audit_pairing_mode');
+    return (s === 'assets' || s === 'assets_auditors') ? s : 'assets_auditors';
+  });
+  const [strictAuditorRule, setStrictAuditorRule] = useState<boolean>(true);
+  const [autoPairingMutual, setAutoPairingMutual] = useState<boolean>(() => {
+    return localStorage.getItem('cross_audit_mutual') === 'true';
+  });
+  const [pairingStrategy, setPairingStrategy] = useState<'mutual' | 'asymmetric'>(() => {
+    return (localStorage.getItem('cross_audit_grouping_strategy') as any) || 'asymmetric';
+  });
+  const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('cross_audit_use_ai') === 'true');
 
-  // Persist simulator state whenever it changes
-  useEffect(() => {
-    localStorage.setItem(SIMULATOR_ACTIVE_KEY, isSimulatorActive ? 'true' : 'false');
-  }, [isSimulatorActive]);
+  const kpiBarRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    localStorage.setItem(SIMULATOR_PAIRINGS_KEY, JSON.stringify(simulatedPairings));
-  }, [simulatedPairings]);
+  const overallTotalAssets = useMemo(() => {
+    return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+  }, [departments]);
 
-  // Persist config toggles
+  const activeDepts = useMemo(() => departments.filter(d => !d.isExempted && !d.isSystemExempted), [departments]);
+  const exemptedDepts = useMemo(() => departments.filter(d => d.isExempted || d.isSystemExempted), [departments]);
+
+  const entities = useMemo(() => {
+    const groupedDepts: Record<string, Department[]> = {};
+    const getAuditorCount = (deptId: string) => {
+      const today = new Date().toISOString().split('T')[0];
+      return users.filter(u => u.departmentId === deptId && u.status === 'Active' && u.certificationExpiry && u.certificationExpiry >= today).length;
+    };
+
+    activeDepts.forEach(dept => {
+      const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
+      const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
+      if (!groupedDepts[key]) groupedDepts[key] = [];
+      groupedDepts[key].push({ ...dept, auditorCount: getAuditorCount(dept.id) });
+    });
+
+    return Object.entries(groupedDepts).map(([groupId, depts]) => {
+      const isUnassigned = groupId.startsWith('unassigned_');
+      const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+      const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+      const name = isUnassigned ? depts[0].name : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
+      const constitutesGroup = !isUnassigned;
+      return { name, assets: totalAssets, auditors: totalAuditors, memberCount: depts.length, isJoint: constitutesGroup, isGroup: constitutesGroup, id: groupId, members: depts };
+    }).sort((a, b) => b.assets - a.assets);
+  }, [activeDepts, auditGroups, users]);
+
+  useEffect(() => { localStorage.setItem(SIMULATOR_ACTIVE_KEY, isSimulatorActive ? 'true' : 'false'); }, [isSimulatorActive]);
+  useEffect(() => { localStorage.setItem(SIMULATOR_PAIRINGS_KEY, JSON.stringify(simulatedPairings)); }, [simulatedPairings]);
   useEffect(() => { localStorage.setItem('cross_audit_pairing_mode', pairingMode); }, [pairingMode]);
-  useEffect(() => { localStorage.setItem('cross_audit_respect_manual', respectManualPairings ? 'true' : 'false'); }, [respectManualPairings]);
   useEffect(() => { localStorage.setItem('cross_audit_simulate_staff', simulateIdealStaffing ? 'true' : 'false'); }, [simulateIdealStaffing]);
   useEffect(() => { localStorage.setItem('cross_audit_mutual', autoPairingMutual ? 'true' : 'false'); }, [autoPairingMutual]);
-    const targetKPIPercentage = useMemo(() => {
-    if (!institutionKPIs || institutionKPIs.length === 0) return 30;
-    return Math.max(...institutionKPIs.map(k => k.targetPercentage || 0));
-  }, [institutionKPIs]);
+  useEffect(() => { localStorage.setItem('cross_audit_grouping_strategy', pairingStrategy); }, [pairingStrategy]);
 
-  // Unified data source for reporting/stats: Simulated if active, else Persisted
-  const activePairingsForStats = useMemo(() => {
-    if (isSimulatorActive) {
-      return simulatedPairings.map(p => ({ auditorDeptId: p.auditorDeptId, targetDeptId: p.targetDeptId }));
+  const executeReset = async () => {
+    setActiveModal(null);
+    setIsProcessing(true);
+    try {
+      setStrategicPlan([]);
+      setIsSimulatorActive(false);
+      setSimulatedPairings([]);
+      localStorage.removeItem(SIMULATOR_ACTIVE_KEY);
+      localStorage.removeItem(SIMULATOR_PAIRINGS_KEY);
+
+      const updates = departments.filter(d => d.auditGroupId).map(d => ({ id: d.id, data: { auditGroupId: null } }));
+      if (updates.length > 0) await onBulkUpdateDepartments(updates);
+
+      if (onBulkDeleteAuditGroups && auditGroups.length > 0) {
+        await onBulkDeleteAuditGroups(auditGroups.map(g => g.id));
+      } else if (onDeleteAuditGroup && auditGroups.length > 0) {
+        for (const group of auditGroups) await onDeleteAuditGroup(group.id);
+      }
+
+      if (onBulkRemovePermissions && permissions.length > 0) {
+        await onBulkRemovePermissions(permissions.map(p => p.id));
+      }
+      await onUnlockPairing?.();
+      showToast?.('System configuration reset successfully.');
+    } catch (error) {
+      console.error("Reset failed:", error);
+    } finally {
+      setIsProcessing(false);
     }
-    return permissions
-      .filter(p => p.isActive)
-      .map(p => ({ auditorDeptId: p.auditor_dept_id, targetDeptId: p.target_dept_id }));
-  }, [isSimulatorActive, simulatedPairings, permissions]);
-
-  const projectedAssetsMet = useMemo(() => {
-    const auditedTargets = new Set(activePairingsForStats.map(p => p.targetDeptId));
-    return Array.from(auditedTargets).reduce((sum, tid) => {
-      const e = entities.find(e => e.id === tid);
-      return sum + (e?.totalAssets || 0);
-    }, 0);
-  }, [activePairingsForStats, entities]);
-
-  const projectedKPIPercentage = useMemo(() => {
-    if (overallTotalAssets === 0) return 0;
-    const pct = (projectedAssetsMet / overallTotalAssets) * 100;
-    return Math.round(pct * 10) / 10;
-  }, [projectedAssetsMet, overallTotalAssets]);
-
-  const isKPIMet = projectedKPIPercentage >= targetKPIPercentage;
-
-  // Update KPI progress bar CSS custom properties whenever values change
-  useEffect(() => {
-    if (kpiBarRef.current) {
-      kpiBarRef.current.style.setProperty('--kpi-fill', `${Math.min(100, projectedKPIPercentage)}%`);
-      kpiBarRef.current.style.setProperty('--kpi-marker', `${targetKPIPercentage}%`);
-    }
-  }, [projectedKPIPercentage, targetKPIPercentage]);
+  };
 
   const handleRunSimulator = () => {
     setIsProcessing(true);
     const minAuditorsRequired = strictAuditorRule ? 2 : 1;
-
-    // 1. Targets = entities with assets, sorted by assets descending
     const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
-
     if (targets.length === 0) {
-      showToast?.('No entities with assets found. Please ensure departments have assets assigned.', 'error');
+      showToast?.('No entities with assets found.', 'error');
       setIsProcessing(false);
       return;
     }
@@ -499,25 +201,42 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const newStrategicPlan: StrategicPair[] = [];
     const usedTargetIds = new Set<string>();
     const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
+    const effectivePairingMode = pairingStrategy === 'mutual' ? 'strict_mutual' : pairingMode;
 
-    // Check if assets_auditors mode has any qualified auditors
-    const hasQualifiedAuditors = entities.some(e => simulateIdealStaffing || e.auditors >= minAuditorsRequired);
-    const effectiveMode = (pairingMode === 'assets_auditors' && !hasQualifiedAuditors) ? 'assets' : pairingMode;
-    if (pairingMode === 'assets_auditors' && !hasQualifiedAuditors) {
-      showToast?.('No departments meet the minimum auditor requirement. Falling back to Asset-Only pairing mode.', 'warning');
-    }
+    if (effectivePairingMode === 'strict_mutual') {
+      const pool = entities.filter(e => e.assets > 0 && (simulateIdealStaffing || e.auditors >= minAuditorsRequired));
+      const sorted = [...pool].sort((a, b) => b.assets - a.assets);
+      const cycle3: typeof sorted = [];
+      if (sorted.length % 2 !== 0 && sorted.length >= 3) {
+        cycle3.push(sorted.pop()!, sorted.pop()!, sorted.pop()!);
+      }
 
-    if (effectiveMode === 'assets') {
-      const auditorPool = entities.filter(e => e.assets > 0 || simulateIdealStaffing);
+      while (sorted.length >= 2) {
+        const a = sorted.shift()!;
+        const b = sorted.shift()!;
+        const createEntry = (aud: any, tgt: any) => ({
+          target: { name: tgt.name, assets: tgt.assets, auditors: tgt.auditors, id: tgt.id } as any,
+          auditors: [{ name: aud.name, assets: aud.assets, auditors: simulateIdealStaffing ? Math.max(aud.auditors, 2) : aud.auditors, id: aud.id, isJoint: aud.isJoint }],
+          totalAuditorsInGroup: simulateIdealStaffing ? Math.max(aud.auditors, 2) : aud.auditors,
+          auditorSideAssets: aud.assets
+        });
+        newStrategicPlan.push(createEntry(a, b));
+        newStrategicPlan.push(createEntry(b, a));
+        newPairings.push({ auditorDeptId: a.id!, targetDeptId: b.id!, isActive: true, isMutual: true } as any);
+        newPairings.push({ auditorDeptId: b.id!, targetDeptId: a.id!, isActive: true, isMutual: true } as any);
+      }
+
+      if (cycle3.length === 3) {
+        const [a, b, c] = cycle3;
+        [[a, b], [b, c], [c, a]].forEach(([aud, tgt]) => {
+          newStrategicPlan.push({ target: tgt as any, auditors: [aud as any], totalAuditorsInGroup: aud.auditors, auditorSideAssets: aud.assets });
+          newPairings.push({ auditorDeptId: aud.id!, targetDeptId: tgt.id!, isActive: true, isMutual: false } as any);
+        });
+      }
+    } else {
+      const auditorPool = entities.filter(e => simulateIdealStaffing || e.auditors >= minAuditorsRequired);
       let poolIdx = 0;
-
-      // Filter targets if respecting manual pairings
-      const finalTargets = respectManualPairings 
-        ? targets.filter(t => !permissions.some(p => p.isActive && p.targetDeptId === t.id))
-        : targets;
-
-      for (const target of finalTargets) {
-        if (usedTargetIds.has(target.id!)) continue;
+      for (const target of targets) {
         let attempts = 0;
         let picked: typeof auditorPool[0] | null = null;
         while (attempts < auditorPool.length) {
@@ -528,253 +247,20 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         }
         if (!picked) continue;
 
-        const potentialMembers: any[] = simulateIdealStaffing && picked.auditors === 0
-          ? [{ id: `virtual-${picked.id}-1`, name: `Virtual Auditor A (${picked.name})` }, { id: `virtual-${picked.id}-2`, name: `Virtual Auditor B (${picked.name})` }]
-          : users.filter(u => picked!.members.map((m: any) => m.id).includes(u.departmentId) && u.status === 'Active' && (u.roles.includes('Supervisor') || u.roles.includes('Staff')));
-
-        const auditorEntry = {
-          name: picked.name, assets: picked.assets,
-          auditors: simulateIdealStaffing ? Math.max(picked.auditors, picked.members.length * 2) : picked.auditors,
-          isJoint: picked.isJoint, id: picked.id,
-          members: potentialMembers.slice(0, 2),
-          isVirtual: simulateIdealStaffing && picked.auditors === 0,
-        };
-
         newStrategicPlan.push({
-          target: { name: target.name, assets: target.assets, auditors: target.auditors, members: target.members, id: target.id } as any,
-          auditors: [auditorEntry],
-          totalAuditorsInGroup: auditorEntry.auditors,
-          auditorSideAssets: auditorEntry.assets,
+          target: target as any,
+          auditors: [{ ...picked, auditors: simulateIdealStaffing ? Math.max(picked.auditors, 2) : picked.auditors } as any],
+          totalAuditorsInGroup: simulateIdealStaffing ? Math.max(picked.auditors, 2) : picked.auditors,
+          auditorSideAssets: picked.assets
         });
-        usedTargetIds.add(target.id!);
-        newPairings.push({ auditorDeptId: picked.id!, targetDeptId: target.id!, isActive: true, isMutual: autoPairingMutual });
-        if (autoPairingMutual) {
-          newPairings.push({ auditorDeptId: target.id!, targetDeptId: picked.id!, isActive: true, isMutual: true });
-        }
+        newPairings.push({ auditorDeptId: picked.id!, targetDeptId: target.id!, isActive: true, isMutual: autoPairingMutual } as any);
       }
-
-    } else {
-      const auditors = entities.filter(e => simulateIdealStaffing || e.auditors >= minAuditorsRequired);
-      const capacityMap = new Map<string, number>();
-      auditors.forEach(a => {
-        capacityMap.set(a.id!, simulateIdealStaffing
-          ? Math.max(2, a.members.length * 2)
-          : (minAuditorsRequired === 2 ? Math.floor(a.auditors / 2) : a.auditors));
-      });
-
-      // Filter targets if respecting manual pairings
-      const finalTargets = respectManualPairings 
-        ? targets.filter(t => !permissions.some(p => p.isActive && p.targetDeptId === t.id))
-        : targets;
-
-      for (const target of finalTargets) {
-        if (usedTargetIds.has(target.id!)) continue;
-        const assets = target.assets || 0;
-        const targetCapacity = Math.max(2, Math.ceil(assets / maxAssetsPerDay));
-        let assignedCount = 0;
-        const assignedAuditors: any[] = [];
-
-        while (assignedCount < targetCapacity) {
-          const availableAuditor = auditors
-            .filter(a => a.id !== target.id && (capacityMap.get(a.id!) || 0) > 0 && !assignedAuditors.some(aa => aa.id === a.id))
-            .sort((a, b) => (capacityMap.get(b.id!) || 0) - (capacityMap.get(a.id!) || 0))[0];
-          if (!availableAuditor) break;
-
-          const potentialMembers: any[] = simulateIdealStaffing && availableAuditor.auditors === 0
-            ? [{ id: `virtual-${availableAuditor.id}-1`, name: `Virtual Auditor A (${availableAuditor.name})` }, { id: `virtual-${availableAuditor.id}-2`, name: `Virtual Auditor B (${availableAuditor.name})` }]
-            : users.filter(u => availableAuditor.members.map((m: any) => m.id).includes(u.departmentId) && u.status === 'Active' && (u.roles.includes('Supervisor') || u.roles.includes('Staff')));
-
-          assignedAuditors.push({
-            name: availableAuditor.name, assets: availableAuditor.assets,
-            auditors: simulateIdealStaffing ? Math.max(availableAuditor.auditors, availableAuditor.members.length * 2) : availableAuditor.auditors,
-            isJoint: availableAuditor.isJoint, id: availableAuditor.id,
-            members: potentialMembers.slice(0, 2),
-            isVirtual: simulateIdealStaffing && availableAuditor.auditors === 0,
-          });
-          const currentCap = capacityMap.get(availableAuditor.id!) || 0;
-          capacityMap.set(availableAuditor.id!, currentCap - 1);
-          assignedCount += (simulateIdealStaffing ? Math.max(availableAuditor.auditors, 2) : availableAuditor.auditors);
-        }
-
-        if (assignedAuditors.length > 0) {
-          newStrategicPlan.push({
-            target: { name: target.name, assets: target.assets, auditors: target.auditors, members: target.members, id: target.id } as any,
-            auditors: assignedAuditors,
-            totalAuditorsInGroup: assignedAuditors.reduce((sum, a) => sum + a.auditors, 0),
-            auditorSideAssets: assignedAuditors.reduce((sum, a) => sum + a.assets, 0),
-          });
-          usedTargetIds.add(target.id!);
-          assignedAuditors.forEach(auditor => {
-            newPairings.push({ auditorDeptId: auditor.id, targetDeptId: target.id!, isActive: true, isMutual: autoPairingMutual });
-            if (autoPairingMutual) {
-              newPairings.push({ auditorDeptId: target.id!, targetDeptId: auditor.id, isActive: true, isMutual: true });
-            }
-          });
-        }
-      }
-    }
-
-    if (newStrategicPlan.length === 0) {
-      showToast?.('No pairings could be generated. Try enabling "Simulate Ideal Inspecting Staff" or switch to "By Total Assets" mode.', 'error');
-      setIsProcessing(false);
-      return;
     }
 
     setStrategicPlan(newStrategicPlan);
     setSimulatedPairings(newPairings);
     setIsSimulatorActive(true);
-    setIsApplied(false);
     setIsProcessing(false);
-  };
-
-  const handleRunStrategicAI = async () => {
-    if (!onRunStrategicPairing) return;
-    setIsProcessing(true);
-    try {
-      const payload = {
-        mode: pairingMode,
-        minAuditors: strictAuditorRule ? 2 : 1,
-        strictAuditorRule,
-        autoPairingMutual,
-        respectManualPairings,
-        simulate: simulateIdealStaffing,
-        useAI: true
-      };
-      
-      const result = await onRunStrategicPairing(payload);
-      
-      if (result.pairings && result.pairings.length > 0) {
-        // Convert flat pairings to strategic plan for visualization
-        const newSimPairings = result.pairings.map(p => ({
-          auditorDeptId: p.auditorDeptId,
-          targetDeptId: p.targetDeptId,
-          isActive: true,
-          isMutual: p.isMutual,
-          aiReason: p.reason
-        }));
-        
-        // Re-construct the strategic plan visualization (simulating what handleRunSimulator does)
-        const newPlan: StrategicPair[] = [];
-        const targetsInOutput = Array.from(new Set(result.pairings.map(p => p.targetDeptId)));
-        
-        for (const targetId of targetsInOutput) {
-          const targetEntity = entities.find(e => e.id === targetId);
-          if (!targetEntity) continue;
-          
-          const pairingDepts = result.pairings.filter(p => p.targetDeptId === targetId);
-          const auditors: any[] = [];
-          
-          for (const p of pairingDepts) {
-             const audEntity = entities.find(e => e.id === p.auditorDeptId);
-             if (!audEntity) continue;
-             
-             auditors.push({
-               ...audEntity,
-               members: audEntity.members?.slice(0, 2) || [],
-               aiReason: p.reason
-             });
-          }
-          
-          newPlan.push({
-            target: targetEntity as any,
-            auditors,
-            totalAuditorsInGroup: auditors.reduce((sum, a) => sum + a.auditors, 0),
-            auditorSideAssets: auditors.reduce((sum, a) => sum + a.assets, 0)
-          });
-        }
-        
-        setStrategicPlan(newPlan);
-        setSimulatedPairings(newSimPairings);
-        setIsSimulatorActive(true);
-        setIsApplied(false);
-        showToast?.(`AI Strategic Matchmaking generated ${result.pairings.length} compatibility-optimized links.`, 'success');
-      }
-    } catch (e) {
-      console.error(e);
-      showToast?.('AI Strategic Matchmaking failed. Falling back to mathematical mode.', 'error');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleAddOverride = async () => {
-    if (!manualAuditor || !manualTarget) return;
-    if (manualAuditor === manualTarget) {
-      alert("Conflict Detected: A unit cannot audit its own assets.");
-      return;
-    }
-
-    // Resolve entity IDs to department IDs (groups must be expanded)
-    const auditorEntity = entities.find(e => e.id === manualAuditor);
-    const targetEntity = entities.find(e => e.id === manualTarget);
-
-    if (!auditorEntity || !targetEntity) return;
-
-    const auditorDeptIds: string[] = auditorEntity.isConsolidated
-      ? auditorEntity.members.map((m: any) => m.id)
-      : [auditorEntity.id!];
-
-    const targetDeptIds: string[] = targetEntity.isConsolidated
-      ? targetEntity.members.map((m: any) => m.id)
-      : [targetEntity.id!];
-
-    if (isSimulatorActive) {
-      // Always use entity-level IDs in simulator so handleCommitSimulation can expand them
-      const simPairs = [{ auditorDeptId: auditorEntity.id!, targetDeptId: targetEntity.id!, isActive: true, isMutual: overrideIsMutual }];
-      if (overrideIsMutual) {
-        simPairs.push({ auditorDeptId: targetEntity.id!, targetDeptId: auditorEntity.id!, isActive: true, isMutual: true });
-      }
-      setSimulatedPairings([...simulatedPairings, ...simPairs]);
-    } else {
-      if (onAddPermission) {
-        setIsProcessing(true);
-        try {
-          const pairs = auditorDeptIds.flatMap(audId =>
-            targetDeptIds.map(tgtId => ({ auditorDeptId: audId, targetDeptId: tgtId }))
-          );
-          for (const p of pairs) {
-            await onAddPermission(p.auditorDeptId, p.targetDeptId, overrideIsMutual);
-            if (overrideIsMutual) {
-              await onAddPermission(p.targetDeptId, p.auditorDeptId, true);
-            }
-          }
-        } catch (e) {
-          console.error("Failed to add permission:", e);
-          alert("Failed to save pairing. Please try again.");
-        } finally {
-          setIsProcessing(false);
-        }
-      }
-    }
-
-    setManualAuditor('');
-    setManualTarget('');
-    setOverrideIsMutual(false);
-  };
-
-  const handleRemoveSimulatedPair = (idx: number) => {
-    const updated = [...simulatedPairings];
-    updated.splice(idx, 1);
-    setSimulatedPairings(updated);
-  };
-
-  const handleSyncMutualFlag = async () => {
-    if (!permissions.length || !onBulkRemovePermissions || !onBulkAddPermissions) return;
-    setIsProcessing(true);
-    try {
-      await onBulkRemovePermissions(permissions.map((p: any) => p.id));
-      await onBulkAddPermissions(permissions.map((p: any) => ({
-        auditorDeptId: p.auditorDeptId,
-        targetDeptId: p.targetDeptId,
-        isActive: p.isActive,
-        isMutual: autoPairingMutual,
-      })));
-      showToast?.(`All ${permissions.length} pairings updated — Mutual: ${autoPairingMutual ? 'ON' : 'OFF'}.`);
-    } catch (e) {
-      alert('Failed to update mutual flag.');
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const handleCommitSimulation = async () => {
@@ -782,643 +268,244 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     setIsProcessing(true);
     try {
       const expandedPairings: Omit<CrossAuditPermission, 'id'>[] = [];
-      
       for (const pair of simulatedPairings) {
-        // Support both entity-level IDs (auto-sim) and dept-level IDs (legacy overrides)
-        const auditorEntity = entities.find(e => e.id === pair.auditorDeptId)
-          ?? entities.find(e => e.members?.some((m: any) => m.id === pair.auditorDeptId));
-        const targetEntity = entities.find(e => e.id === pair.targetDeptId)
-          ?? entities.find(e => e.members?.some((m: any) => m.id === pair.targetDeptId));
-        
-        if (!auditorEntity || !targetEntity) continue;
-        
-        for (const auditorDept of auditorEntity.members) {
-          for (const targetDept of targetEntity.members) {
-             expandedPairings.push({
-               auditorDeptId: auditorDept.id,
-               targetDeptId: targetDept.id,
-               isActive: true,
-               isMutual: pair.isMutual
-             });
+        const audEntity = entities.find(e => e.id === pair.auditorDeptId);
+        const tgtEntity = entities.find(e => e.id === pair.targetDeptId);
+        if (!audEntity || !tgtEntity) continue;
+        for (const audD of audEntity.members) {
+          for (const tgtD of tgtEntity.members) {
+            expandedPairings.push({ auditorDeptId: audD.id, targetDeptId: tgtD.id, isActive: true, isMutual: pair.isMutual });
           }
         }
       }
-
-      if (expandedPairings.length === 0) {
-        alert("Expansion failed. No valid pairings generated.");
-        return;
-      }
-
-      if (onBulkRemovePermissions && permissions.length > 0) {
-          await onBulkRemovePermissions(permissions.map(p => p.id));
-      }
-      
+      if (onBulkRemovePermissions && permissions.length > 0) await onBulkRemovePermissions(permissions.map(p => p.id));
       await onBulkAddPermissions(expandedPairings);
       setIsSimulatorActive(false);
       setSimulatedPairings([]);
-      localStorage.removeItem('cross_audit_simulator_active');
-      localStorage.removeItem('cross_audit_simulator_pairings');
-      showToast?.(`Successfully committed ${expandedPairings.length} departmental links.`);
+      localStorage.removeItem(SIMULATOR_ACTIVE_KEY);
+      localStorage.removeItem(SIMULATOR_PAIRINGS_KEY);
       await onLockPairing?.(expandedPairings.length);
+      showToast?.('Assignments committed and locked.');
     } catch (e) {
-      alert("Failed to commit simulated pairings.");
+      console.error(e);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const activePairingList = isSimulatorActive ? simulatedPairings : (permissions as any[]);
+  const activePairingsForStats = useMemo(() => {
+    if (isSimulatorActive) return simulatedPairings;
+    return permissions.filter(p => p.isActive).map(p => ({ auditorDeptId: p.auditorDeptId, targetDeptId: p.targetDeptId }));
+  }, [isSimulatorActive, simulatedPairings, permissions]);
+
+  const projectedAssetsMet = useMemo(() => {
+    const auditedTargets = new Set(activePairingsForStats.map(p => p.targetDeptId));
+    return Array.from(auditedTargets).reduce((sum, tid) => {
+      const dept = departments.find(d => d.id === tid);
+      return sum + (typeof dept?.totalAssets === 'string' ? parseInt(dept.totalAssets) : (dept?.totalAssets || 0));
+    }, 0);
+  }, [activePairingsForStats, departments]);
+
+  const projectedKPIPercentage = overallTotalAssets === 0 ? 0 : (projectedAssetsMet / overallTotalAssets) * 100;
+  const targetKPIPercentage = 100; // Standard for institutional audits
 
   const entityPermissions = useMemo(() => {
     if (isSimulatorActive) {
-      return simulatedPairings.map((p, idx) => ({
-        auditorEntityId: p.auditorDeptId,
-        targetEntityId: p.targetDeptId,
-        isMutual: p.isMutual,
-        rawPermIds: [] as string[],
-        simIdx: idx,
-      }));
+      return simulatedPairings.map((p, idx) => ({ auditorEntityId: p.auditorDeptId, targetEntityId: p.targetDeptId, isMutual: p.isMutual, simIdx: idx }));
     }
-    const map = new Map<string, { auditorEntityId: string; targetEntityId: string; isMutual: boolean; rawPermIds: string[] }>();
-    (permissions as any[]).forEach(p => {
-      const auditorEntity = entities.find(e => e.id === p.auditorDeptId || (e.members && e.members.some((m: any) => m.id === p.auditorDeptId)));
-      const targetEntity = entities.find(e => e.id === p.targetDeptId || (e.members && e.members.some((m: any) => m.id === p.targetDeptId)));
-      if (!auditorEntity || !targetEntity) return;
-      const key = `${auditorEntity.id}-${targetEntity.id}`;
-      if (map.has(key)) {
-        map.get(key)!.rawPermIds.push(p.id);
-      } else {
-        map.set(key, {
-            auditorEntityId: auditorEntity.id!,
-            targetEntityId: targetEntity.id!,
-            isMutual: p.isMutual,
-            rawPermIds: [p.id],
-        });
-      }
+    const map = new Map<string, any>();
+    permissions.forEach(p => {
+      const audE = entities.find(e => e.id === p.auditorDeptId || e.members.some(m => m.id === p.auditorDeptId));
+      const tgtE = entities.find(e => e.id === p.targetDeptId || e.members.some(m => m.id === p.targetDeptId));
+      if (!audE || !tgtE) return;
+      const key = `${audE.id}-${tgtE.id}`;
+      if (!map.has(key)) map.set(key, { auditorEntityId: audE.id, targetEntityId: tgtE.id, isMutual: p.isMutual, rawPermIds: [] });
+      map.get(key).rawPermIds.push(p.id);
     });
     return Array.from(map.values());
   }, [isSimulatorActive, simulatedPairings, permissions, entities]);
 
-  const filteredEntityPermissions = useMemo(() => {
-    return entityPermissions.filter(ep => {
-      const auditorEntity = entities.find(e => e.id === ep.auditorEntityId);
-      const targetEntity = entities.find(e => e.id === ep.targetEntityId);
-      const auditorMatch = !auditorFilter ||
-        auditorEntity?.name.toLowerCase().includes(auditorFilter.toLowerCase()) ||
-        auditorEntity?.members?.some((m: any) => m.abbr?.toLowerCase().includes(auditorFilter.toLowerCase()));
-      const targetMatch = !targetFilter ||
-        targetEntity?.name.toLowerCase().includes(targetFilter.toLowerCase()) ||
-        targetEntity?.members?.some((m: any) => m.abbr?.toLowerCase().includes(targetFilter.toLowerCase()));
-      return auditorMatch && targetMatch;
-    });
-  }, [entityPermissions, auditorFilter, targetFilter, entities]);
-
-  // Always-live permissions for Manual tab (ignores simulator state)
-  const liveEntityPermissions = useMemo(() => {
-    const map = new Map<string, { auditorEntityId: string; targetEntityId: string; isMutual: boolean; rawPermIds: string[] }>();
-    (permissions as any[]).forEach(p => {
-      const auditorEntity = entities.find(e => e.id === p.auditorDeptId || (e.members && e.members.some((m: any) => m.id === p.auditorDeptId)));
-      const targetEntity = entities.find(e => e.id === p.targetDeptId || (e.members && e.members.some((m: any) => m.id === p.targetDeptId)));
-      if (!auditorEntity || !targetEntity) return;
-      const key = `${auditorEntity.id}-${targetEntity.id}`;
-      if (map.has(key)) { map.get(key)!.rawPermIds.push(p.id); }
-      else { map.set(key, { auditorEntityId: auditorEntity.id!, targetEntityId: targetEntity.id!, isMutual: p.isMutual, rawPermIds: [p.id] }); }
-    });
-    return Array.from(map.values()).filter(ep => {
-      const auditorEntity = entities.find(e => e.id === ep.auditorEntityId);
-      const targetEntity = entities.find(e => e.id === ep.targetEntityId);
-      const auditorMatch = !auditorFilter || auditorEntity?.name.toLowerCase().includes(auditorFilter.toLowerCase()) || auditorEntity?.members?.some((m: any) => m.abbr?.toLowerCase().includes(auditorFilter.toLowerCase()));
-      const targetMatch = !targetFilter || targetEntity?.name.toLowerCase().includes(targetFilter.toLowerCase()) || targetEntity?.members?.some((m: any) => m.abbr?.toLowerCase().includes(targetFilter.toLowerCase()));
-      return auditorMatch && targetMatch;
-    });
-  }, [permissions, entities, auditorFilter, targetFilter]);
+  const filteredPermissions = entityPermissions.filter(p => {
+    const aud = entities.find(e => e.id === p.auditorEntityId);
+    const tgt = entities.find(e => e.id === p.targetEntityId);
+    return (!auditorFilter || aud?.name.toLowerCase().includes(auditorFilter.toLowerCase())) &&
+           (!targetFilter || tgt?.name.toLowerCase().includes(targetFilter.toLowerCase()));
+  });
 
   return (
-    <>
-      <div className="bg-white rounded-[40px] border-2 border-slate-200 shadow-sm relative overflow-hidden">
-        {isSimulatorActive && managementMode === 'auto' && (
-          <div className="absolute top-0 left-0 right-0 h-2 bg-linear-to-r from-amber-400 via-orange-500 to-amber-400 animate-pulse" />
-        )}
+    <div className="bg-white rounded-[40px] border-2 border-slate-200 shadow-sm relative overflow-hidden p-8 md:p-12">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-12">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Institutional Cross-Audit Management</h2>
+          <p className="text-slate-500 font-medium">Simulator-driven strategy for movable asset inspections.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <PrintButton onClick={() => printCrossAuditAssignments(entityPermissions, entities)} label="Print Plan" />
+          <button onClick={() => setShowConstraints(!showConstraints)} className="px-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4" /> Limits
+          </button>
+          <button onClick={() => setActiveModal('reset')} className="px-4 py-2.5 rounded-2xl border border-red-100 bg-red-50 text-red-500 text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-2">
+            <RotateCcw className="w-4 h-4" /> Reset Cycle
+          </button>
+        </div>
+      </div>
 
-        {/* ── HEADER ── */}
-        <div className="px-8 md:px-12 pt-8 md:pt-12">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
-            <div>
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Movable Asset Inspection Management</h2>
-              <p className="text-slate-500 font-medium">Configure institutional consolidation and generate anti-bias pairing strategies.</p>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <PrintButton
-                onClick={() => printCrossAuditAssignments(liveEntityPermissions, entities)}
-                label="Print"
-                title="Print Active Cross-Audit Assignments"
-              />
-              <button 
-                onClick={() => printStrategicInspectionPlanApproval(
-                  'Institution',
-                  new Date().getFullYear(),
-                  { 
-                    totalInstitutionAssets: overallTotalAssets,
-                    inspectedAssets: projectedAssetsMet,
-                    targetAssets: overallTotalAssets * (targetKPIPercentage/100),
-                    actualPercentage: projectedKPIPercentage,
-                    targetPercentage: targetKPIPercentage,
-                    isOnTrack: isKPIMet
-                  },
-                  feasibilityReport || null,
-                  entities,
-                  entityPermissions,
-                  { approver: 'PENGARAH', supporter: 'TIMBALAN PENGARAH (AKADEMIK) / KETUA UNIT' },
-                  auditGroups,
-                  departments
-                )}
-                disabled={entityPermissions.length === 0}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border bg-indigo-50 border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-all active:scale-95 disabled:opacity-50"
-                title={isSimulatorActive ? 'Generate Simulation Report' : 'Print Final Approval Memo'}
-              >
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                Memo
-              </button>
-              <button
-                onClick={() => setShowConstraints(!showConstraints)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-xs font-bold transition-all ${
-                  showConstraints ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <ShieldCheck className={`w-4 h-4 ${showConstraints ? 'animate-pulse' : ''}`} />
-                Limits
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${showConstraints ? 'rotate-180' : ''}`} />
-              </button>
-              <button
-                onClick={handleResetClick}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-red-100 bg-red-50 text-red-500 text-xs font-bold hover:bg-red-100 transition-all"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reset
-              </button>
-            </div>
-          </div>
+      {showConstraints && (
+        <div className="mb-12 animate-in fade-in slide-in-from-top-4">
+          <AuditConstraints
+            maxAssetsPerDay={maxAssetsPerDay}
+            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay || (() => {})}
+            maxLocationsPerDay={maxLocationsPerDay}
+            onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay || (() => {})}
+            minAuditorsPerLocation={minAuditorsPerLocationProp}
+            onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation || (() => {})}
+            dailyInspectionCapacity={dailyInspectionCapacityProp}
+            onUpdateDailyInspectionCapacity={onUpdateDailyInspectionCapacity || (() => {})}
+          />
+        </div>
+      )}
 
-          {showConstraints && onUpdateMaxAssetsPerDay && onUpdateMaxLocationsPerDay && (
-            <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
-              <AuditConstraints
-                maxAssetsPerDay={maxAssetsPerDay}
-                onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
-                maxLocationsPerDay={maxLocationsPerDay}
-                onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
-                minAuditorsPerLocation={minAuditorsPerLocationProp}
-                onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation || (() => {})}
-                dailyInspectionCapacity={dailyInspectionCapacityProp}
-                onUpdateDailyInspectionCapacity={onUpdateDailyInspectionCapacity || (() => {})}
-              />
-            </div>
-          )}
+      <div className="flex flex-col lg:flex-row gap-12">
+        {/* Left: Settings */}
+        <div className="lg:w-1/3 space-y-8">
+           <div className={`p-8 rounded-[32px] border-2 transition-all ${isSimulatorActive ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+              <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center mb-6">
+                <Zap className={`w-6 h-6 ${isSimulatorActive ? 'text-amber-500' : 'text-indigo-500'}`} />
+              </div>
+              <h3 className="text-xl font-black text-slate-800 mb-2">Assignment Strategy</h3>
+              <p className="text-xs text-slate-500 leading-relaxed mb-8">All audit relationships are generated programmatically to ensure separation of duties and fairness.</p>
 
-          {/* ── TAB SWITCHER ── */}
-          <div className="flex bg-slate-100 rounded-2xl p-1 gap-1 mb-8 max-w-xs">
-            <button
-              onClick={() => setManagementMode('auto')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                managementMode === 'auto' ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100' : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              <Wand2 className="w-3.5 h-3.5" /> Auto
-            </button>
-            <button
-              onClick={() => setManagementMode('manual')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                managementMode === 'manual' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              <UserPen className="w-3.5 h-3.5" /> Manual
-            </button>
-          </div>
+              <div className="space-y-6">
+                 <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Pairing Logic</p>
+                    <div className="flex bg-white/50 p-1 rounded-xl border border-slate-200 gap-1">
+                       <button onClick={() => setPairingMode('assets')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingMode === 'assets' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Assets</button>
+                       <button onClick={() => setPairingMode('assets_auditors')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingMode === 'assets_auditors' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Capacity</button>
+                    </div>
+                 </div>
+
+                 <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Institutional Flow</p>
+                    <div className="flex bg-white/50 p-1 rounded-xl border border-slate-200 gap-1">
+                       <button onClick={() => setPairingStrategy('asymmetric')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingStrategy === 'asymmetric' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Asymmetric (→)</button>
+                       <button onClick={() => setPairingStrategy('mutual')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingStrategy === 'mutual' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Mutual (⇄)</button>
+                    </div>
+                 </div>
+
+                 <div className="pt-4 space-y-3">
+                    <label className="flex items-center justify-between cursor-pointer group">
+                       <span className="text-[10px] font-black uppercase text-slate-500">Ideal Staffing Simulation</span>
+                       <input type="checkbox" className="sr-only peer" checked={simulateIdealStaffing} onChange={() => setSimulateIdealStaffing(!simulateIdealStaffing)} />
+                       <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-indigo-600 relative after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                    </label>
+                 </div>
+
+                 {isSimulatorActive ? (
+                   <div className="pt-6 space-y-3">
+                      <button onClick={handleCommitSimulation} disabled={isProcessing} className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-black transition-all">
+                        {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+                        Commit & Lock
+                      </button>
+                      <button onClick={() => { setIsSimulatorActive(false); setSimulatedPairings([]); }} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
+                        Cancel Draft
+                      </button>
+                   </div>
+                 ) : (
+                   <button onClick={handleRunSimulator} disabled={isProcessing || pairingLocked} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all disabled:opacity-50">
+                     {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                     {pairingLocked ? 'Pairing Locked' : 'Run Auto-Pairing'}
+                   </button>
+                 )}
+              </div>
+           </div>
+
+           {exemptedDepts.length > 0 && (
+             <div className="p-6 rounded-[28px] border border-rose-100 bg-rose-50/50">
+               <div className="flex items-center gap-2 mb-4">
+                 <Ban className="w-4 h-4 text-rose-400" />
+                 <span className="text-[10px] font-black uppercase text-rose-500">Exempted Departments</span>
+               </div>
+               <div className="flex flex-wrap gap-2">
+                 {exemptedDepts.map(d => <span key={d.id} className="px-2 py-1 bg-white border border-rose-100 rounded-lg text-[9px] font-black uppercase text-rose-400">{d.name}</span>)}
+               </div>
+             </div>
+           )}
         </div>
 
-        {/* ── AUTO TAB ── */}
-        {managementMode === 'auto' && (
-          <div className="px-8 md:px-12 pb-8 md:pb-12">
-            <div className="flex flex-col lg:flex-row gap-10">
-              {/* Left: Settings Panel (or locked banner) */}
-              <div className="lg:w-1/3">
-                {pairingLocked ? (
-                  <div className="rounded-3xl border-2 border-emerald-200 bg-emerald-50 p-7 flex flex-col gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                      <Lock className="w-7 h-7" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-black text-slate-900 mb-1">Pairings Locked</h3>
-                      <p className="text-sm text-slate-500 leading-relaxed">The audit pairings for this cycle have been committed and locked. No changes can be made until the cycle is reset.</p>
-                    </div>
-                    {pairingLockInfo && (
-                      <div className="bg-white rounded-2xl border border-emerald-100 p-4 space-y-2 text-xs">
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <Calendar className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          <span className="font-bold text-slate-700">Locked:</span>
-                          <span>{new Date(pairingLockInfo.lockedAt).toLocaleString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <Users className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          <span className="font-bold text-slate-700">By:</span>
-                          <span>{pairingLockInfo.lockedBy}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <Link className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          <span className="font-bold text-slate-700">Pairings:</span>
-                          <span>{pairingLockInfo.pairingCount} departmental links</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-slate-500">
-                          <Network className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          <span className="font-bold text-slate-700">Cycle Year:</span>
-                          <span>{pairingLockInfo.cycleYear}</span>
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Use Reset to unlock for the next annual cycle.</p>
-                  </div>
-                ) : (
-                  <>
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-colors ${isSimulatorActive ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                  <Zap className="w-7 h-7" />
-                </div>
-                <h3 className="text-xl font-black text-slate-900 mb-2">Pairing Simulator</h3>
-                <p className="text-slate-500 text-sm leading-relaxed mb-6">Generate efficient audit assignments automatically. Review generated pairings and refine before locking.</p>
+        {/* Right: Results Dashboard */}
+        <div className="lg:w-2/3 space-y-8">
+           <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-10"><Sparkles className="w-24 h-24" /></div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2">Institutional Target Achievement</p>
+              <div className="text-5xl font-black italic tracking-tighter mb-6">{projectedKPIPercentage.toFixed(1)}%</div>
+              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${projectedKPIPercentage}%` }} />
+              </div>
+              <p className="text-[10px] font-medium text-slate-500 mt-4">Projected Coverage: {projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Movable Assets.</p>
+           </div>
 
-                {/* Strategy toggle */}
-                <div className="mb-5">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pairing Strategy</p>
-                  <div className="flex rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-1 gap-1">
-                    <button onClick={() => setPairingMode('assets')} className={`flex-1 py-2 px-3 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${pairingMode === 'assets' ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}>By Total Assets</button>
-                    <button onClick={() => setPairingMode('assets_auditors')} className={`flex-1 py-2 px-3 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${pairingMode === 'assets_auditors' ? 'bg-white text-indigo-600 shadow-sm border border-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}>Assets + Auditors</button>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                    {pairingMode === 'assets' ? 'Pairs targets by asset volume only — no auditor-count gating.' : 'Requires auditor capacity. Entities assigned by asset size and available officers.'}
-                  </p>
-                </div>
-
-                {/* Option toggles */}
-                {[
-                  { icon: <ShieldCheck className="w-4 h-4 text-emerald-500" />, label: 'Respect Manual Pairings', desc: 'Skip units already manually assigned', checked: respectManualPairings, onChange: () => setRespectManualPairings(!respectManualPairings), color: 'peer-checked:bg-indigo-600' },
-                  { icon: <Users className="w-4 h-4 text-indigo-500" />, label: 'Simulate Ideal Staff', desc: 'Bypass officer shortage for planning', checked: simulateIdealStaffing, onChange: () => setSimulateIdealStaffing(!simulateIdealStaffing), color: 'peer-checked:bg-indigo-600' },
-                  { icon: <ArrowLeftRight className="w-4 h-4 text-violet-500" />, label: 'Mutual Pairing (Vice Versa)', desc: 'A audits B and B audits A', checked: autoPairingMutual, onChange: () => setAutoPairingMutual(!autoPairingMutual), color: 'peer-checked:bg-violet-500' },
-                ].map((t, i) => (
-                  <div key={i} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-3">
-                    <label className="flex items-center justify-between cursor-pointer">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">{t.icon}<span className="text-xs font-black text-slate-800 uppercase tracking-tight">{t.label}</span></div>
-                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-tighter">{t.desc}</p>
-                      </div>
-                      <div className="relative inline-flex items-center ml-4">
-                        <input type="checkbox" className="sr-only peer" checked={t.checked} onChange={t.onChange} />
-                        <div className={`w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${t.color}`}></div>
-                      </div>
-                    </label>
-                  </div>
-                ))}
-
-                {exemptedDepts.length > 0 && (
-                  <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 mb-5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Ban className="w-3.5 h-3.5 text-rose-400" />
-                      <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Excluded from Cross-Audit</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {exemptedDepts.map(d => (
-                        <span key={d.id} className="px-2 py-1 bg-white border border-rose-200 text-rose-500 rounded-lg text-[9px] font-black uppercase tracking-wider">{d.name}</span>
-                      ))}
-                    </div>
-                    <p className="text-[9px] text-rose-400 mt-2">These departments are excluded. Manage in Department Settings.</p>
-                  </div>
-                )}
-
-                {/* CTA buttons removed and moved to Header */}
-                  
-                  {isSimulatorActive && (
-                    <>
-                      <button onClick={handleCommitSimulation} disabled={isProcessing} className="w-full px-6 py-4 bg-slate-900 hover:bg-black text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all">
-                        {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCheck className="w-5 h-5" />}
-                        Lock In Pairings
-                      </button>
-                      <button onClick={() => { setIsSimulatorActive(false); setStrategicPlan([]); setSimulatedPairings([]); }} disabled={isProcessing} className="w-full px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 active:scale-95 transition-all">
-                        Cancel Simulation
-                      </button>
-                    </>
-                  )}
-
-                {!isSimulatorActive && (
-                  <div className="space-y-3">
-                    <button 
-                      onClick={() => { setUseAI(!useAI); localStorage.setItem('cross_audit_use_ai', (!useAI).toString()); }}
-                      className={`w-full px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${useAI ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-100 text-slate-400 border border-slate-200 hover:bg-slate-200'}`}
-                    >
-                      <Sparkles className={`w-3.5 h-3.5 ${useAI ? 'text-indigo-200' : 'text-slate-300'}`} />
-                      AI Strategic Mode {useAI ? 'ON' : 'OFF'}
-                    </button>
-                    
-                    <button 
-                      onClick={useAI ? handleRunStrategicAI : handleRunSimulator} 
-                      disabled={isProcessing} 
-                      className={`w-full px-6 py-4 rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all ${useAI ? 'bg-indigo-900 hover:bg-black text-white shadow-indigo-900/20' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'}`}
-                    >
-                      {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : (useAI ? <Sparkles className="w-5 h-5" /> : <Wand2 className="w-5 h-5" />)}
-                      {useAI ? 'Run Strategic Matchmaking' : 'Run Auto-Pairing'}
-                    </button>
-                    {useAI && (
-                      <p className="text-[10px] font-medium text-indigo-500 italic text-center animate-pulse">Analyzing technical affinity & compatibility...</p>
-                    )}
-                  </div>
-                )}
-                  </>
-                )}
+           <div>
+              <div className="flex items-center justify-between mb-6">
+                 <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{isSimulatorActive ? 'Simulated Assignments (Draft)' : 'Current Assignment Links'}</h4>
+                 <div className="flex gap-2">
+                    <input type="text" placeholder="Auditor..." className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none w-32" value={auditorFilter} onChange={(e) => setAuditorFilter(e.target.value)} />
+                    <input type="text" placeholder="Target..." className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none w-32" value={targetFilter} onChange={(e) => setTargetFilter(e.target.value)} />
+                 </div>
               </div>
 
-              {/* Right: KPI + Results */}
-              <div className="lg:w-2/3 flex flex-col gap-6">
-                {/* KPI bar */}
-                <div className="bg-slate-50 rounded-[28px] p-7 border border-slate-100">
-                  <div className="flex items-end justify-between mb-4">
-                    <div>
-                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Projected KPI Achievement (Asset Inspection)</h4>
-                      <div className="text-3xl font-black text-slate-800 tracking-tighter mt-1">
-                        {projectedKPIPercentage.toFixed(1)}% <span className="text-lg text-slate-400 font-bold">/ {targetKPIPercentage}%</span>
-                      </div>
-                    </div>
-                    <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border ${isKPIMet ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
-                      {isKPIMet ? 'KPI Secured' : 'KPI Missed'}
-                    </div>
-                  </div>
-                  <div ref={kpiBarRef} className="h-4 w-full bg-slate-200 rounded-full overflow-hidden relative">
-                    <div className={`h-full transition-all duration-1000 w-(--kpi-fill) ${isKPIMet ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    <div className="absolute top-0 bottom-0 w-1 bg-slate-900 z-10 left-(--kpi-marker)" />
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-400 mt-2 text-right">{projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Total Movable Assets Inspected</p>
-                </div>
-
-                {/* Refinement form — only when simulator is active */}
-                {isSimulatorActive && (
-                  <div className="bg-white p-6 rounded-2xl border border-amber-200 shadow-sm">
-                    <h4 className="text-[10px] font-black uppercase text-amber-500 tracking-widest mb-4 flex items-center gap-2">
-                      <UserPen className="w-3.5 h-3.5" /> Refine / Add Override
-                    </h4>
-                    <div className="flex flex-col gap-3">
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <select title="Inspecting Entity" className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none" value={manualAuditor} onChange={(e) => setManualAuditor(e.target.value)}>
-                          <option value="">Select Inspecting Entity</option>
-                          {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
-                            <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
-                          ))}
-                        </select>
-                        <select title="Target Entity" className="flex-1 min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none" value={manualTarget} onChange={(e) => setManualTarget(e.target.value)}>
-                          <option value="">Select Target</option>
-                          {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
-                            <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer px-2 flex-1">
-                          <div className="relative inline-flex items-center">
-                            <input type="checkbox" className="sr-only peer" checked={overrideIsMutual} onChange={() => setOverrideIsMutual(!overrideIsMutual)} />
-                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
-                          </div>
-                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Vice Versa</span>
-                        </label>
-                        <button onClick={handleAddOverride} disabled={!manualAuditor || !manualTarget} className="px-6 py-3 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-amber-100 transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap">
-                          <Plus className="w-4 h-4" /> Add Override
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Pairings table */}
-                <div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                      {isSimulatorActive ? 'Simulated Assignments (Draft)' : 'Active Database Assignments'}
-                    </h4>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {!isSimulatorActive && permissions.length > 0 && (
-                        <button
-                          onClick={handleSyncMutualFlag}
-                          disabled={isProcessing}
-                          title={autoPairingMutual ? 'Mark all active pairings as Mutual (⇄)' : 'Mark all active pairings as One-way (→)'}
-                          className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                            autoPairingMutual
-                              ? 'bg-violet-50 border border-violet-200 text-violet-600 hover:bg-violet-100'
-                              : 'bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100'
-                          }`}
-                        >
-                          <ArrowRightLeft className="w-3 h-3" />
-                          {autoPairingMutual ? 'Set All ⇄' : 'Set All →'}
-                        </button>
-                      )}
-                      <div className="relative">
-                        <input type="text" placeholder="Filter inspecting..." className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none w-44" value={auditorFilter} onChange={(e) => setAuditorFilter(e.target.value)} />
-                        <Network className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                      </div>
-                      <div className="relative">
-                        <input type="text" placeholder="Filter target..." className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none w-40" value={targetFilter} onChange={(e) => setTargetFilter(e.target.value)} />
-                        <Layers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                      </div>
-                      {(auditorFilter || targetFilter) && (
-                        <button title="Clear filters" onClick={() => { setAuditorFilter(''); setTargetFilter(''); }} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-colors"><RotateCcw className="w-3 h-3" /></button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="bg-white border border-slate-200 rounded-[24px] overflow-hidden shadow-sm">
-                    <div className="max-h-130 overflow-y-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10 backdrop-blur-md">
-                          <tr>
-                            <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Inspecting Entity</th>
-                            <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Dir.</th>
-                            <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Entity</th>
-                            <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {filteredEntityPermissions.length === 0 ? (
-                            <tr><td colSpan={4} className="py-12 text-center text-slate-400 font-medium text-sm">{isSimulatorActive ? 'Run Auto-Pairing to generate pairings.' : 'No active pairings.'}</td></tr>
-                          ) : filteredEntityPermissions.map((ep, idx) => {
-                            const targetEntity = entities.find(e => e.id === ep.targetEntityId);
-                            const auditorEntity = entities.find(e => e.id === ep.auditorEntityId);
-                            return (
-                              <tr key={`auto-${ep.auditorEntityId}-${ep.targetEntityId}`} className="hover:bg-slate-50/50 transition-colors">
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">{auditorEntity?.isConsolidated ? <Boxes className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}</div>
-                                    <div>
-                                      <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || ep.auditorEntityId}</p>
-                                      <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">{auditorEntity?.assets?.toLocaleString() || 0} Assets</p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5 text-center">
-                                  <div className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-400">{ep.isMutual ? <ArrowRightLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}</div>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">{targetEntity?.isConsolidated ? <Boxes className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}</div>
-                                    <div>
-                                      <p className="font-bold text-sm text-slate-900">{targetEntity?.name || ep.targetEntityId}</p>
-                                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Assets</p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5 text-right">
-                                  {isSimulatorActive ? (
-                                    <button title="Remove pairing" onClick={() => handleRemoveSimulatedPair(idx)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><X className="w-4 h-4" /></button>
-                                  ) : (
-                                    <button title="Remove pairing" onClick={() => onBulkRemovePermissions && ep.rawPermIds?.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
+              <div className="bg-white border border-slate-200 rounded-[24px] overflow-hidden">
+                 <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-50 border-b border-slate-100">
+                       <tr>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Inspecting Entity</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Flow</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Entity</th>
+                          <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Action</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                       {filteredPermissions.length === 0 ? (
+                         <tr><td colSpan={4} className="py-16 text-center text-slate-400 text-xs font-medium italic">No assignments generated. Click "Run Auto-Pairing" to begin.</td></tr>
+                       ) : filteredPermissions.map((p, idx) => {
+                         const aud = entities.find(e => e.id === p.auditorEntityId);
+                         const tgt = entities.find(e => e.id === p.targetEntityId);
+                         return (
+                           <tr key={idx} className="hover:bg-slate-50/50 transition-all group">
+                             <td className="px-6 py-4">
+                                <span className="text-sm font-black text-slate-800">{aud?.name || 'Unknown'}</span>
+                             </td>
+                             <td className="px-6 py-4 text-center">
+                                <div className="inline-flex p-1.5 bg-slate-100 rounded-lg text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-500 transition-all">{p.isMutual ? <ArrowRightLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}</div>
+                             </td>
+                             <td className="px-6 py-4">
+                                <span className="text-sm font-black text-slate-800">{tgt?.name || 'Unknown'}</span>
+                             </td>
+                             <td className="px-6 py-4 text-right">
+                                {isSimulatorActive ? (
+                                  <button onClick={() => { const up = [...simulatedPairings]; up.splice(p.simIdx, 1); setSimulatedPairings(up); }} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><X className="w-4 h-4" /></button>
+                                ) : (
+                                  <button onClick={() => onBulkRemovePermissions && onBulkRemovePermissions(p.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 className="w-4 h-4" /></button>
+                                )}
+                             </td>
+                           </tr>
+                         )
+                       })}
+                    </tbody>
+                 </table>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── MANUAL TAB ── */}
-        {managementMode === 'manual' && (
-          <div className="px-8 md:px-12 pb-8 md:pb-12">
-            {/* Add pair form */}
-            <div className="bg-slate-50 rounded-[28px] p-7 border border-slate-100 mb-8">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center shrink-0"><Plus className="w-4 h-4" /></div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">Add Pairing</h3>
-                  <p className="text-[10px] text-slate-400 font-medium">Changes apply immediately to the database — no lock step needed.</p>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 mb-3">
-                <select title="Inspecting Entity" className="flex-1 min-w-0 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-slate-500/20 outline-none" value={manualAuditor} onChange={(e) => setManualAuditor(e.target.value)}>
-                  <option value="">Select Inspecting Entity</option>
-                  {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
-                    <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
-                  ))}
-                </select>
-                <select title="Target Entity" className="flex-1 min-w-0 px-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-slate-500/20 outline-none" value={manualTarget} onChange={(e) => setManualTarget(e.target.value)}>
-                  <option value="">Select Target Entity</option>
-                  {[...entities].sort((a, b) => b.assets - a.assets).map(e => (
-                    <option key={e.id} value={e.id}>{e.isConsolidated ? '📦 [GROUP] ' : '🏢 [UNIT] '}{e.name} — {e.assets.toLocaleString()} Assets</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2.5 cursor-pointer flex-1">
-                  <div className="relative inline-flex items-center">
-                    <input type="checkbox" className="sr-only peer" checked={isMutual} onChange={() => setIsMutual(!isMutual)} />
-                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-500"></div>
-                  </div>
-                  <ArrowLeftRight className={`w-3.5 h-3.5 transition-colors ${isMutual ? 'text-violet-500' : 'text-slate-400'}`} />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mutual (Vice Versa)</span>
-                </label>
-                <button onClick={handleAddManualPair} disabled={!manualAuditor || !manualTarget || isProcessing} className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-black transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap">
-                  {isProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Add Pairing
-                </button>
-              </div>
-            </div>
-
-            {/* Live pairings table */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Active Pairings ({permissions.length})</h4>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
-                  <input type="text" placeholder="Filter inspecting..." className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-slate-500/20 outline-none w-48" value={auditorFilter} onChange={(e) => setAuditorFilter(e.target.value)} />
-                  <Network className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                </div>
-                <div className="relative">
-                  <input type="text" placeholder="Filter target..." className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold focus:ring-2 focus:ring-slate-500/20 outline-none w-40" value={targetFilter} onChange={(e) => setTargetFilter(e.target.value)} />
-                  <Layers className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
-                </div>
-                {(auditorFilter || targetFilter) && (
-                  <button title="Clear filters" onClick={() => { setAuditorFilter(''); setTargetFilter(''); }} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl transition-colors"><RotateCcw className="w-3 h-3" /></button>
-                )}
-              </div>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-[24px] overflow-hidden shadow-sm">
-              <div className="max-h-150 overflow-y-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50/80 border-b border-slate-100 sticky top-0 z-10 backdrop-blur-md">
-                    <tr>
-                      <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Inspecting Entity</th>
-                      <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Dir.</th>
-                      <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Target Entity</th>
-                      <th className="px-5 py-3.5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Remove</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {liveEntityPermissions.length === 0 ? (
-                      <tr><td colSpan={4} className="py-12 text-center text-slate-400 font-medium text-sm">No pairings yet. Add one above.</td></tr>
-                    ) : liveEntityPermissions.map((ep) => {
-                      const targetEntity = entities.find(e => e.id === ep.targetEntityId);
-                      const auditorEntity = entities.find(e => e.id === ep.auditorEntityId);
-                      return (
-                        <tr key={`manual-${ep.auditorEntityId}-${ep.targetEntityId}`} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-3">
-                              <div className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shrink-0">{auditorEntity?.isConsolidated ? <Boxes className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}</div>
-                              <div>
-                                <p className="font-bold text-sm text-slate-900">{auditorEntity?.name || ep.auditorEntityId}</p>
-                                <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">{auditorEntity?.assets?.toLocaleString() || 0} Assets</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3.5 text-center">
-                            <div className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 text-slate-400">{ep.isMutual ? <ArrowRightLeft className="w-3.5 h-3.5" /> : <ArrowRight className="w-3.5 h-3.5" />}</div>
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-3">
-                              <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">{targetEntity?.isConsolidated ? <Boxes className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}</div>
-                              <div>
-                                <p className="font-bold text-sm text-slate-900">{targetEntity?.name || ep.targetEntityId}</p>
-                                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{targetEntity?.assets?.toLocaleString() || 0} Assets</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3.5 text-right">
-                            <button title="Remove pairing" onClick={() => onBulkRemovePermissions && ep.rawPermIds?.length > 0 && onBulkRemovePermissions(ep.rawPermIds)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"><Trash2 className="w-4 h-4" /></button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+           </div>
+        </div>
       </div>
 
       <ConfirmationModal
-        isOpen={activeModal === 'apply'}
-        title="Apply Strategic Matrix?"
-        message="This will overwrite existing permissions."
-        confirmLabel="Apply Now"
-        cancelLabel="Cancel"
-        onConfirm={executeApply}
-        onCancel={() => setActiveModal(null)}
-        variant="info"
-      />
-
-      <ConfirmationModal
         isOpen={activeModal === 'reset'}
-        title="Clear Configurations?"
-        message="This will dissolve all groups and clear permissions."
+        title="Reset Entire Cycle?"
+        message="This will dissolve all groups and clear all current inspection assignments. This action cannot be undone."
         confirmLabel="Reset Everything"
-        cancelLabel="Cancel"
         onConfirm={executeReset}
         onCancel={() => setActiveModal(null)}
         variant="warning"
       />
-    </>
+    </div>
   );
 };
