@@ -790,14 +790,14 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
         const entB = pool.find(e => e.id === idB);
         if (!entA || !entB) continue;
         
-        // A audits B
+        // Simulation-Mirroring: Pushing both directions for mutual pairs
+        // This ensures the audit list shows the target for both parties.
         newPairings.push({ 
           auditorDeptId: idA, 
           targetDeptId: idB, 
           isMutual: true, 
           burdenScore: Math.round(entB.assets / entA.auditors) 
         });
-        // B audits A
         newPairings.push({ 
           auditorDeptId: idB, 
           targetDeptId: idA, 
@@ -930,8 +930,12 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
     }, 0);
     const projectedKPIPct = overallTotalAssets > 0 ? (projectedAssetsMet / overallTotalAssets) * 100 : 0;
 
-    // Persist if not a simulation
+    // Persist if not a simulation (Purge old perms first for IDEMPOTENCY)
     if (!simulate && newPairings.length > 0) {
+      // 1. Clear existing active pairings to prevent duplication
+      await db.prepare('DELETE FROM cross_audit_permissions WHERE is_active = 1').run();
+
+      // 2. Batch insert new normalized pairings
       const insertStmts = newPairings.map((p) =>
         db.prepare(
           'INSERT INTO cross_audit_permissions (id, auditor_dept_id, target_dept_id, is_active, is_mutual) VALUES (?, ?, ?, 1, ?)'
