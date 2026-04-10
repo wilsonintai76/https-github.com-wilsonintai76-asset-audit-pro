@@ -389,6 +389,7 @@ const App: React.FC = () => {
           onDeleteAuditGroup={handleDeleteAuditGroup}
           onAutoConsolidate={handleAutoConsolidate}
           onRunStrategicPairing={handleRunStrategicPairing}
+          onResetPairingData={handleResetPairingData}
           auditGroups={auditGroups}
           feasibilityReport={appData.feasibilityReport}
         />

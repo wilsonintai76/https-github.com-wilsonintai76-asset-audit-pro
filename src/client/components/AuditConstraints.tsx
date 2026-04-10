@@ -38,12 +38,19 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
 }) => {
   // Hardcode policy to 2
   const policyMinAuditors = 2;
+  const BBI_DAILY_CAPACITY = 1500; // Standard target BBI per day per team
 
-  // Projection math
+  // Projection math (BBI-based)
   const auditorTeams = Math.floor(activeAuditors / policyMinAuditors);
-  const totalDailyCapacity = auditorTeams * dailyInspectionCapacity;
-  const daysToFinish = totalDailyCapacity > 0 ? Math.ceil(totalAssets / totalDailyCapacity) : 0;
-  const monthCompletion = totalAssets > 0 ? Math.min(100, Math.round(((totalDailyCapacity * 20) / totalAssets) * 100)) : 0;
+  
+  // Use either the explicit daily capacity or our BBI standard
+  const workloadCapacity = auditorTeams * (dailyInspectionCapacity || 150); 
+  const totalDailyBBICapacity = auditorTeams * BBI_DAILY_CAPACITY;
+  
+  const daysToFinish = workloadCapacity > 0 ? Math.ceil(totalAssets / workloadCapacity) : 0;
+  const monthCompletion = totalAssets > 0 
+    ? Math.min(100, Math.round(((workloadCapacity * 20) / totalAssets) * 100)) 
+    : 0;
 
   return (
     <div className={`bg-white border-2 rounded-[32px] p-8 shadow-sm transition-all duration-500 ${isSimulatorActive ? 'border-amber-200 bg-amber-50/5' : 'border-slate-100'}`}>
@@ -71,21 +78,6 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
-            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Max Assets Per Day</label>
-            <div className="relative group">
-              <input 
-                type="number"
-                min="100"
-                step="100"
-                className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
-                value={maxAssetsPerDay}
-                onChange={(e) => onUpdateMaxAssetsPerDay(parseInt(e.target.value, 10) || 1000)}
-              />
-            </div>
-            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">Limits total assets a cross-audit team can handle in a 24-hour shift.</p>
-          </div>
-
-          <div className="space-y-4">
             <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Min Auditors Per Location</label>
             <div className="relative">
               <input 
@@ -102,29 +94,29 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
           </div>
 
           <div className="space-y-4">
-            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Daily Inspection Capacity</label>
-            <input
-              type="number"
-              min="10"
-              step="10"
-              className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
-              value={dailyInspectionCapacity}
-              onChange={(e) => onUpdateDailyInspectionCapacity(Math.max(10, parseInt(e.target.value, 10) || 150))}
-            />
-            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">Optimization Benchmark: Estimated assets one team can verify per working day.</p>
-          </div>
-
-          <div className="space-y-4">
-            <label className="text-xs font-black uppercase text-indigo-500 tracking-widest block">Standalone Asset Threshold</label>
+            <label className="text-xs font-black uppercase text-indigo-500 tracking-widest block">Standalone BBI Threshold</label>
             <input 
               type="number"
               min="100"
               step="100"
               className="w-full px-4 py-4 bg-indigo-50/30 border-2 border-indigo-100/50 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
               value={standaloneThresholdAssets}
-              onChange={(e) => onUpdateStandaloneThresholdAssets(parseInt(e.target.value, 10) || 1000)}
+              onChange={(e) => onUpdateStandaloneThresholdAssets(parseInt(e.target.value, 10) || 1500)}
             />
-            <p className="text-[10px] text-indigo-400 font-bold leading-relaxed">Consolidation Trigger: Units with total assets above this value will audit themselves autonomously.</p>
+            <p className="text-[10px] text-indigo-400 font-bold leading-relaxed">Magnitude Trigger: Units with total BBI above this value will audit themselves autonomously.</p>
+          </div>
+
+          <div className="md:col-span-2 p-6 bg-slate-50 border border-slate-100 rounded-2xl opacity-60 pointer-events-none">
+             <div className="flex items-center justify-between">
+                <div>
+                   <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Implicit Daily Capacity (BBI)</span>
+                   <span className="text-xl font-bold text-slate-600">{BBI_DAILY_CAPACITY.toLocaleString()} per team</span>
+                </div>
+                <div className="text-right">
+                   <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Monthly Asset Target</span>
+                   <span className="text-xl font-bold text-slate-600">~{(workloadCapacity * 20).toLocaleString()}</span>
+                </div>
+             </div>
           </div>
         </div>
 
@@ -165,7 +157,7 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
                      ></div>
                   </div>
                   <p className="text-[10px] text-slate-500 font-medium leading-normal italic">
-                    Based on 20 working days, your current capacity allows for {totalDailyCapacity.toLocaleString()} assets per day. 
+                    Based on 20 working days, your current capacity allows for {(workloadCapacity).toLocaleString()} assets per day. 
                     {daysToFinish > 0 && ` Estimated total time: ${daysToFinish} days.`}
                   </p>
                </div>

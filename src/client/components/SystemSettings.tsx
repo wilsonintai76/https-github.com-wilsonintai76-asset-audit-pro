@@ -80,6 +80,7 @@ interface SystemSettingsProps {
   pairingLockInfo?: { lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null;
   onLockPairing?: (pairingCount: number) => Promise<void>;
   onUnlockPairing?: () => Promise<void>;
+  onResetPairingData?: () => Promise<void>;
   showToast?: (message: string, type?: any) => void;
   feasibilityReport?: any;
 }
@@ -99,6 +100,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onAddPhase,
   onUpdatePhase,
   onDeletePhase,
+  onResetPairingData,
   onAddKPITier,
   onUpdateKPITier,
   onDeleteKPITier,
@@ -219,14 +221,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         optimizedCapacity = Math.max(50, Math.min(1000, optimizedCapacity));
       }
 
+      // 3. Apply to State
       handleUpdateDraftConstraints({ 
-        maxAssetsPerDay: result.assetThreshold || 1000,
+        standaloneThresholdAssets: result.assetThreshold || 1500,
         dailyInspectionCapacity: optimizedCapacity,
-        minAuditorsPerLocation: 2, // Hard policy enforced
-        maxLocationsPerDay: 5 // Default standard
+        minAuditorsPerLocation: 2, 
       });
 
-      if (showToast) showToast('AI Strategy Optimized based on actual headcount and assets.', 'success');
+      if (showToast) showToast('Strategy Optimized: Standalone BBI set to ' + (result.assetThreshold || 1500), 'success');
     } catch (err) {
       console.error('AI Auto-Optimize failed:', err);
       if (showToast) showToast('AI optimization encountered an error.', 'error');
@@ -575,6 +577,35 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Clear Locations
+              </button>
+            </div>
+
+            {/* Reset Pairings */}
+            <div className={`rounded-2xl border p-4 transition-all ${
+              isSystemLocked ? 'border-slate-100 bg-slate-50' : 'border-amber-100 bg-white hover:border-amber-200 shadow-sm'
+            }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  isSystemLocked ? 'bg-slate-100 text-slate-300' : 'bg-amber-50 text-amber-500'
+                }`}>
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${isSystemLocked ? 'text-slate-400' : 'text-slate-900'}`}>Reset Pairings</h4>
+                  <p className={`text-[10px] ${isSystemLocked ? 'text-slate-300' : 'text-slate-400'}`}>Purges assigned pairs from database (Hard Reset)</p>
+                </div>
+              </div>
+              <button
+                onClick={onResetPairingData}
+                disabled={isSystemLocked || !onResetPairingData}
+                className={`w-full mt-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                  isSystemLocked
+                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                    : 'bg-white border-2 border-amber-200 text-amber-600 hover:bg-amber-600 hover:text-white shadow-xl shadow-amber-100/20'
+                }`}
+              >
+                <RotateCcw className="w-3.5 h-3.5 italic" />
+                Clear All Assignments
               </button>
             </div>
 

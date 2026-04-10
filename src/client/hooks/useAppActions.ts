@@ -428,8 +428,23 @@ export const useAppActions = (props: AppActionsProps) => {
     await gateway.updateSystemSetting('pairing_lock', info); setPairingLocked(true); setPairingLockInfo(info); handleRebalanceSchedule();
   };
 
+  const handleResetPairingData = async () => {
+    customConfirm("Reset Pairings", "This will permanently delete ALL active cross-audit assignments. Proceed?", async () => {
+      try { 
+        await gateway.clearAllPermissions(); 
+        setStrategicPlan([]);
+        showToast('Pairings cleared from database.', 'success');
+        loadAllData();
+      } catch (e) { showError(e); }
+    });
+  };
+
   const handleUnlockPairing = async () => {
-    await gateway.updateSystemSetting('pairing_lock', { locked: false }); setPairingLocked(false); setPairingLockInfo(null);
+    // Soft unlock by default, but pairing reset is available via Reset Pairings
+    await gateway.updateSystemSetting('pairing_lock', { locked: false }); 
+    setPairingLocked(false); 
+    setPairingLockInfo(null);
+    showToast('Configuration unlocked. You can now edit constraints or pairings.', 'info');
   };
 
   const handleViewChange = (view: AppView) => {
@@ -639,7 +654,7 @@ export const useAppActions = (props: AppActionsProps) => {
     refreshDepartmentTotals, handleToggleLock, handleAssign, handleUnassign, handleDeleteAudit, handleUpdateAudit,
     handleUpdateAuditDate, handleToggleStatus, handleAddLoc, handleUpdateLoc, handleDeleteLoc, handleAddDept,
     handleUpdateDept, handleDeleteDept, handleAddPermission, handleRemovePermission, handleUpdatePhase,
-    handleRebalanceSchedule, handleResetOperationalData, handleLockPairing, handleUnlockPairing, handleViewChange,
+    handleRebalanceSchedule, handleResetOperationalData, handleLockPairing, handleUnlockPairing, handleResetPairingData, handleViewChange,
     handleResetDepartments, handleResetLocations, handleResetUsers, handleResetPhases, handleResetKPI,
     handleBulkAddAudits, handleBulkAddLocs, handleUpdateUninspectedAssetCounts, handleApproveArchive,
     handleRejectArchive, handleBulkAddDepts, handleBulkUpdateDepts, handleBulkAddPermissions,
