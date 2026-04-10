@@ -150,6 +150,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 }) => {
   const isAdmin = (userRoles || []).includes('Admin');
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [isSuggestingAI, setIsSuggestingAI] = React.useState(false);
   const [strictAuditorRule, setStrictAuditorRule] = React.useState(true);
 
   // GLOBAL SIMULATOR STATE (Lumped)
@@ -179,6 +180,20 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         const base = prev || { maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, dailyInspectionCapacity };
         return { ...base, ...updates } as any;
       });
+    }
+  };
+
+  const handleAISuggestThresholds = async () => {
+    setIsSuggestingAI(true);
+    try {
+      const result = await suggestThresholds(departments);
+      if (result.assetThreshold) {
+        handleUpdateDraftConstraints({ maxAssetsPerDay: result.assetThreshold });
+      }
+    } catch (err) {
+      console.error('AI Threshold suggestion failed:', err);
+    } finally {
+      setIsSuggestingAI(false);
     }
   };
 

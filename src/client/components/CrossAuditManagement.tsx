@@ -63,36 +63,40 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   departments, 
   users,
   permissions, 
+  onTogglePermission,
+  onAddPermission,
   onRemovePermission,
+  onUpdateDepartment,
   onBulkUpdateDepartments,
   auditGroups = [],
+  onAddAuditGroup,
+  onUpdateAuditGroup,
   onDeleteAuditGroup,
   onBulkDeleteAuditGroups,
+  onAutoConsolidate,
+  onRunStrategicPairing,
   onBulkAddPermissions,
   onBulkRemovePermissions,
+  pairingLocked = false,
+  pairingLockInfo = null,
+  onLockPairing,
+  onUnlockPairing,
+  phases,
+  institutionKPIs,
   maxAssetsPerDay = 1000,
   maxLocationsPerDay = 5,
-  minAuditorsPerLocation: minAuditorsPerLocationProp = 2,
-  dailyInspectionCapacity: dailyInspectionCapacityProp = 150,
+  minAuditorsPerLocation = 2,
+  dailyInspectionCapacity = 150,
+  isSimulatorActive,
+  setIsSimulatorActive,
+  draftConstraints,
+  setDraftConstraints,
   showToast,
   onUpdateMaxAssetsPerDay,
   onUpdateMaxLocationsPerDay,
   onUpdateMinAuditorsPerLocation,
   onUpdateDailyInspectionCapacity,
-  pairingLocked = false,
-  pairingLockInfo = null,
-  onLockPairing,
-  onUnlockPairing,
-  onRunStrategicPairing,
-  feasibilityReport,
-  isSimulatorActive,
-  setIsSimulatorActive,
-  draftConstraints,
-  setDraftConstraints,
-  maxAssetsPerDay,
-  maxLocationsPerDay,
-  minAuditorsPerLocation,
-  dailyInspectionCapacity
+  feasibilityReport
 }) => {
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -208,13 +212,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const handleRunSimulator = () => {
     setIsProcessing(true);
     
-    // Use effective constraints (draft if active, else global)
     if (!draftConstraints) {
       setDraftConstraints({
         maxAssetsPerDay,
-        maxLocationsPerDay,
-        minAuditorsPerLocation: minAuditorsPerLocationProp,
-        dailyInspectionCapacity: dailyInspectionCapacityProp
+        maxLocationsPerDay: currentMaxLocations,
+        minAuditorsPerLocation: currentMinAuditors,
+        pairingLocked: pairingLocked
       });
     }
 
