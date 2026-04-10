@@ -79,13 +79,20 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onUpdateMaxLocationsPerDay,
   onUpdateMinAuditorsPerLocation,
   onUpdateDailyInspectionCapacity,
+  pairingLocked = false,
+  pairingLockInfo = null,
+  onLockPairing,
   onUnlockPairing,
   onRunStrategicPairing,
   feasibilityReport,
   isSimulatorActive,
   setIsSimulatorActive,
   draftConstraints,
-  setDraftConstraints
+  setDraftConstraints,
+  maxAssetsPerDay,
+  maxLocationsPerDay,
+  minAuditorsPerLocation,
+  dailyInspectionCapacity
 }) => {
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);

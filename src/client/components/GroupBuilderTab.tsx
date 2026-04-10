@@ -5,9 +5,6 @@ import { PrintButton } from './PrintButton';
 import { printUnitConsolidation } from '../lib/printUtils';
 import { suggestThresholds } from '../services/aiService';
 
-function saveStandaloneCutoff(t: number) {
-  localStorage.setItem(STANDALONE_CUTOFF_KEY, String(t));
-}
 
 interface GroupBuilderTabProps {
   departments: Department[];
@@ -21,7 +18,7 @@ interface GroupBuilderTabProps {
   setIsProcessing: (processing: boolean) => void;
   strictAuditorRule: boolean;
   setStrictAuditorRule: (val: boolean) => void;
-  maxAssetsPerDay?: number;
+  maxAssetsPerDay: number;
   maxLocationsPerDay?: number;
   minAuditorsPerLocation?: number;
   isSystemLocked?: boolean;
@@ -39,6 +36,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   setIsProcessing,
   strictAuditorRule,
   setStrictAuditorRule,
+  maxAssetsPerDay,
   minAuditorsPerLocation = 2,
   isSystemLocked = false,
   pairingLocked = false,
@@ -143,20 +141,11 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
       const name = isUnassigned ? depts[0].name : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
       const isStandaloneExempt = isUnassigned && totalAssets >= maxAssetsPerDay;
 
-      return {
-        name,
-        assets: totalAssets,
-        auditors: totalAuditors,
-        memberCount: depts.length,
-        isJoint: !isUnassigned,
-        isConsolidated: !isUnassigned,
-        isStandaloneExempt,
-        id: groupId,
-        members: depts,
-        isGroup: depts.length > 1
-      };
+      const constitutesGroup = !isUnassigned;
+
+      return { name, assets: totalAssets, auditors: totalAuditors, memberCount: depts.length, isJoint: constitutesGroup, isGroup: constitutesGroup, id: groupId, members: depts };
     }).sort((a, b) => b.assets - a.assets);
-  }, [departments, auditGroups, standaloneCutoff]);
+  }, [departments, auditGroups, maxAssetsPerDay]);
 
   const grandTotalAssets = useMemo(() => {
     return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);

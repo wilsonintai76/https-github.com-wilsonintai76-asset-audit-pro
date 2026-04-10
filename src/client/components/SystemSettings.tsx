@@ -11,6 +11,7 @@ import { Zap, Sliders, AlertCircle, Eye, Calendar, UserCheck, Users, UserPlus, E
 import { BackupButton } from './BackupButton';
 import { PageHeader } from './PageHeader';
 import { GroupBuilderTab } from './GroupBuilderTab';
+import { AuditConstraints } from './AuditConstraints';
 
 interface SystemSettingsProps {
   departments: Department[];
@@ -169,19 +170,18 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
 
   const handleUpdateDraftConstraints = (updates: Partial<typeof draftConstraints>) => {
     if (!isSimulatorActive) {
-      // If not in simulator, update global state immediately via props
       if (updates.maxAssetsPerDay !== undefined) onUpdateMaxAssetsPerDay(updates.maxAssetsPerDay);
       if (updates.maxLocationsPerDay !== undefined) onUpdateMaxLocationsPerDay(updates.maxLocationsPerDay);
       if (updates.minAuditorsPerLocation !== undefined) onUpdateMinAuditorsPerLocation(updates.minAuditorsPerLocation);
       if (updates.dailyInspectionCapacity !== undefined) onUpdateDailyInspectionCapacity(updates.dailyInspectionCapacity);
     } else {
-      // In simulator mode, shadow with draft
       setDraftConstraints(prev => {
         const base = prev || { maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, dailyInspectionCapacity };
         return { ...base, ...updates } as any;
       });
     }
   };
+
   const activePhase = React.useMemo(() => {
     const today = new Date();
     return phases.find(p => {
@@ -218,7 +218,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         />
       )}
 
-      {/* GLOBAL INSTITUTIONAL CONSTRAINTS */}
       <div className="animate-in fade-in slide-in-from-top-4 duration-700">
         <div className="flex items-center gap-3 mb-4 px-2">
            <ShieldCheck className={`w-5 h-5 ${isSimulatorActive ? 'text-amber-500' : 'text-indigo-500'}`} />
@@ -345,6 +344,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         minAuditorsPerLocation={currentMinAuditors}
         isSystemLocked={isSystemLocked}
         pairingLocked={pairingLocked}
+        onSuggestThresholds={handleAISuggestThresholds}
+        isSuggestingAI={isSuggestingAI}
       />
 
       <CrossAuditManagement
