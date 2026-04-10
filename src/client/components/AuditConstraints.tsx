@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface AuditConstraintsProps {
   maxAssetsPerDay: number;
   onUpdateMaxAssetsPerDay: (value: number) => void;
@@ -9,6 +7,11 @@ interface AuditConstraintsProps {
   onUpdateMinAuditorsPerLocation: (value: number) => void;
   dailyInspectionCapacity: number;
   onUpdateDailyInspectionCapacity: (value: number) => void;
+  onAutoOptimize?: () => Promise<void>;
+  isOptimizing?: boolean;
+  activeAuditors?: number;
+  totalAssets?: number;
+  isSimulatorActive?: boolean;
 }
 
 export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
@@ -20,62 +23,154 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
   onUpdateMinAuditorsPerLocation,
   dailyInspectionCapacity,
   onUpdateDailyInspectionCapacity,
+  onAutoOptimize,
+  isOptimizing = false,
+  activeAuditors = 0,
+  totalAssets = 0,
+  isSimulatorActive = false,
 }) => {
+  // Hardcode policy to 2
+  const policyMinAuditors = 2;
+
+  // Projection math
+  const auditorTeams = Math.floor(activeAuditors / policyMinAuditors);
+  const totalDailyCapacity = auditorTeams * dailyInspectionCapacity;
+  const daysToFinish = totalDailyCapacity > 0 ? Math.ceil(totalAssets / totalDailyCapacity) : 0;
+  const monthCompletion = totalAssets > 0 ? Math.min(100, Math.round(((totalDailyCapacity * 20) / totalAssets) * 100)) : 0;
+
   return (
-    <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
-      <h3 className="text-xl font-bold text-slate-900 mb-2">Inspection Constraints</h3>
-      <p className="text-sm text-slate-500 mb-6">Configure institutional limits to determine inspecting officer recommendations.</p>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="space-y-4">
-          <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Max Assets Per Day</label>
-          <input 
-            type="number"
-            min="100"
-            step="100"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
-            value={maxAssetsPerDay}
-            onChange={(e) => onUpdateMaxAssetsPerDay(parseInt(e.target.value, 10) || 1000)}
-          />
-          <p className="text-[10px] text-slate-400 font-medium">Limits assets a team can inspect in 24 hours.</p>
+    <div className={`bg-white border-2 rounded-[32px] p-8 shadow-sm transition-all duration-500 ${isSimulatorActive ? 'border-amber-200 bg-amber-50/5' : 'border-slate-100'}`}>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 pb-6 border-b border-slate-50">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800">Operational Strategy & Safety Policies</h3>
+          <p className="text-sm text-slate-500 font-medium">Control the institutional pace and safety minimums for all automated pairings.</p>
+        </div>
+        {onAutoOptimize && (
+          <button
+            onClick={onAutoOptimize}
+            disabled={isOptimizing}
+            className="group flex items-center gap-3 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-200 disabled:opacity-50 active:scale-95"
+          >
+            {isOptimizing ? (
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-emerald-400 group-hover:rotate-12 transition-transform" />
+            )}
+            {isOptimizing ? 'Analyzing Capacity...' : 'AI Auto-Optimize Strategy'}
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Max Assets Per Day</label>
+            <div className="relative group">
+              <input 
+                type="number"
+                min="100"
+                step="100"
+                className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+                value={maxAssetsPerDay}
+                onChange={(e) => onUpdateMaxAssetsPerDay(parseInt(e.target.value, 10) || 1000)}
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">Limits total assets a cross-audit team can handle in a 24-hour shift.</p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Min Auditors Per Location</label>
+            <div className="relative">
+              <input 
+                type="number"
+                readOnly
+                className="w-full px-4 py-4 bg-slate-100/50 border-2 border-slate-200 rounded-2xl text-base font-black text-slate-400 cursor-not-allowed outline-none"
+                value={policyMinAuditors}
+              />
+              <div className="absolute top-1/2 -right-2 -translate-y-1/2 -rotate-12 translate-x-1/2">
+                 <div className="px-2 py-1 bg-red-600 text-white rounded-lg text-[8px] font-black uppercase tracking-wider shadow-lg">Fixed Policy</div>
+              </div>
+            </div>
+            <p className="text-[10px] text-red-400 font-bold leading-relaxed">Standard Institutional Safety: Minimum 2 officers required per inspection.</p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Daily Inspection Capacity</label>
+            <input
+              type="number"
+              min="10"
+              step="10"
+              className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+              value={dailyInspectionCapacity}
+              onChange={(e) => onUpdateDailyInspectionCapacity(Math.max(10, parseInt(e.target.value, 10) || 150))}
+            />
+            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">Optimization Benchmark: Estimated assets one team can verify per working day.</p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Max Locations Per Day</label>
+            <input 
+              type="number"
+              min="1"
+              className="w-full px-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
+              value={maxLocationsPerDay}
+              onChange={(e) => onUpdateMaxLocationsPerDay(parseInt(e.target.value, 10) || 5)}
+            />
+            <p className="text-[10px] text-slate-400 font-bold leading-relaxed">Travel Limit: Maximum number of distinct buildings permitted per shift.</p>
+          </div>
         </div>
 
-        <div className="space-y-4">
-          <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Max Locations Per Day</label>
-          <input 
-            type="number"
-            min="1"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
-            value={maxLocationsPerDay}
-            onChange={(e) => onUpdateMaxLocationsPerDay(parseInt(e.target.value, 10) || 5)}
-          />
-          <p className="text-[10px] text-slate-400 font-medium">Limits distinct locations a team can visit daily.</p>
-        </div>
+        {/* Projection Sidebar */}
+        <div className="bg-slate-900 rounded-3xl p-6 text-white relative overflow-hidden shadow-2xl">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[60px]"></div>
+          <div className="relative z-10 flex flex-col h-full">
+            <div className="text-[10px] font-black uppercase text-indigo-400 tracking-[0.2em] mb-6">Resource Health Signal</div>
+            
+            <div className="space-y-6 flex-grow">
+               <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4 transition-all hover:bg-white/10">
+                 <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center">
+                       <Users className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div>
+                       <span className="block text-2xl font-black">{activeAuditors}</span>
+                       <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Staff</span>
+                    </div>
+                 </div>
+                 <div className="text-right">
+                    <span className="block text-xl font-black text-emerald-400">{auditorTeams}</span>
+                    <span className="block text-[8px] font-bold text-slate-500 uppercase">Teams (Fix 2)</span>
+                 </div>
+               </div>
 
-        <div className="space-y-4">
-          <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Min Auditors Per Location</label>
-          <input
-            type="number"
-            min="1"
-            max="10"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
-            value={minAuditorsPerLocation}
-            onChange={(e) => onUpdateMinAuditorsPerLocation(Math.max(1, parseInt(e.target.value, 10) || 2))}
-          />
-          <p className="text-[10px] text-slate-400 font-medium">Minimum inspectors/auditors assigned per location (e.g. 2 for cross-verification).</p>
-        </div>
+               <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">1-Month Projection</span>
+                    <span className={`text-xs font-black px-2 py-0.5 rounded-md ${monthCompletion > 80 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                      {monthCompletion}% Completion
+                    </span>
+                  </div>
+                  <div className="h-4 bg-white/5 rounded-full overflow-hidden mb-3 p-1">
+                     <div 
+                       className="h-full bg-linear-to-r from-indigo-500 to-emerald-400 rounded-full transition-all duration-1000"
+                       style={{ width: `${monthCompletion}%` }}
+                     ></div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium leading-normal italic">
+                    Based on 20 working days, your current capacity allows for {totalDailyCapacity.toLocaleString()} assets per day. 
+                    {daysToFinish > 0 && ` Estimated total time: ${daysToFinish} days.`}
+                  </p>
+               </div>
+            </div>
 
-        <div className="space-y-4">
-          <label className="text-xs font-black uppercase text-slate-400 tracking-widest block">Daily Inspection Capacity</label>
-          <input
-            type="number"
-            min="10"
-            step="10"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold"
-            value={dailyInspectionCapacity}
-            onChange={(e) => onUpdateDailyInspectionCapacity(Math.max(10, parseInt(e.target.value, 10) || 150))}
-          />
-          <p className="text-[10px] text-slate-400 font-medium">Estimated assets one auditor team can check per day (used for capacity estimation in auto-calculate).</p>
+            <div className="mt-6 pt-6 border-t border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                 <ShieldCheck className="w-4 h-4 text-indigo-500" />
+                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Security: Hard Policy Enabled</span>
+              </div>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -170,6 +170,16 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   const currentMinAuditors = draftConstraints?.minAuditorsPerLocation ?? (strictAuditorRule ? 2 : minAuditorsPerLocation);
   const currentDailyCapacity = draftConstraints?.dailyInspectionCapacity ?? dailyInspectionCapacity;
 
+  // Actual Resource Calculations
+  const activeAuditorCount = React.useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return users.filter(u => u.status === 'Active' && (!u.certificationExpiry || u.certificationExpiry >= today)).length;
+  }, [users]);
+
+  const totalInstitutionalAssets = React.useMemo(() => {
+    return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+  }, [departments]);
+
   const handleUpdateDraftConstraints = (updates: Partial<typeof draftConstraints>) => {
     if (!isSimulatorActive) {
       if (updates.maxAssetsPerDay !== undefined) onUpdateMaxAssetsPerDay(updates.maxAssetsPerDay);
@@ -184,15 +194,35 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
     }
   };
 
-  const handleAISuggestThresholds = async () => {
+  const handleAIAutoOptimize = async () => {
     setIsSuggestingAI(true);
     try {
+      // 1. Get AI suggested base threshold for grouping
       const result = await suggestThresholds(departments);
-      if (result.assetThreshold) {
-        handleUpdateDraftConstraints({ maxAssetsPerDay: result.assetThreshold });
+      
+      // 2. Resource-based Capacity Math
+      const teamCount = Math.floor(activeAuditorCount / 2); // Policy 2 minimum
+      const WORK_DAYS_PER_MONTH = 20; 
+      
+      let optimizedCapacity = dailyInspectionCapacity;
+      if (teamCount > 0 && totalInstitutionalAssets > 0) {
+        // Ideal capacity per team to finish in 1 month (20 working days)
+        optimizedCapacity = Math.ceil(totalInstitutionalAssets / (teamCount * WORK_DAYS_PER_MONTH));
+        // Clamp to reasonable ranges (e.g., 50 to 1000)
+        optimizedCapacity = Math.max(50, Math.min(1000, optimizedCapacity));
       }
+
+      handleUpdateDraftConstraints({ 
+        maxAssetsPerDay: result.assetThreshold || 1000,
+        dailyInspectionCapacity: optimizedCapacity,
+        minAuditorsPerLocation: 2, // Hard policy enforced
+        maxLocationsPerDay: 5 // Default standard
+      });
+
+      if (showToast) showToast('AI Strategy Optimized based on actual headcount and assets.', 'success');
     } catch (err) {
-      console.error('AI Threshold suggestion failed:', err);
+      console.error('AI Auto-Optimize failed:', err);
+      if (showToast) showToast('AI optimization encountered an error.', 'error');
     } finally {
       setIsSuggestingAI(false);
     }
@@ -251,6 +281,11 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           onUpdateMinAuditorsPerLocation={(v) => handleUpdateDraftConstraints({ minAuditorsPerLocation: v })}
           dailyInspectionCapacity={currentDailyCapacity}
           onUpdateDailyInspectionCapacity={(v) => handleUpdateDraftConstraints({ dailyInspectionCapacity: v })}
+          onAutoOptimize={handleAIAutoOptimize}
+          isOptimizing={isSuggestingAI}
+          activeAuditors={activeAuditorCount}
+          totalAssets={totalInstitutionalAssets}
+          isSimulatorActive={isSimulatorActive}
         />
       </div>
 
@@ -360,7 +395,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         minAuditorsPerLocation={currentMinAuditors}
         isSystemLocked={isSystemLocked}
         pairingLocked={pairingLocked}
-        onSuggestThresholds={handleAISuggestThresholds}
+        onSuggestThresholds={handleAIAutoOptimize}
         isSuggestingAI={isSuggestingAI}
       />
 
