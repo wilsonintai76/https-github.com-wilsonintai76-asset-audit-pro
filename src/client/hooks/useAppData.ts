@@ -129,8 +129,15 @@ export const useAppData = () => {
   const departmentNames = useMemo(() => ['All', ...departments.map(d => d.name)], [departments]);
   
   const departmentsWithAssets = useMemo(() => {
+    // Aggregate metrics per department
     const deptTotals: Record<string, number> = {};
-    locations.forEach(l => { if (l.departmentId) deptTotals[l.departmentId] = (deptTotals[l.departmentId] || 0) + (l.totalAssets || 0); });
+    const deptLocations: Record<string, number> = {};
+    locations.forEach(l => { 
+      if (l.departmentId) {
+        deptTotals[l.departmentId] = (deptTotals[l.departmentId] || 0) + (l.totalAssets || 0);
+        deptLocations[l.departmentId] = (deptLocations[l.departmentId] || 0) + 1;
+      }
+    });
 
     // Unified Auditor Definition: Status Active AND Valid Expiry exists
     const deptAuditors: Record<string, number> = {};
@@ -145,10 +152,12 @@ export const useAppData = () => {
     return departments.map(d => {
       const totalAssets = deptTotals[d.id] || 0;
       const auditorCount = deptAuditors[d.id] || 0;
+      const locationCount = deptLocations[d.id] || 0;
       return { 
         ...d, 
         totalAssets,
         auditorCount,
+        locationCount,
         // Natural Exemption: 0 assets AND 0 certified auditors
         isSystemExempted: totalAssets === 0 && auditorCount === 0
       };
