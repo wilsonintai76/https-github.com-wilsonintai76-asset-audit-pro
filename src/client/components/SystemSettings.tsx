@@ -150,6 +150,38 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   const isAdmin = (userRoles || []).includes('Admin');
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [strictAuditorRule, setStrictAuditorRule] = React.useState(true);
+
+  // GLOBAL SIMULATOR STATE (Lumped)
+  const [isSimulatorActive, setIsSimulatorActive] = React.useState<boolean>(() => {
+    return localStorage.getItem('cross_audit_simulator_active') === 'true';
+  });
+  const [draftConstraints, setDraftConstraints] = React.useState<{
+    maxAssetsPerDay: number;
+    maxLocationsPerDay: number;
+    minAuditorsPerLocation: number;
+    dailyInspectionCapacity: number;
+  } | null>(null);
+
+  const currentMaxAssets = draftConstraints?.maxAssetsPerDay ?? maxAssetsPerDay;
+  const currentMaxLocations = draftConstraints?.maxLocationsPerDay ?? maxLocationsPerDay;
+  const currentMinAuditors = draftConstraints?.minAuditorsPerLocation ?? (strictAuditorRule ? 2 : minAuditorsPerLocation);
+  const currentDailyCapacity = draftConstraints?.dailyInspectionCapacity ?? dailyInspectionCapacity;
+
+  const handleUpdateDraftConstraints = (updates: Partial<typeof draftConstraints>) => {
+    if (!isSimulatorActive) {
+      // If not in simulator, update global state immediately via props
+      if (updates.maxAssetsPerDay !== undefined) onUpdateMaxAssetsPerDay(updates.maxAssetsPerDay);
+      if (updates.maxLocationsPerDay !== undefined) onUpdateMaxLocationsPerDay(updates.maxLocationsPerDay);
+      if (updates.minAuditorsPerLocation !== undefined) onUpdateMinAuditorsPerLocation(updates.minAuditorsPerLocation);
+      if (updates.dailyInspectionCapacity !== undefined) onUpdateDailyInspectionCapacity(updates.dailyInspectionCapacity);
+    } else {
+      // In simulator mode, shadow with draft
+      setDraftConstraints(prev => {
+        const base = prev || { maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, dailyInspectionCapacity };
+        return { ...base, ...updates } as any;
+      });
+    }
+  };
   const activePhase = React.useMemo(() => {
     const today = new Date();
     return phases.find(p => {
@@ -185,6 +217,27 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           onUpdateUninspectedAssets={onUpdateUninspectedAssets}
         />
       )}
+
+      {/* GLOBAL INSTITUTIONAL CONSTRAINTS */}
+      <div className="animate-in fade-in slide-in-from-top-4 duration-700">
+        <div className="flex items-center gap-3 mb-4 px-2">
+           <ShieldCheck className={`w-5 h-5 ${isSimulatorActive ? 'text-amber-500' : 'text-indigo-500'}`} />
+           <h3 className="text-xl font-black text-slate-800 tracking-tight">Global Institutional Strategy</h3>
+           {isSimulatorActive && (
+             <span className="px-3 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black uppercase tracking-widest animate-pulse">Draft Mode</span>
+           )}
+        </div>
+        <AuditConstraints
+          maxAssetsPerDay={currentMaxAssets}
+          onUpdateMaxAssetsPerDay={(v) => handleUpdateDraftConstraints({ maxAssetsPerDay: v })}
+          maxLocationsPerDay={currentMaxLocations}
+          onUpdateMaxLocationsPerDay={(v) => handleUpdateDraftConstraints({ maxLocationsPerDay: v })}
+          minAuditorsPerLocation={currentMinAuditors}
+          onUpdateMinAuditorsPerLocation={(v) => handleUpdateDraftConstraints({ minAuditorsPerLocation: v })}
+          dailyInspectionCapacity={currentDailyCapacity}
+          onUpdateDailyInspectionCapacity={(v) => handleUpdateDraftConstraints({ dailyInspectionCapacity: v })}
+        />
+      </div>
 
       <div className="relative">
         <AuditPhasesSettings
@@ -287,8 +340,9 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         setIsProcessing={setIsProcessing}
         strictAuditorRule={strictAuditorRule}
         setStrictAuditorRule={setStrictAuditorRule}
-        maxAssetsPerDay={maxAssetsPerDay}
-        maxLocationsPerDay={maxLocationsPerDay}
+        maxAssetsPerDay={currentMaxAssets}
+        maxLocationsPerDay={currentMaxLocations}
+        minAuditorsPerLocation={currentMinAuditors}
         isSystemLocked={isSystemLocked}
         pairingLocked={pairingLocked}
       />
@@ -318,10 +372,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUnlockPairing={onUnlockPairing}
         phases={phases}
         institutionKPIs={institutionKPIs}
-        maxAssetsPerDay={maxAssetsPerDay}
-        maxLocationsPerDay={maxLocationsPerDay}
-        minAuditorsPerLocation={minAuditorsPerLocation}
-        dailyInspectionCapacity={dailyInspectionCapacity}
+        maxAssetsPerDay={currentMaxAssets}
+        maxLocationsPerDay={currentMaxLocations}
+        minAuditorsPerLocation={currentMinAuditors}
+        dailyInspectionCapacity={currentDailyCapacity}
+        isSimulatorActive={isSimulatorActive}
+        setIsSimulatorActive={setIsSimulatorActive}
+        draftConstraints={draftConstraints}
+        setDraftConstraints={setDraftConstraints}
         onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay}
         onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay}
         onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation}

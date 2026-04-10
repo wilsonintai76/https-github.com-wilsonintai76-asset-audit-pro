@@ -5,18 +5,6 @@ import { PrintButton } from './PrintButton';
 import { printUnitConsolidation } from '../lib/printUtils';
 import { suggestThresholds } from '../services/aiService';
 
-const THRESHOLD_STORAGE_KEY = 'group_builder_threshold';
-const STANDALONE_CUTOFF_KEY = 'group_builder_standalone_cutoff';
-
-function loadThreshold(): number {
-  return parseInt(localStorage.getItem(THRESHOLD_STORAGE_KEY) || '1000', 10);
-}
-function saveThreshold(t: number) {
-  localStorage.setItem(THRESHOLD_STORAGE_KEY, String(t));
-}
-function loadStandaloneCutoff(): number {
-  return parseInt(localStorage.getItem(STANDALONE_CUTOFF_KEY) || '300', 10);
-}
 function saveStandaloneCutoff(t: number) {
   localStorage.setItem(STANDALONE_CUTOFF_KEY, String(t));
 }
@@ -35,6 +23,7 @@ interface GroupBuilderTabProps {
   setStrictAuditorRule: (val: boolean) => void;
   maxAssetsPerDay?: number;
   maxLocationsPerDay?: number;
+  minAuditorsPerLocation?: number;
   isSystemLocked?: boolean;
   pairingLocked?: boolean;
 }
@@ -50,14 +39,11 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   setIsProcessing,
   strictAuditorRule,
   setStrictAuditorRule,
-  maxAssetsPerDay = 1000,
-  maxLocationsPerDay = 5,
+  minAuditorsPerLocation = 2,
   isSystemLocked = false,
   pairingLocked = false,
 }) => {
   const [builderTab, setBuilderTab] = useState<1 | 2>(() => auditGroups.length > 0 ? 2 : 1);
-  const [threshold, setThreshold] = useState<number>(() => loadThreshold());
-  const [standaloneCutoff, setStandaloneCutoff] = useState<number>(() => loadStandaloneCutoff());
   const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('group_builder_use_ai') === 'true');
   const [isSuggestingAI, setIsSuggestingAI] = useState(false);
 
@@ -80,22 +66,12 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     return { initLocked: false, initLockReason: '' };
   }, [pairingLocked, isSystemLocked]);
 
-  const handleThresholdChange = (val: number) => {
-    setThreshold(val);
-    saveThreshold(val);
-  };
-
-  const handleStandaloneCutoffChange = (val: number) => {
-    setStandaloneCutoff(val);
-    saveStandaloneCutoff(val);
-  };
-
   const handleAISuggestThresholds = async () => {
     setIsSuggestingAI(true);
     try {
       const result = await suggestThresholds(departments);
-      handleThresholdChange(result.assetThreshold);
-      handleStandaloneCutoffChange(result.megaTargetThreshold);
+      // We don't update local state anymore, just suggest to user or let them adjust global
+      // Note: Ideally AI suggestions should update the global constraints if requested.
     } catch (err) {
       console.error('AI Threshold suggestion failed:', err);
     } finally {
@@ -107,11 +83,13 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     if (!onAutoConsolidate) return;
     setIsProcessing(true);
     try {
+      // Use maxAssetsPerDay as both the threshold and the cutoff for what constitutes a "large" standalone unit
+      const threshold = maxAssetsPerDay;
       const standaloneExemptIds = departments
-        .filter(d => (d.totalAssets || 0) >= standaloneCutoff)
+        .filter(d => (d.totalAssets || 0) >= threshold)
         .map(d => d.id);
 
-      const minAuditors = strictAuditorRule ? 2 : 1;
+      const minAuditors = minAuditorsPerLocation;
       await onAutoConsolidate(threshold, standaloneExemptIds, minAuditors, useAI);
       setBuilderTab(2);
     } finally {
@@ -163,7 +141,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
       const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       const name = isUnassigned ? depts[0].name : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
-      const isStandaloneExempt = isUnassigned && totalAssets >= standaloneCutoff;
+      const isStandaloneExempt = isUnassigned && totalAssets >= maxAssetsPerDay;
 
       return {
         name,
@@ -294,33 +272,29 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 px-2">
                   <div className="space-y-4">
                      <div className="flex items-center justify-between">
-                       <label className="text-[10px] font-black text-slate-400 block uppercase tracking-widest">Asset Threshold</label>
+                       <label className="text-[10px] font-black text-slate-400 block uppercase tracking-widest">Target Threshold</label>
                        <label className="flex items-center gap-2 cursor-pointer">
                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Strict Rule</span>
                          <input type="checkbox" className="sr-only peer" checked={strictAuditorRule} onChange={() => setStrictAuditorRule(!strictAuditorRule)} />
                          <div className="w-8 h-4 bg-slate-100 rounded-full peer peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-0.5 after:inset-s-0.5 after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-full relative"></div>
                        </label>
                      </div>
-                     <div className="flex items-center gap-4 bg-slate-50 p-6 border border-slate-100 rounded-[28px]">
+                     <div className="flex items-center gap-4 bg-slate-50 p-6 border border-slate-100 rounded-[28px] opacity-60">
                        <Boxes className="w-7 h-7 text-indigo-400" />
-                       <input 
-                         type="number"
-                         className="w-full text-3xl font-black text-slate-800 outline-none bg-transparent tabular-nums"
-                         value={threshold}
-                         onChange={e => handleThresholdChange(parseInt(e.target.value) || 1000)}
-                       />
+                       <div className="flex flex-col">
+                         <span className="text-3xl font-black text-slate-800 tabular-nums italic">{maxAssetsPerDay.toLocaleString()}</span>
+                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Inherited from Global Strategy</span>
+                       </div>
                      </div>
                   </div>
                   <div className="space-y-4">
-                     <label className="text-[10px] font-black text-amber-500 block uppercase tracking-widest">Large Dept Exemption Cutoff</label>
-                     <div className="flex items-center gap-4 bg-amber-50/30 p-6 border border-amber-100 rounded-[28px]">
-                       <Sparkles className="w-7 h-7 text-amber-500" />
-                       <input 
-                         type="number"
-                         className="w-full text-3xl font-black text-slate-800 outline-none bg-transparent tabular-nums"
-                         value={standaloneCutoff}
-                         onChange={e => handleStandaloneCutoffChange(parseInt(e.target.value) || 0)}
-                       />
+                     <label className="text-[10px] font-black text-amber-500 block uppercase tracking-widest">Min Auditor Safety</label>
+                     <div className="flex items-center gap-4 bg-amber-50/30 p-6 border border-amber-100 rounded-[28px] opacity-60">
+                       <Users className="w-7 h-7 text-amber-500" />
+                       <div className="flex flex-col">
+                         <span className="text-3xl font-black text-slate-800 tabular-nums italic">{minAuditorsPerLocation}</span>
+                         <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Institutional Minimum</span>
+                       </div>
                      </div>
                   </div>
                </div>

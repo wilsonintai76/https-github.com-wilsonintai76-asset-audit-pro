@@ -53,6 +53,10 @@ interface CrossAuditManagementProps {
     bottlenecks: string[];
     recommendations: string[];
   } | null;
+  isSimulatorActive: boolean;
+  setIsSimulatorActive: (v: boolean) => void;
+  draftConstraints: any;
+  setDraftConstraints: (v: any) => void;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -75,12 +79,13 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onUpdateMaxLocationsPerDay,
   onUpdateMinAuditorsPerLocation,
   onUpdateDailyInspectionCapacity,
-  pairingLocked = false,
-  pairingLockInfo = null,
-  onLockPairing,
   onUnlockPairing,
   onRunStrategicPairing,
-  feasibilityReport
+  feasibilityReport,
+  isSimulatorActive,
+  setIsSimulatorActive,
+  draftConstraints,
+  setDraftConstraints
 }) => {
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -92,14 +97,18 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const SIMULATOR_ACTIVE_KEY = 'cross_audit_simulator_active';
   const SIMULATOR_PAIRINGS_KEY = 'cross_audit_simulator_pairings';
 
+  const [pairingStrategy, setPairingStrategy] = useState<'mutual' | 'asymmetric'>(() => {
+    return (localStorage.getItem('cross_audit_grouping_strategy') as any) || 'asymmetric';
+  });
+  const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('cross_audit_use_ai') === 'true');
+
+  const kpiBarRef = useRef<HTMLDivElement>(null);
+
   const [simulatedPairings, setSimulatedPairings] = useState<Omit<CrossAuditPermission, 'id'>[]>(() => {
     try {
       const stored = localStorage.getItem(SIMULATOR_PAIRINGS_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
-  });
-  const [isSimulatorActive, setIsSimulatorActive] = useState<boolean>(() => {
-    return localStorage.getItem(SIMULATOR_ACTIVE_KEY) === 'true';
   });
   const [simulateIdealStaffing, setSimulateIdealStaffing] = useState<boolean>(() => {
     return localStorage.getItem('cross_audit_simulate_staff') === 'true';
@@ -112,12 +121,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const [autoPairingMutual, setAutoPairingMutual] = useState<boolean>(() => {
     return localStorage.getItem('cross_audit_mutual') === 'true';
   });
-  const [pairingStrategy, setPairingStrategy] = useState<'mutual' | 'asymmetric'>(() => {
-    return (localStorage.getItem('cross_audit_grouping_strategy') as any) || 'asymmetric';
-  });
-  const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('cross_audit_use_ai') === 'true');
 
-  const kpiBarRef = useRef<HTMLDivElement>(null);
+  // Effective constraint constants (checks if we are in draft mode)
+  const currentMaxAssets = draftConstraints?.maxAssetsPerDay ?? maxAssetsPerDay;
+  const currentMaxLocations = draftConstraints?.maxLocationsPerDay ?? maxLocationsPerDay;
+  const currentMinAuditors = draftConstraints?.minAuditorsPerLocation ?? (strictAuditorRule ? 2 : minAuditorsPerLocation);
+  const currentDailyCapacity = draftConstraints?.dailyInspectionCapacity ?? dailyInspectionCapacity;
 
   const overallTotalAssets = useMemo(() => {
     return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
@@ -166,6 +175,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       setSimulatedPairings([]);
       localStorage.removeItem(SIMULATOR_ACTIVE_KEY);
       localStorage.removeItem(SIMULATOR_PAIRINGS_KEY);
+      setDraftConstraints(null);
 
       const updates = departments.filter(d => d.auditGroupId).map(d => ({ id: d.id, data: { auditGroupId: null } }));
       if (updates.length > 0) await onBulkUpdateDepartments(updates);
@@ -190,7 +200,18 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const handleRunSimulator = () => {
     setIsProcessing(true);
-    const minAuditorsRequired = strictAuditorRule ? 2 : 1;
+    
+    // Use effective constraints (draft if active, else global)
+    if (!draftConstraints) {
+      setDraftConstraints({
+        maxAssetsPerDay,
+        maxLocationsPerDay,
+        minAuditorsPerLocation: minAuditorsPerLocationProp,
+        dailyInspectionCapacity: dailyInspectionCapacityProp
+      });
+    }
+
+    const minAuditorsRequired = currentMinAuditors;
     const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
     if (targets.length === 0) {
       showToast?.('No entities with assets found.', 'error');
@@ -235,25 +256,58 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       }
     } else {
       const auditorPool = entities.filter(e => simulateIdealStaffing || e.auditors >= minAuditorsRequired);
+      const capacityMap = new Map<string, number>();
+      
+      // Track available "slots" per unit based on their own size and currentDailyCapacity
+      auditorPool.forEach(a => {
+        const slots = simulateIdealStaffing ? 99 : Math.max(1, Math.floor(a.auditors / minAuditorsRequired));
+        capacityMap.set(a.id!, slots);
+      });
+
       let poolIdx = 0;
       for (const target of targets) {
+        if (usedTargetIds.has(target.id!)) continue;
+
+        // Calculate how many units we need for this target based on its asset volume
+        const unitsNeeded = Math.ceil(target.assets / currentMaxAssets);
+        const assignedAuditors: any[] = [];
+        
         let attempts = 0;
-        let picked: typeof auditorPool[0] | null = null;
-        while (attempts < auditorPool.length) {
-          const candidate = auditorPool[poolIdx % auditorPool.length];
+        const totalPotentialAuditors = auditorPool.length;
+
+        while (assignedAuditors.length < unitsNeeded && attempts < totalPotentialAuditors) {
+          const candidate = auditorPool[poolIdx % totalPotentialAuditors];
           poolIdx++;
           attempts++;
-          if (candidate.id !== target.id) { picked = candidate; break; }
-        }
-        if (!picked) continue;
 
-        newStrategicPlan.push({
-          target: target as any,
-          auditors: [{ ...picked, auditors: simulateIdealStaffing ? Math.max(picked.auditors, 2) : picked.auditors } as any],
-          totalAuditorsInGroup: simulateIdealStaffing ? Math.max(picked.auditors, 2) : picked.auditors,
-          auditorSideAssets: picked.assets
-        });
-        newPairings.push({ auditorDeptId: picked.id!, targetDeptId: target.id!, isActive: true, isMutual: autoPairingMutual } as any);
+          if (candidate.id !== target.id && (capacityMap.get(candidate.id!) || 0) > 0) {
+            assignedAuditors.push({
+              ...candidate,
+              auditors: simulateIdealStaffing ? Math.max(candidate.auditors, currentMinAuditors) : candidate.auditors
+            });
+            capacityMap.set(candidate.id!, (capacityMap.get(candidate.id!) || 0) - 1);
+          }
+        }
+
+        if (assignedAuditors.length > 0) {
+          newStrategicPlan.push({
+            target: target as any,
+            auditors: assignedAuditors,
+            totalAuditorsInGroup: assignedAuditors.reduce((sum, a) => sum + a.auditors, 0),
+            auditorSideAssets: assignedAuditors.reduce((sum, a) => sum + a.assets, 0)
+          });
+
+          assignedAuditors.forEach(aud => {
+            newPairings.push({ 
+              auditorDeptId: aud.id!, 
+              targetDeptId: target.id!, 
+              isActive: true, 
+              isMutual: autoPairingMutual 
+            } as any);
+          });
+          
+          usedTargetIds.add(target.id!);
+        }
       }
     }
 
@@ -280,12 +334,22 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       }
       if (onBulkRemovePermissions && permissions.length > 0) await onBulkRemovePermissions(permissions.map(p => p.id));
       await onBulkAddPermissions(expandedPairings);
+
+      // PERSIST CONSTRAINTS (Locking them in)
+      if (draftConstraints) {
+        onUpdateMaxAssetsPerDay?.(draftConstraints.maxAssetsPerDay);
+        onUpdateMaxLocationsPerDay?.(draftConstraints.maxLocationsPerDay);
+        onUpdateMinAuditorsPerLocation?.(draftConstraints.minAuditorsPerLocation);
+        onUpdateDailyInspectionCapacity?.(draftConstraints.dailyInspectionCapacity);
+      }
+
       setIsSimulatorActive(false);
       setSimulatedPairings([]);
+      setDraftConstraints(null);
       localStorage.removeItem(SIMULATOR_ACTIVE_KEY);
       localStorage.removeItem(SIMULATOR_PAIRINGS_KEY);
       await onLockPairing?.(expandedPairings.length);
-      showToast?.('Assignments committed and locked.');
+      showToast?.('Assignments and constraints committed and locked.');
     } catch (e) {
       console.error(e);
     } finally {
@@ -341,29 +405,12 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         </div>
         <div className="flex items-center gap-3">
           <PrintButton onClick={() => printCrossAuditAssignments(entityPermissions, entities)} label="Print Plan" />
-          <button onClick={() => setShowConstraints(!showConstraints)} className="px-4 py-2.5 rounded-2xl border border-slate-200 text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4" /> Limits
-          </button>
           <button onClick={() => setActiveModal('reset')} className="px-4 py-2.5 rounded-2xl border border-red-100 bg-red-50 text-red-500 text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-2">
             <RotateCcw className="w-4 h-4" /> Reset Cycle
           </button>
         </div>
       </div>
 
-      {showConstraints && (
-        <div className="mb-12 animate-in fade-in slide-in-from-top-4">
-          <AuditConstraints
-            maxAssetsPerDay={maxAssetsPerDay}
-            onUpdateMaxAssetsPerDay={onUpdateMaxAssetsPerDay || (() => {})}
-            maxLocationsPerDay={maxLocationsPerDay}
-            onUpdateMaxLocationsPerDay={onUpdateMaxLocationsPerDay || (() => {})}
-            minAuditorsPerLocation={minAuditorsPerLocationProp}
-            onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation || (() => {})}
-            dailyInspectionCapacity={dailyInspectionCapacityProp}
-            onUpdateDailyInspectionCapacity={onUpdateDailyInspectionCapacity || (() => {})}
-          />
-        </div>
-      )}
 
       <div className="flex flex-col lg:flex-row gap-12">
         {/* Left: Settings */}
