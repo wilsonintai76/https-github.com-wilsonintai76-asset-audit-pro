@@ -413,13 +413,19 @@ compute.post(
     
     // PARITY ENFORCEMENT: (Standalone + Bins) must be EVEN
     if ((standaloneDepts.length + targetBins) % 2 !== 0) {
-      // If odd, try to add a bin to split the load, or remove one if load is light
-      if (totalPoolBurden / targetBins < 700) targetBins = Math.max(1, targetBins - 1);
-      else targetBins += 1;
-      
-      // Final fallback to ensure even parity
-      if ((standaloneDepts.length + targetBins) % 2 !== 0) {
-        targetBins = Math.max(1, targetBins + 1);
+      // PREFER COMBINATION: If total is odd, try to reduce bins to combine units
+      if (targetBins > 1) {
+        targetBins--;
+      } else if (targetBins === 1 && standaloneDepts.length > 0) {
+        // If only 1 bin and it makes total odd, pull the smallest standalone into the pool
+        // so that (S-1) + 1 group = Even total.
+        const smallestIdx = standaloneDepts.reduce((min, d, i, a) => 
+          (d.total_assets || 0) < (a[min].total_assets || 0) ? i : min, 0);
+        const pulledDept = standaloneDepts.splice(smallestIdx, 1)[0];
+        pool.push(pulledDept);
+        targetBins = 1; // Still 1 bin, but now includes the standalone
+      } else {
+        targetBins++; // Last resort
       }
     }
 
