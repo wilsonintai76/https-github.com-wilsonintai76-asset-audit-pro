@@ -1,3 +1,6 @@
+import React from 'react';
+import { Loader2, Sparkles, Users, ShieldCheck } from 'lucide-react';
+
 interface AuditConstraintsProps {
   maxAssetsPerDay: number;
   onUpdateMaxAssetsPerDay: (value: number) => void;
