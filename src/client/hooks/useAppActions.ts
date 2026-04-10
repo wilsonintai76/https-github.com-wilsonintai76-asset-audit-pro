@@ -88,8 +88,7 @@ export const useAppActions = (props: AppActionsProps) => {
     setAuditGroups, setBuildings, setActivities, setNotifications, setToasts,
     setPairingLocked, setPairingLockInfo, setIsSidebarOpen, setConfirmState, setFeasibilityReport, setCrossAuditPermissions,
     certRenewalModalUser, setCertRenewalModalUser, setShowForcePasswordModal, setShowProfileCompleteModal,
-    loadAllData, departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets, 
-    setCrossAuditPermissions, rbacMatrix, activeView
+    loadAllData, setConnectionErrorMessage, rbacMatrix
   } = props;
 
   const showToast = useCallback((message: string, type: ToastType = 'success', duration?: number) => {
