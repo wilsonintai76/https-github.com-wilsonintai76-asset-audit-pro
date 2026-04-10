@@ -90,7 +90,7 @@ const App: React.FC = () => {
     handleAddDepartmentMapping, handleDeleteDepartmentMapping,
     handleSyncLocationMappings, handleUpsertLocations,
     handleSetDeptTotalsFromMapping, handleUpdateUninspectedAssetCounts,
-    handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing,
+    handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleResetPairingData,
     showToast, closeToast, showError, customConfirm, customAlert
   } = appActions;
 

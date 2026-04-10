@@ -240,6 +240,10 @@ class DataGateway {
     await this.rpc<unknown>(h => (api as any).db.permissions.bulk.$delete({ json: { ids } }, { headers: h }));
   }
 
+  async clearAllPermissions(): Promise<{ success: boolean }> {
+    return this.rpc<{ success: boolean }>(h => (api as any).db.permissions.clear.$post({}, { headers: h }));
+  }
+
   async updatePermission(id: string, updates: Partial<CrossAuditPermission>) {
     await this.rpc<unknown>(h => (api as any).db.permissions[':id'].$patch({ param: { id }, json: updates as any }, { headers: h }));
   }

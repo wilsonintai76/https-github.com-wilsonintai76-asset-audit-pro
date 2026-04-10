@@ -1022,7 +1022,7 @@ db.delete('/permissions/bulk', async (c) => {
   }
 });
 
-db.post('/permissions/clear', rbacGuard('manage:system'), async (c) => {
+db.post('/permissions/clear', rbacGuard('system:settings'), async (c) => {
   try {
     await c.env.DB.prepare('DELETE FROM cross_audit_permissions').run();
     return c.json({ success: true, message: 'All cross-audit assignments cleared' });

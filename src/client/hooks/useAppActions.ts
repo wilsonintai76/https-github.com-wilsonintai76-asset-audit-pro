@@ -52,6 +52,8 @@ interface AppActionsProps {
   setPairingLockInfo: React.Dispatch<React.SetStateAction<any>>;
   setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setConfirmState: React.Dispatch<React.SetStateAction<any>>;
+  setFeasibilityReport: React.Dispatch<React.SetStateAction<any>>;
+  setCrossAuditPermissions: React.Dispatch<React.SetStateAction<CrossAuditPermission[]>>;
   certRenewalModalUser: User | null;
   setCertRenewalModalUser: React.Dispatch<React.SetStateAction<User | null>>;
   setShowForcePasswordModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -84,7 +86,7 @@ export const useAppActions = (props: AppActionsProps) => {
     locations, setLocations, setAuditPhases, setKpiTiers, 
     setKpiTierTargets, setInstitutionKPIs, setDepartmentMappings, 
     setAuditGroups, setBuildings, setActivities, setNotifications, setToasts,
-    setPairingLocked, setPairingLockInfo, setIsSidebarOpen, setConfirmState, 
+    setPairingLocked, setPairingLockInfo, setIsSidebarOpen, setConfirmState, setFeasibilityReport, setCrossAuditPermissions,
     certRenewalModalUser, setCertRenewalModalUser, setShowForcePasswordModal, setShowProfileCompleteModal,
     loadAllData, departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets, 
     setCrossAuditPermissions, rbacMatrix, activeView
@@ -432,7 +434,8 @@ export const useAppActions = (props: AppActionsProps) => {
     customConfirm("Reset Pairings", "This will permanently delete ALL active cross-audit assignments. Proceed?", async () => {
       try { 
         await gateway.clearAllPermissions(); 
-        setStrategicPlan([]);
+        setFeasibilityReport(null);
+        setCrossAuditPermissions([]);
         showToast('Pairings cleared from database.', 'success');
         loadAllData();
       } catch (e) { showError(e); }
