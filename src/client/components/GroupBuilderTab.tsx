@@ -44,6 +44,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 }) => {
   const [builderTab, setBuilderTab] = useState<1 | 2>(() => auditGroups.length > 0 ? 2 : 1);
   const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('group_builder_use_ai') === 'true');
+  const [recommendations, setRecommendations] = useState<{ deptId: string; reason: string; action: string }[]>([]);
 
   // Auto-switch to Unit Inventory whenever groups become non-empty
   useEffect(() => {
@@ -68,13 +69,14 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   const handleRunAutoConsolidate = async () => {
     if (!onAutoConsolidate) return;
     setIsProcessing(true);
+    setRecommendations([]);
     try {
-      // The server handles the logic of large standalone units based on the threshold.
       const threshold = standaloneThresholdAssets;
       const minAuditors = minAuditorsPerLocation;
-      
-      // Pass empty array for excludedIds to let server logic prevail by default
-      await onAutoConsolidate(threshold, [], minAuditors, useAI);
+      const res = await onAutoConsolidate(threshold, [], minAuditors, useAI);
+      if (res?.recommendations) {
+        setRecommendations(res.recommendations);
+      }
       setBuilderTab(2);
     } finally {
       setIsProcessing(false);
@@ -300,8 +302,35 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                   className={`mx-2 w-[calc(100%-1rem)] py-5 rounded-[24px] text-xs font-black uppercase tracking-widest flex items-center justify-center gap-4 transition-all ${initLocked ? 'bg-slate-200 text-slate-400' : 'bg-slate-900 text-white'}`}
                 >
                   {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5 text-indigo-400" />}
-                  {initLocked ? 'Locked — Audit In Progress' : 'Initialize Consolidation'}
+                  {initLocked ? 'Locked — Audit In Progress' : 'Initialize BBI Consolidation'}
                 </button>
+
+                {recommendations.length > 0 && (
+                  <div className="mt-8 mx-2 animate-in fade-in duration-500">
+                    <div className="flex items-center gap-3 mb-4">
+                       <Zap className="w-4 h-4 text-amber-500" />
+                       <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Structural Recommendations</h5>
+                    </div>
+                    <div className="space-y-2">
+                       {recommendations.map((rec, idx) => {
+                         const dept = departments.find(d => d.id === rec.deptId);
+                         return (
+                           <div key={idx} className="flex items-center justify-between gap-4 p-4 bg-amber-50/50 border border-amber-100 rounded-2xl">
+                             <div className="flex flex-col gap-0.5">
+                               <span className="text-[10px] font-black text-amber-900 uppercase tracking-tighter">{dept?.abbr || rec.deptId}</span>
+                               <span className="text-[9px] text-amber-700 font-medium leading-tight">{rec.reason}</span>
+                             </div>
+                             <div className="shrink-0 flex items-center gap-2">
+                               <div className="px-2 py-0.5 bg-amber-500 text-white rounded-lg text-[8px] font-black uppercase italic shadow-sm">
+                                 {rec.action === 'exempt' ? 'Exemption Candidate' : 'Merge Priority'}
+                               </div>
+                             </div>
+                           </div>
+                         );
+                       })}
+                    </div>
+                  </div>
+                )}
              </div>
            )}
 

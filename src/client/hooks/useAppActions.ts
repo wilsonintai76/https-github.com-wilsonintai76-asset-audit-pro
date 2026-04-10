@@ -574,10 +574,11 @@ export const useAppActions = (props: AppActionsProps) => {
 
   const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => {
     try { 
-      await gateway.autoConsolidateAuditGroups(threshold, excludedIds, minAuditors, useAI); 
+      const res = await gateway.autoConsolidateAuditGroups(threshold, excludedIds, minAuditors, useAI); 
       setAuditGroups(await gateway.getAuditGroups()); 
       setDepartments(await gateway.getDepartments());
       showToast(useAI ? 'Thematic consolidation complete' : 'Mathematical consolidation complete'); 
+      return res;
     } catch (e) { showError(e); }
   };
 

@@ -404,16 +404,37 @@ compute.post(
 
     // 4. Calculate Balanced Burden Index (BBI) & Target Bins
     // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
-    // This treats staff as a primary component of a unit's institutional "footprint."
+    // Target Magnitude for a full-day audit: 1,500 BBI
     const getBBI = (d: any) => 
       (d.total_assets || 0) * 0.5 + 
       (locationCountByDept[d.id] || 0) * 100 + 
       (auditorCountByDept[d.id] || 0) * 300;
 
-    const totalPoolBBI = pool.reduce((sum, d) => sum + getBBI(d), 0);
+    const recommendations: { deptId: string; reason: string; action: 'exempt' | 'merge' }[] = [];
     
-    // Target ~1200 BBI units per group (approx 1000 assets + baseline staff)
-    let targetBins = Math.max(1, Math.ceil(totalPoolBBI / 1200));
+    // Identify Auto-Exemption Recommendations
+    const filteredPool: any[] = [];
+    for (const d of pool) {
+      const bbi = getBBI(d);
+      if (bbi < 300) {
+        recommendations.push({ deptId: d.id, reason: `Ultra-low workload (BBI: ${Math.round(bbi)}). Logistically inefficient for cross-audit.`, action: 'exempt' });
+        filteredPool.push(d); // Still in pool until user accepts, but flagged
+      } else if (bbi > 10000) {
+        recommendations.push({ deptId: d.id, reason: `Mega-unit workload (BBI: ${Math.round(bbi)}). Overwhelms standard pairs.`, action: 'exempt' });
+        filteredPool.push(d);
+      } else {
+        filteredPool.push(d);
+      }
+    }
+
+    const totalPoolBBI = filteredPool.reduce((sum, d) => sum + getBBI(d), 0);
+    
+    // Target Bins based on total staff capacity (Min 2 per group)
+    const totalAuditors = filteredPool.reduce((sum, d) => sum + (auditorCountByDept[d.id] || 0), 0);
+    let targetBins = Math.max(1, Math.floor(totalAuditors / minAuditors));
+    // Also respect BBI density: dont make groups too huge
+    const bbiTargetBins = Math.ceil(totalPoolBBI / 1500);
+    targetBins = Math.min(targetBins, bbiTargetBins);
     
     // PARITY ENFORCEMENT: (Standalone + Bins) must be EVEN
     // We aim for even total entities to ensure every unit has a cross-audit partner
@@ -456,39 +477,58 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
       } catch (err) { console.error('AI Categorization failed:', err); }
     }
 
-    // 5. Balanced Bin Distribution (Ratio-Aware Greedy)
-    // We aim to balance "Resource Density" (Assets per Auditor) across all groups.
-    pool.sort((a, b) => getBBI(b) - getBBI(a));
-    const bins: any[][] = Array.from({ length: targetBins }, () => []);
-    const binBBIs = new Array(targetBins).fill(0);
-    const binAssets = new Array(targetBins).fill(0);
-    const binAuditors = new Array(targetBins).fill(0);
+    // 5. 'Anchor-Orphan' Bin Distribution
+    // ANCHORS: Units with >= minAuditors. 
+    // ORPHANS: Units with < minAuditors (must be merged).
+    const anchors = filteredPool.filter(d => (auditorCountByDept[d.id] || 0) >= minAuditors);
+    const orphans = filteredPool.filter(d => (auditorCountByDept[d.id] || 0) < minAuditors);
 
-    for (const dept of pool) {
-      const deptAssets = dept.total_assets || 0;
-      const deptAuditors = auditorCountByDept[dept.id] || 0;
-      const deptBBI = getBBI(dept);
+    // Initial bins from anchors
+    const bins: any[][] = anchors.map(a => [a]);
+    const binAuditors = anchors.map(a => auditorCountByDept[a.id] || 0);
+    const binBBIs = anchors.map(a => getBBI(a));
 
-      // Heuristic: Find bin that MOST needs this department's profile to reach institutional average ratio
-      // Or more simply: Pick bin with lowest current BBI to keep size balanced,
-      // but if BBI is similar, pick bin that improves the Asset/Auditor ratio.
-      let bestBinIdx = 0;
-      let minBBI = Infinity;
+    // If no anchors, start with one empty bin
+    if (bins.length === 0 && orphans.length > 0) {
+      bins.push([]);
+      binAuditors.push(0);
+      binBBIs.push(0);
+    }
 
-      for (let i = 0; i < targetBins; i++) {
-        if (binBBIs[i] < minBBI) {
-          minBBI = binBBIs[i];
+    // Distribute orphans into bins to satisfy minAuditors and balance BBI
+    for (const orphan of orphans) {
+      const oBBI = getBBI(orphan);
+      const oAuditors = auditorCountByDept[orphan.id] || 0;
+
+      // Find bin that MOST needs this orphan (lowest BBI) 
+      // but prioritize satisfaction of minAuditors first
+      let bestBinIdx = -1;
+      let minAudCount = Infinity;
+
+      for (let i = 0; i < bins.length; i++) {
+        if (binAuditors[i] < minAudCount) {
+          minAudCount = binAuditors[i];
           bestBinIdx = i;
         }
       }
-      
-      bins[bestBinIdx].push(dept);
-      binBBIs[bestBinIdx] += deptBBI;
-      binAssets[bestBinIdx] += deptAssets;
-      binAuditors[bestBinIdx] += deptAuditors;
+
+      // If all bins are at least at minAuditors, just pick lowest BBI
+      if (minAudCount >= minAuditors) {
+        let minBBIValue = Infinity;
+        for (let i = 0; i < bins.length; i++) {
+          if (binBBIs[i] < minBBIValue) {
+            minBBIValue = binBBIs[i];
+            bestBinIdx = i;
+          }
+        }
+      }
+
+      bins[bestBinIdx].push(orphan);
+      binAuditors[bestBinIdx] += oAuditors;
+      binBBIs[bestBinIdx] += oBBI;
     }
 
-    // Validation: Merge bins that don't meet the minAuditors policy
+    // Final Validation: Merge bins that STILL don't meet the minAuditors policy
     let finalBundles = bins.filter(b => b.length > 0);
 
     // --- PARITY SAFEGUARD (POST-BINNING) ---
@@ -558,9 +598,8 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
     return c.json({
       groups: createdGroups,
       ungrouped: standaloneDepts.map(s => s.id),
-      standaloneCount: standaloneDepts.length,
       createdCount: createdGroups.length,
-      totalEntities: standaloneDepts.length + createdGroups.length,
+      recommendations,
       isParityEven: (standaloneDepts.length + createdGroups.length) % 2 === 0
     });
   },
