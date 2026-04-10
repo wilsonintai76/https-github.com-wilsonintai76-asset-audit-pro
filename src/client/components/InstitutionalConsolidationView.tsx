@@ -2,6 +2,7 @@
 import React from 'react';
 import { Department, AuditGroup } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
+import { Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PrintButton } from './PrintButton';
 import { printUnitConsolidation } from '../lib/printUtils';
@@ -134,17 +135,22 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
             </div>
           </div>
 
-          {/* Card Footer: Summary Stats */}
-          <div className="bg-slate-900 p-4 flex justify-between items-center">
-             <div className="flex items-center gap-2">
-               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Active System</span>
+          {/* Card Footer: Detailed Resource Summary */}
+          <div className="bg-slate-900 px-6 py-5 grid grid-cols-3 gap-4 border-t border-white/5">
+             <div className="flex flex-col">
+               <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Assets</span>
+               <span className="text-sm font-black text-white tabular-nums italic">{group.subTotalAssets.toLocaleString()}</span>
              </div>
-             <div className="flex items-center gap-3">
-                 <div className="flex flex-col items-end">
-                   <span className="text-[8px] font-bold text-slate-500 uppercase">Assets</span>
-                   <span className="text-xs font-black text-white tabular-nums italic">{group.subTotalAssets.toLocaleString()}</span>
-                 </div>
+             <div className="flex flex-col border-x border-white/10 px-4">
+               <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Locs</span>
+               <span className="text-sm font-black text-white tabular-nums italic">{group.subTotalLocs.toLocaleString()}</span>
+             </div>
+             <div className="flex flex-col items-end">
+               <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Staff</span>
+               <span className="text-sm font-black text-white tabular-nums italic inline-flex items-center gap-1.5">
+                 {group.subTotalAuditors}
+                 <Users className="w-3 h-3 text-slate-600" />
+               </span>
              </div>
           </div>
         </div>

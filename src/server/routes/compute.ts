@@ -723,7 +723,7 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
         : [...poolIds];
       
       // Sort available by assets to pair similar sizes
-      const sortedAvailable = pool.filter(e => availableIds.includes(e.id)).sort((a,b) => b.assets - a.assets);
+      const sortedAvailable = pool.filter(e => availableIds.includes(e.id)).sort((a,b) => b.bbi - a.bbi);
       
       const pairs: [string, string][] = [];
       let cycle3: [string, string, string] | null = null;
@@ -810,24 +810,17 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
       }
       
     } else if (effectiveMode === 'assets') {
-      // Round-robin asset-based pairing
-      const auditorPool = entities.filter((e) => e.assets > 0);
+      const auditorPool = entities.filter((e) => e.auditors > 0);
       const finalTargets = respectManualPairings
-        ? entities.filter((e) => e.assets > 0 && !existingPerms.some((p: any) => p.target_dept_id === e.id))
-        : entities.filter((e) => e.assets > 0);
+        ? entities.filter((e) => e.bbi > 0 && !existingPerms.some((p: any) => p.target_dept_id === e.id))
+        : entities.filter((e) => e.bbi > 0);
 
-      // Pre-process AI Suggestions first
-      for (const suggestion of aiPairingSuggestions) {
-          if (usedTargetIds.has(suggestion.targetId)) continue;
-          const auditor = auditorPool.find(a => a.id === suggestion.auditorId);
-          const target = finalTargets.find(t => t.id === suggestion.targetId);
-          if (auditor && target && auditor.id !== target.id) {
-             newPairings.push({ auditorDeptId: auditor.id, targetDeptId: target.id, isMutual: autoPairingMutual });
-             if (autoPairingMutual) newPairings.push({ auditorDeptId: target.id, targetDeptId: auditor.id, isMutual: true });
-             strategicPlan.push({ targetId: target.id, targetName: target.name, auditorId: auditor.id, auditorName: auditor.name, auditorDeptAssets: auditor.assets });
-             usedTargetIds.add(target.id);
-          }
-      }
+      const capacityMap = new Map<string, number>();
+      auditorPool.forEach(a => {
+        // Minimum 2 auditors per "slot"
+        const slots = Math.max(1, Math.floor(a.auditors / 2)); 
+        capacityMap.set(a.id, slots);
+      });
 
       let poolIdx = 0;
       for (const target of finalTargets) {

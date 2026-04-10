@@ -248,9 +248,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     }
 
     const minAuditorsRequired = currentMinAuditors;
-    const targets = entities.filter(e => e.assets > 0).sort((a, b) => b.assets - a.assets);
+    const targets = entities.filter(e => e.bbi > 0).sort((a, b) => b.bbi - a.bbi);
     if (targets.length === 0) {
-      showToast?.('No entities with assets found.', 'error');
+      showToast?.('No entities with audit workload found.', 'error');
       setIsProcessing(false);
       return;
     }
@@ -262,8 +262,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const effectivePairingMode = forceMutual ? 'strict_mutual' : pairingMode;
 
     if (effectivePairingMode === 'strict_mutual') {
-      const pool = entities.filter(e => e.assets > 0 && (simulateIdealStaffing || e.auditors >= minAuditorsRequired));
-      const sorted = [...pool].sort((a, b) => b.assets - a.assets);
+      const pool = entities.filter(e => e.bbi > 0 && (simulateIdealStaffing || e.auditors >= minAuditorsRequired));
+      const sorted = [...pool].sort((a, b) => b.bbi - a.bbi);
       const cycle3: typeof sorted = [];
       if (sorted.length % 2 !== 0 && sorted.length >= 3) {
         cycle3.push(sorted.pop()!, sorted.pop()!, sorted.pop()!);
@@ -305,8 +305,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       for (const target of targets) {
         if (usedTargetIds.has(target.id!)) continue;
 
-        // Calculate how many units we need for this target based on its asset volume
-        const unitsNeeded = Math.ceil(target.assets / currentMaxAssets);
+        // BBI target is ~1200 per "slot"
+        const unitsNeeded = Math.ceil(target.bbi / 1200);
         const assignedAuditors: any[] = [];
         
         let attempts = 0;
