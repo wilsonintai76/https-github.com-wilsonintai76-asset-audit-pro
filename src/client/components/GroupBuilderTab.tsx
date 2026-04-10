@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Department, AuditGroup } from '@shared/types';
-import { Boxes, Loader2, Sparkles, Trash2, Users, RotateCcw, Lock, AlertTriangle } from 'lucide-react';
+import { Boxes, Loader2, Sparkles, Trash2, Users, RotateCcw, Lock, AlertTriangle, Zap } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printUnitConsolidation } from '../lib/printUtils';
 
