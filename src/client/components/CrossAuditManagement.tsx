@@ -237,7 +237,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const newStrategicPlan: StrategicPair[] = [];
     const usedTargetIds = new Set<string>();
     const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
-    const effectivePairingMode = pairingStrategy === 'mutual' ? 'strict_mutual' : pairingMode;
+    const forceMutual = pairingStrategy === 'mutual';
+    const effectivePairingMode = forceMutual ? 'strict_mutual' : pairingMode;
 
     if (effectivePairingMode === 'strict_mutual') {
       const pool = entities.filter(e => e.assets > 0 && (simulateIdealStaffing || e.auditors >= minAuditorsRequired));

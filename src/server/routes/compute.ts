@@ -463,10 +463,34 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
     }
 
     // Validation: Merge bins that don't meet the minAuditors policy
-    // Note: This might break parity, so we handle it by merging TWO smallest bins into one 
-    // and potentially adding a standalone if we need to restore parity, but for now 
-    // institutional policy (min auditors) takes priority over perfect 1:1 parity if forced.
     let finalBundles = bins.filter(b => b.length > 0);
+
+    // --- PARITY SAFEGUARD (POST-BINNING) ---
+    // Ensure (Standalone + Groups) is ALWAYS even.
+    let totalEntities = standaloneDepts.length + finalBundles.length;
+    if (totalEntities % 2 !== 0 && finalBundles.length > 0) {
+      // If we are odd, merge the smallest bundle into the second smallest 
+      // (or into a standalone if only 1 bundle exists)
+      finalBundles.sort((a, b) => a.reduce((sum, d) => sum + getBurden(d), 0) - b.reduce((sum, d) => sum + getBurden(d), 0));
+      const orphan = finalBundles.shift()!;
+      if (finalBundles.length > 0) {
+        finalBundles[0] = [...finalBundles[0], ...orphan];
+      } else if (standaloneDepts.length > 0) {
+        // Extreme case: 19 Standalones + 1 Bundle = 20. Wait, 19 + 1 = 20 (Even).
+        // If 20 Standalones + 1 Bundle = 21 (Odd).
+        // We convert the bundle into a member of the smallest standalone.
+        const smallestStandaloneIdx = standaloneDepts.reduce((minIdx, d, idx, arr) => 
+          (d.total_assets || 0) < (arr[minIdx].total_assets || 0) ? idx : minIdx, 0);
+        
+        // This is handled by creating a 'Group' for that standalone
+        finalBundles = [[standaloneDepts[smallestStandaloneIdx], ...orphan]];
+        standaloneDepts.splice(smallestStandaloneIdx, 1);
+      }
+    }
+    // Re-verify strictly even
+    if ((standaloneDepts.length + finalBundles.length) % 2 !== 0) {
+      console.warn('Parity could not be automatically enforced. Pairing might fail.');
+    }
     
     // 6. Create audit_groups and link departments
     const createdGroups: { name: string; id: string; departments: string[]; totalAssets: number; totalLocations: number; auditors: number; burden: number }[] = [];
