@@ -62,18 +62,6 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
     return { initLocked: false, initLockReason: '' };
   }, [pairingLocked, isSystemLocked]);
 
-  const handleAISuggestThresholds = async () => {
-    setIsSuggestingAI(true);
-    try {
-      const result = await suggestThresholds(departments);
-      // We don't update local state anymore, just suggest to user or let them adjust global
-      // Note: Ideally AI suggestions should update the global constraints if requested.
-    } catch (err) {
-      console.error('AI Threshold suggestion failed:', err);
-    } finally {
-      setIsSuggestingAI(false);
-    }
-  };
 
   const handleRunAutoConsolidate = async () => {
     if (!onAutoConsolidate) return;
