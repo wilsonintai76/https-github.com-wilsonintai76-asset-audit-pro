@@ -64,7 +64,21 @@ export const useAppData = () => {
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>('All');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<any>(null);
-  const [feasibilityReport, setFeasibilityReport] = useState<any>(null);
+  const [feasibilityReport, setFeasibilityReport] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('last_feasibility_report');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+
+  // Persist feasibility report
+  useMemo(() => {
+    if (feasibilityReport) {
+      localStorage.setItem('last_feasibility_report', JSON.stringify(feasibilityReport));
+    } else {
+      localStorage.removeItem('last_feasibility_report');
+    }
+  }, [feasibilityReport]);
 
   const dataLoadedRef = useRef(false);
 

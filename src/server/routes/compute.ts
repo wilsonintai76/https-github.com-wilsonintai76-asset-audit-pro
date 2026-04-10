@@ -1156,28 +1156,54 @@ compute.post(
       return { name: p.name, target, workDays };
     });
 
-    const activeUnits = depts.filter(d => (d.total_assets || 0) > 0 || (auditorCountByDept[d.id] || 0) > 0);
+    // --- MATHEMATICAL PRE-CALCULATION ---
+    const activeUnitStats = activeUnits.map(d => ({
+      name: d.name,
+      assets: d.total_assets || 0,
+      locations: locationCountByDept[d.id] || 0,
+      auditors: auditorCountByDept[d.id] || 0,
+      burden: (d.total_assets || 0) * 0.7 + (locationCountByDept[d.id] || 0) * 100,
+      capacityRatio: (auditorCountByDept[d.id] || 0) > 0 
+        ? Math.round(((d.total_assets || 0) + (locationCountByDept[d.id] || 0) * 10) / (auditorCountByDept[d.id] || 0)) 
+        : 'INF'
+    }));
 
-    const aiPrompt = `Analyze the feasibility of this audit plan:
-Total Certified Auditors: ${certifiedAuditors}
-Total Assets: ${institutionTotalAssets}
+    const globalAvgBurden = Math.round(activeUnitStats.reduce((s, u) => s + (u.capacityRatio === 'INF' ? 0 : u.capacityRatio), 0) / activeUnits.length);
 
-Active Units Analysis (Capacity vs Burden):
-${activeUnits.slice(0, 20).map(d => `- ${d.name}: ${d.total_assets || 0} assets, ${locationCountByDept[d.id] || 0} locations, ${auditorCountByDept[d.id] || 0} auditors`).join('\n')}
+    const aiPrompt = `Analyze the Strategic Feasibility of this audit plan. Provide two distinct perspectives:
 
-Risk Factors:
-1. Logistical Risk: High location count increases travel/coordination time. 
-2. Resource Gap: High asset count vs low auditors.
-3. Exemption: Identify units that are high-strain and should be exempted.
+Perspective 1: MATHEMATICAL BALANCE (The "Math")
+Focus on Load vs Capacity. Identify units where the workload (Assets + Locations) is disproportionate to the Auditor headcount.
+- Global Avg Load/Auditor: ${globalAvgBurden} units
+- High Burden Threshold: > 800 units/auditor
+
+Perspective 2: THEMATIC SYNERGY (The "Theme")
+Focus on Functional Affinity. Evaluate if the grouping of these departments makes sense (e.g., Tech with Tech, Admin with Admin).
+
+Infrastructure Stats:
+- Total Certified auditors: ${certifiedAuditors}
+- Total Assets: ${institutionTotalAssets}
+
+Unit Breakdown:
+${activeUnitStats.slice(0, 20).map(u => `- ${u.name}: ${u.assets} assets, ${u.locations} locs, ${u.auditors} auds (Load Index: ${u.capacityRatio})`).join('\n')}
 
 CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR AFTER.
 {
   "score": number,
   "riskLevel": "Low"|"Medium"|"High"|"Critical",
+  "mathematicalAnalysis": {
+    "summary": string,
+    "logisticalRisks": string[],
+    "loadBalanceScore": number
+  },
+  "thematicAnalysis": {
+    "summary": string,
+    "synergyObservations": string[],
+    "affinityScore": number
+  },
   "bottlenecks": string[],
   "recommendations": string[],
-  "exemptionRecommendations": [],
-  "projections": {}
+  "exemptionRecommendations": []
 }
 `;
 

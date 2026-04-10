@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Department, CrossAuditPermission, User, AuditGroup } from '@shared/types';
-import { Wand2, Zap, Boxes, Loader2, Layers, Network, CheckCheck, RotateCcw, Link, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, X, ShieldCheck, ChevronDown, Lock, Calendar, Sparkles } from 'lucide-react';
+import { Wand2, Zap, Boxes, Loader2, Layers, Network, CheckCheck, RotateCcw, Link, ArrowRightLeft, ArrowRight, Ban, Users, Building2, Trash2, X, ShieldCheck, ChevronDown, Lock, Calendar, Sparkles, Activity, Brain, LayoutGrid, ClipboardCheck, Info } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printCrossAuditAssignments, printStrategicInspectionPlanApproval } from '../lib/printUtils';
 import { suggestThresholds } from '../services/aiService';
@@ -505,6 +505,84 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
               </div>
               <p className="text-[10px] font-medium text-slate-500 mt-4">Projected Coverage: {projectedAssetsMet.toLocaleString()} / {overallTotalAssets.toLocaleString()} Movable Assets.</p>
            </div>
+
+           {/* STRATEGIC FEASIBILITY & SYNERGY REPORT */}
+           {feasibilityReport && (
+              <div className="animate-in fade-in slide-in-from-top-4 duration-1000">
+                <div className="flex items-center gap-3 mb-6 px-2">
+                  <ClipboardCheck className="w-5 h-5 text-indigo-500" />
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">AI Strategic Analysis</h3>
+                  <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${
+                    feasibilityReport.riskLevel === 'Low' ? 'bg-emerald-100 text-emerald-600' :
+                    feasibilityReport.riskLevel === 'Medium' ? 'bg-amber-100 text-amber-600' :
+                    'bg-rose-100 text-rose-600'
+                  }`}>
+                    {feasibilityReport.riskLevel} Risk
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Math Analysis */}
+                  <div className="p-8 rounded-[32px] border-2 border-indigo-100 bg-linear-to-br from-white to-indigo-50/30">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                        <Activity className="w-5 h-5" />
+                      </div>
+                      <div className="text-xs font-black text-indigo-400 uppercase tracking-tighter">Math Score: {feasibilityReport.mathematicalAnalysis?.loadBalanceScore || 0}%</div>
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-3">Mathematical Balance</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed mb-6 font-medium">
+                      {feasibilityReport.mathematicalAnalysis?.summary || 'Comprehensive capacity analysis of assets vs. certified headcount.'}
+                    </p>
+                    <div className="space-y-2">
+                      {feasibilityReport.mathematicalAnalysis?.logisticalRisks?.map((risk: string, i: number) => (
+                        <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-white/60 border border-indigo-50 rounded-xl text-[10px] font-bold text-slate-600">
+                          <Info className="w-3 h-3 text-indigo-400 mt-0.5 shrink-0" />
+                          {risk}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Thematic Analysis */}
+                  <div className="p-8 rounded-[32px] border-2 border-emerald-100 bg-linear-to-br from-white to-emerald-50/30">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                        <Brain className="w-5 h-5" />
+                      </div>
+                      <div className="text-xs font-black text-emerald-400 uppercase tracking-tighter">Synergy: {feasibilityReport.thematicAnalysis?.affinityScore || 0}%</div>
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-3">Thematic Synergy</h4>
+                    <p className="text-xs text-slate-600 leading-relaxed mb-6 font-medium">
+                      {feasibilityReport.thematicAnalysis?.summary || 'Qualitative assessment of department affinity and technical compatibility.'}
+                    </p>
+                    <div className="space-y-2">
+                      {feasibilityReport.thematicAnalysis?.synergyObservations?.map((obs: string, i: number) => (
+                        <div key={i} className="flex items-start gap-2.5 px-3 py-2 bg-white/60 border border-emerald-50 rounded-xl text-[10px] font-bold text-slate-600">
+                          <LayoutGrid className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
+                          {obs}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8 p-6 bg-slate-50 rounded-[28px] border border-slate-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    <span className="text-[10px] font-black uppercase text-slate-500">Overall Strategy Advice</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {feasibilityReport.recommendations?.slice(0, 4).map((rec: string, i: number) => (
+                      <div key={i} className="flex items-start gap-3 p-4 bg-white rounded-2xl border border-slate-100 shadow-xs">
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                        <p className="text-[10px] font-bold text-slate-700 leading-relaxed">{rec}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+           )}
 
            <div>
               <div className="flex items-center justify-between mb-6">
