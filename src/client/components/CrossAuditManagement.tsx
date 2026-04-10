@@ -153,7 +153,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       return users.filter(u => 
         u.departmentId === deptId && 
         u.status === 'Active' && 
-        (!u.certificationExpiry || u.certificationExpiry >= today)
+        u.certificationExpiry && 
+        u.certificationExpiry >= today
       ).length;
     };
 

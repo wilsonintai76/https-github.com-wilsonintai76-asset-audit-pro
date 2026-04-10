@@ -173,7 +173,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   // Actual Resource Calculations
   const activeAuditorCount = React.useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
-    return users.filter(u => u.status === 'Active' && (!u.certificationExpiry || u.certificationExpiry >= today)).length;
+    return users.filter(u => u.status === 'Active' && u.certificationExpiry && u.certificationExpiry >= today).length;
   }, [users]);
 
   const totalInstitutionalAssets = React.useMemo(() => {

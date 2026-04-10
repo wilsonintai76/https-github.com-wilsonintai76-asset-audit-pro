@@ -132,11 +132,11 @@ export const useAppData = () => {
     const deptTotals: Record<string, number> = {};
     locations.forEach(l => { if (l.departmentId) deptTotals[l.departmentId] = (deptTotals[l.departmentId] || 0) + (l.totalAssets || 0); });
 
-    // Unified Auditor Definition: Status Active AND (No expiry OR Not yet expired)
+    // Unified Auditor Definition: Status Active AND Valid Expiry exists
     const deptAuditors: Record<string, number> = {};
     const today = new Date().toISOString().split('T')[0];
     users.forEach(u => {
-      const isValidAuditor = u.status === 'Active' && (!u.certificationExpiry || u.certificationExpiry >= today);
+      const isValidAuditor = u.status === 'Active' && u.certificationExpiry && u.certificationExpiry >= today;
       if (u.departmentId && isValidAuditor) {
         deptAuditors[u.departmentId] = (deptAuditors[u.departmentId] || 0) + 1;
       }
