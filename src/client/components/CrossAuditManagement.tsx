@@ -150,7 +150,11 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const groupedDepts: Record<string, Department[]> = {};
     const getAuditorCount = (deptId: string) => {
       const today = new Date().toISOString().split('T')[0];
-      return users.filter(u => u.departmentId === deptId && u.status === 'Active' && u.certificationExpiry && u.certificationExpiry >= today).length;
+      return users.filter(u => 
+        u.departmentId === deptId && 
+        u.status === 'Active' && 
+        (!u.certificationExpiry || u.certificationExpiry >= today)
+      ).length;
     };
 
     activeDepts.forEach(dept => {
