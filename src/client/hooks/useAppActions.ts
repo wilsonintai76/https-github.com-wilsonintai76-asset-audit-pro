@@ -76,7 +76,6 @@ interface AppActionsProps {
   setMaxLocationsPerDay: React.Dispatch<React.SetStateAction<number>>;
   setMinAuditorsPerLocation: React.Dispatch<React.SetStateAction<number>>;
   setDailyInspectionCapacity: React.Dispatch<React.SetStateAction<number>>;
-  setCrossAuditPermissions: React.Dispatch<React.SetStateAction<CrossAuditPermission[]>>;
 }
 
 export const useAppActions = (props: AppActionsProps) => {
@@ -88,7 +87,7 @@ export const useAppActions = (props: AppActionsProps) => {
     setAuditGroups, setBuildings, setActivities, setNotifications, setToasts,
     setPairingLocked, setPairingLockInfo, setIsSidebarOpen, setConfirmState, setFeasibilityReport, setCrossAuditPermissions,
     certRenewalModalUser, setCertRenewalModalUser, setShowForcePasswordModal, setShowProfileCompleteModal,
-    loadAllData, setConnectionErrorMessage, rbacMatrix
+    loadAllData, setConnectionErrorMessage, rbacMatrix, departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets, maxAssetsPerDay
   } = props;
 
   const showToast = useCallback((message: string, type: ToastType = 'success', duration?: number) => {
