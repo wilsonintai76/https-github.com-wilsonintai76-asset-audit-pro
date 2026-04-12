@@ -611,6 +611,12 @@ export const useAppActions = (props: AppActionsProps) => {
     }
   };
 
+  const handleSaveFeasibilityReport = (report: any) => {
+    if ((props as any).setFeasibilityReport) {
+      (props as any).setFeasibilityReport(report);
+    }
+  };
+
   const handleSetDeptTotalsFromMapping = async () => {
     try { await gateway.setDeptTotalsFromMapping(); await refreshDepartmentTotals(); showToast('Totals updated'); }
     catch (e) { showError(e); }
@@ -663,7 +669,7 @@ export const useAppActions = (props: AppActionsProps) => {
     handleUpdateKPITier, handleUpdateKPITierTarget, handleUpdateInstitutionKPI, handleAutoCalculateTierTargets,
     handleDeleteKPITier, handleAddDepartmentMapping, handleDeleteDepartmentMapping, handleAddAuditGroup,
     handleUpdateAuditGroup, handleUpdateBuilding, handleDeleteBuilding, handleBulkAddBuildings,
-    handleDeleteAuditGroup, handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleSetDeptTotalsFromMapping,
+    handleDeleteAuditGroup, handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleSaveFeasibilityReport, handleSetDeptTotalsFromMapping,
     handleUpsertLocations, handleSyncLocationMappings, handleAddMember, handleBulkAddMembers, handleUpdateMember,
     handleRequestRenewal, handleApproveCert, handleIssueCertForRenewal, handleUpdateDashboardConfig,
     handleUpdateUserStatus, handleUpdateUserRoles, handleResetUserPassword, handleBulkActivateStaff,

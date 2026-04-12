@@ -99,19 +99,20 @@ export const AuditorAssignmentSlot: React.FC<AuditorAssignmentSlotProps> = ({
       // 1. Basic cert/past check (Role is decoupled, Admin decides via RBAC)
       if (!officer.certificationExpiry || new Date(officer.certificationExpiry) <= new Date() || isPast) return false;
       
-      // 2. Conflict Check (Entity level)
       const myEntityId = getEntityName(officer.departmentId || '');
       const targetEntityId = getEntityName(audit.departmentId);
-      if (myEntityId === targetEntityId) return false;
+      const isInternal = myEntityId === targetEntityId;
+      const isAdminUser = currentUser?.roles?.includes('Admin');
 
-      // 3. ABSOLUTE LOCK: Supervisor cannot be the Auditor for the same location
+      // 2. Conflict Check (Entity level) - Permitted for Admins during internal audits
+      if (isInternal && !isAdminUser) return false;
+
+      // 3. ABSOLUTE LOCK: Supervisor cannot be the Auditor for the same location (Integrity Rule)
       if (officer.id === audit.supervisorId) return false;
 
       // 4. Already in this audit?
       if (audit.auditor1Id === officer.id || audit.auditor2Id === officer.id) return false;
 
-      // 4. Limit Check
-      // (Note: Limit check here is complex because users is large, but we can do it for the list)
       return true;
     });
   }, [users, canAssignOthers, audit, getEntityName, isPast]);

@@ -70,14 +70,20 @@ CREATE TABLE IF NOT EXISTS locations (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_locations_unique_name ON locations(name, department_id, level, building_id);
 
--- Cross Audit Permissions Table
+-- Cross Audit Permissions Table (Relational Group-Level support)
 CREATE TABLE IF NOT EXISTS cross_audit_permissions (
   id TEXT PRIMARY KEY,
-  auditor_dept_id TEXT NOT NULL,
-  target_dept_id TEXT NOT NULL,
+  auditor_dept_id TEXT, -- NULL if group-level
+  target_dept_id TEXT,  -- NULL if group-level
+  auditor_group_id TEXT, -- NULL if dept-level
+  target_group_id TEXT,  -- NULL if dept-level
   is_active INTEGER DEFAULT 1,
   is_mutual INTEGER DEFAULT 0,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (auditor_dept_id) REFERENCES departments(id),
+  FOREIGN KEY (target_dept_id) REFERENCES departments(id),
+  FOREIGN KEY (auditor_group_id) REFERENCES audit_groups(id),
+  FOREIGN KEY (target_group_id) REFERENCES audit_groups(id)
 );
 
 -- Department Mappings Table

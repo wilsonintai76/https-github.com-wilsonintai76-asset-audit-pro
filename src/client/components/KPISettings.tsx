@@ -16,8 +16,10 @@ interface KPISettingsProps {
   onUpdateTarget: (tierId: string, phaseId: string, percentage: number) => void;
   onUpdateInstitutionKPI: (phaseId: string, percentage: number) => void;
   onAutoCalculateTierTargets?: () => Promise<void>;
-  departments: Department[];
-  onUpdateFeasibility?: (report: any) => void;
+  onUpdateFeasibility?: (payload: any) => Promise<any>;
+  onSaveFeasibilityReport?: (report: any) => void;
+  feasibilityReport?: any;
+  showToast?: (message: string, type?: any) => void;
 }
 
 export const KPISettings: React.FC<KPISettingsProps> = ({
@@ -32,7 +34,10 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
   onUpdateTarget,
   onUpdateInstitutionKPI,
   onAutoCalculateTierTargets,
-  onUpdateFeasibility
+  onUpdateFeasibility,
+  onSaveFeasibilityReport,
+  feasibilityReport: globalFeasibilityReport,
+  showToast
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tierToDelete, setTierToDelete] = useState<string | null>(null);
@@ -47,9 +52,16 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
     recommendations: string[];
     projections: Record<string, string>;
     rawText?: string;
-  } | null>(null);
+  } | null>(globalFeasibilityReport || null);
   const [showRawOutput, setShowRawOutput] = useState(false);
   const [isFeasibilityLoading, setIsFeasibilityLoading] = useState(false);
+
+  // Sync with global report when it changes (e.g. from tab switch)
+  React.useEffect(() => {
+    if (globalFeasibilityReport) {
+      setFeasibilityReport(globalFeasibilityReport);
+    }
+  }, [globalFeasibilityReport]);
 
   const sortedPhases = [...phases].sort((a,b) => a.startDate.localeCompare(b.startDate));
   const sortedTiers = [...tiers].sort((a, b) => {
@@ -146,14 +158,19 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
   const handleCheckFeasibility = async () => {
     setIsFeasibilityLoading(true);
     try {
-      const response = await (api as any).compute.feasibility.$post({}, { headers: getAuthHeaders() });
+      const response = await (api as any).compute.feasibility.$post({}, { headers: await getAuthHeaders() });
       if (response.ok) {
         const report = await response.json();
         setFeasibilityReport(report);
-        onUpdateFeasibility?.(report);
+        onSaveFeasibilityReport?.(report);
+        showToast?.('AI Strategy Assessment generated successfully', 'success');
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        showToast?.(`Assessment failed: ${errData.error || response.statusText}`, 'error');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      showToast?.(`Connection error: ${err.message}`, 'error');
     } finally {
       setIsFeasibilityLoading(false);
     }
@@ -167,10 +184,16 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
         { headers: await getAuthHeaders() }
       );
       if (res.ok) {
-        setFeasibilityReport(await res.json());
+        const report = await res.json();
+        setFeasibilityReport(report);
+        onSaveFeasibilityReport?.(report);
+        showToast?.('Strategy assessment updated.', 'success');
+      } else {
+        showToast?.('Failed to update strategy.', 'error');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Feasibility fetch failed:', err);
+      showToast?.('Resource projection unavailable.', 'error');
     } finally {
       setIsFeasibilityLoading(false);
     }
@@ -307,7 +330,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                       </div>
 
                       <div className="space-y-4">
-                         {Object.entries(feasibilityReport.projections).map(([phase, prediction]) => (
+                         {Object.entries(feasibilityReport.projections || {}).map(([phase, prediction]) => (
                             <div key={phase} className="flex items-center justify-between text-xs">
                                <span className="text-slate-400 font-bold">{phase}</span>
                                <span className="text-white font-black">{prediction} completion</span>
@@ -323,7 +346,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                             AI Recommendations & Policy Proposals
                          </div>
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            {feasibilityReport.recommendations.map((r, i) => (
+                            {(feasibilityReport.recommendations || []).map((r, i) => (
                               <div key={i} className="bg-blue-500/10 border border-blue-500/20 text-blue-100 p-3 rounded-2xl text-[11px] font-medium leading-relaxed italic">
                                  "{r}"
                               </div>
@@ -342,7 +365,7 @@ export const KPISettings: React.FC<KPISettingsProps> = ({
                            Strategic Bottlenecks
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                           {feasibilityReport.bottlenecks.map((b, i) => (
+                           {(feasibilityReport.bottlenecks || []).map((b, i) => (
                              <div key={i} className="bg-red-500/10 border border-red-500/20 text-red-200 p-3 rounded-2xl text-[11px] font-medium leading-relaxed">
                                 {b}
                              </div>

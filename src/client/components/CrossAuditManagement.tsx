@@ -12,6 +12,7 @@ interface StrategicPair {
   auditors: { id: string; name: string; assets: number; auditors: number; isJoint: boolean; members?: any[] }[];
   totalAuditorsInGroup: number;
   auditorSideAssets: number;
+  isSwarm?: boolean;
 }
 
 interface CrossAuditManagementProps {
@@ -57,6 +58,7 @@ interface CrossAuditManagementProps {
   setIsSimulatorActive: (v: boolean) => void;
   draftConstraints: any;
   setDraftConstraints: (v: any) => void;
+  currentUser?: User | null;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -96,7 +98,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   onUpdateMaxLocationsPerDay,
   onUpdateMinAuditorsPerLocation,
   onUpdateDailyInspectionCapacity,
-  feasibilityReport
+  feasibilityReport,
+  currentUser
 }) => {
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -108,8 +111,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const SIMULATOR_ACTIVE_KEY = 'cross_audit_simulator_active';
   const SIMULATOR_PAIRINGS_KEY = 'cross_audit_simulator_pairings';
 
-  const [pairingStrategy, setPairingStrategy] = useState<'mutual' | 'asymmetric'>(() => {
-    return (localStorage.getItem('cross_audit_grouping_strategy') as any) || 'asymmetric';
+  const [pairingStrategy, setPairingStrategy] = useState<'mutual' | 'asymmetric' | 'hybrid'>(() => {
+    return (localStorage.getItem('cross_audit_grouping_strategy') as any) || 'hybrid';
   });
   const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('cross_audit_use_ai') === 'true');
 
@@ -149,8 +152,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   const entities = useMemo(() => {
     const groupedDepts: Record<string, Department[]> = {};
     
-    // Use enriched departments with counts from useAppData if available
-    // Otherwise calculate locally
+    // Enriched departments calculation
     const getStats = (deptId: string) => {
       const today = new Date().toISOString().split('T')[0];
       const deptUsers = users.filter(u => u.departmentId === deptId);
@@ -163,20 +165,23 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     };
 
     activeDepts.forEach(dept => {
-      const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
-      const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
+      // TRUST the auditGroupId. Every department is part of a group in the new architecture.
+      const key = dept.auditGroupId || 'unassigned_' + dept.id;
+      
       if (!groupedDepts[key]) groupedDepts[key] = [];
       const stats = getStats(dept.id);
       groupedDepts[key].push({ ...dept, auditorCount: stats.auditors, locationCount: stats.locs });
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
-      const isUnassigned = groupId.startsWith('unassigned_');
+      const isActuallyUnassigned = groupId.startsWith('unassigned_');
       const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       const totalLocations = depts.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
-      const name = isUnassigned ? depts[0].name : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
-      const constitutesGroup = !isUnassigned;
+      
+      // Name Resolution: Group Record Name > First Dept Name
+      const groupRecord = auditGroups.find(g => g.id === groupId);
+      const name = groupRecord?.name ?? depts[0].name;
 
       // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
       const bbi = (totalAssets * 0.5) + (totalLocations * 100) + (totalAuditors * 300);
@@ -188,8 +193,8 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         locations: totalLocations,
         bbi: Math.round(bbi),
         memberCount: depts.length, 
-        isJoint: constitutesGroup, 
-        isGroup: constitutesGroup, 
+        isJoint: !isActuallyUnassigned, 
+        isGroup: true, 
         id: groupId, 
         members: depts 
       };
@@ -258,93 +263,86 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const newStrategicPlan: StrategicPair[] = [];
     const usedTargetIds = new Set<string>();
     const newPairings: Omit<CrossAuditPermission, 'id'>[] = [];
-    const forceMutual = pairingStrategy === 'mutual';
-    const effectivePairingMode = forceMutual ? 'strict_mutual' : pairingMode;
+    
+    const pool = entities.filter(e => e.bbi > 0 && (simulateIdealStaffing || e.auditors >= minAuditorsRequired));
+    const sorted = [...pool].sort((a,b) => b.assets - a.assets); // Primary sort by assets
 
-    if (effectivePairingMode === 'strict_mutual') {
-      const pool = entities.filter(e => e.bbi > 0 && (simulateIdealStaffing || e.auditors >= minAuditorsRequired));
-      const sorted = [...pool].sort((a, b) => b.bbi - a.bbi);
-      const cycle3: typeof sorted = [];
-      if (sorted.length % 2 !== 0 && sorted.length >= 3) {
-        cycle3.push(sorted.pop()!, sorted.pop()!, sorted.pop()!);
-      }
-
-      while (sorted.length >= 2) {
-        const a = sorted.shift()!;
-        const b = sorted.shift()!;
-        const createEntry = (aud: any, tgt: any) => ({
-          target: { name: tgt.name, assets: tgt.assets, auditors: tgt.auditors, id: tgt.id } as any,
-          auditors: [{ name: aud.name, assets: aud.assets, auditors: simulateIdealStaffing ? Math.max(aud.auditors, 2) : aud.auditors, id: aud.id, isJoint: aud.isJoint }],
-          totalAuditorsInGroup: simulateIdealStaffing ? Math.max(aud.auditors, 2) : aud.auditors,
-          auditorSideAssets: aud.assets
-        });
-        newStrategicPlan.push(createEntry(a, b));
-        newStrategicPlan.push(createEntry(b, a));
-        newPairings.push({ auditorDeptId: a.id!, targetDeptId: b.id!, isActive: true, isMutual: true } as any);
-        newPairings.push({ auditorDeptId: b.id!, targetDeptId: a.id!, isActive: true, isMutual: true } as any);
-      }
-
-      if (cycle3.length === 3) {
-        const [a, b, c] = cycle3;
-        [[a, b], [b, c], [c, a]].forEach(([aud, tgt]) => {
-          newStrategicPlan.push({ target: tgt as any, auditors: [aud as any], totalAuditorsInGroup: aud.auditors, auditorSideAssets: aud.assets });
-          newPairings.push({ auditorDeptId: aud.id!, targetDeptId: tgt.id!, isActive: true, isMutual: false } as any);
-        });
-      }
-    } else {
-      const auditorPool = entities.filter(e => simulateIdealStaffing || e.auditors >= minAuditorsRequired);
-      const capacityMap = new Map<string, number>();
-      
-      // Track available "slots" per unit based on their own size and currentDailyCapacity
-      auditorPool.forEach(a => {
-        const slots = simulateIdealStaffing ? 99 : Math.max(1, Math.floor(a.auditors / minAuditorsRequired));
-        capacityMap.set(a.id!, slots);
-      });
-
-      let poolIdx = 0;
-      for (const target of targets) {
-        if (usedTargetIds.has(target.id!)) continue;
-
-        // BBI target is ~1200 per "slot"
-        const unitsNeeded = Math.ceil(target.bbi / 1200);
-        const assignedAuditors: any[] = [];
+    const mode = pairingStrategy; // 'mutual', 'asymmetric', 'hybrid'
+    
+    // 1. PHASE 1: Reciprocal Mutual Pairing (Standard Units)
+    // We pair departments that are "Mirror Matches" (within 200 assets difference)
+    if (mode === 'mutual' || mode === 'hybrid') {
+      const candidates = [...sorted];
+      for (let i = 0; i < candidates.length - 1; i++) {
+        const a = candidates[i];
+        if (usedTargetIds.has(a.id!)) continue;
         
-        let attempts = 0;
-        const totalPotentialAuditors = auditorPool.length;
-
-        while (assignedAuditors.length < unitsNeeded && attempts < totalPotentialAuditors) {
-          const candidate = auditorPool[poolIdx % totalPotentialAuditors];
-          poolIdx++;
-          attempts++;
-
-          if (candidate.id !== target.id && (capacityMap.get(candidate.id!) || 0) > 0) {
-            assignedAuditors.push({
-              ...candidate,
-              auditors: simulateIdealStaffing ? Math.max(candidate.auditors, currentMinAuditors) : candidate.auditors
-            });
-            capacityMap.set(candidate.id!, (capacityMap.get(candidate.id!) || 0) - 1);
-          }
-        }
-
-        if (assignedAuditors.length > 0) {
-          newStrategicPlan.push({
-            target: target as any,
-            auditors: assignedAuditors,
-            totalAuditorsInGroup: assignedAuditors.reduce((sum, a) => sum + a.auditors, 0),
-            auditorSideAssets: assignedAuditors.reduce((sum, a) => sum + a.assets, 0)
-          });
-
-          assignedAuditors.forEach(aud => {
-            newPairings.push({ 
-              auditorDeptId: aud.id!, 
-              targetDeptId: target.id!, 
-              isActive: true, 
-              isMutual: autoPairingMutual 
-            } as any);
+        // Find a mirror match within 200 assets
+        const bIdx = candidates.findIndex((e, idx) => idx > i && !usedTargetIds.has(e.id!) && Math.abs(e.assets - a.assets) <= 200);
+        
+        if (bIdx !== -1) {
+          const b = candidates[bIdx];
+          const createPairing = (aud: any, tgt: any) => ({
+            target: { id: tgt.id, name: tgt.name, assets: tgt.assets, auditors: tgt.auditors },
+            auditors: [{ id: aud.id, name: aud.name, assets: aud.assets, auditors: aud.auditors, isJoint: false }],
+            totalAuditorsInGroup: aud.auditors,
+            auditorSideAssets: aud.assets
           });
           
-          usedTargetIds.add(target.id!);
+          newStrategicPlan.push(createPairing(a, b));
+          newStrategicPlan.push(createPairing(b, a));
+          newPairings.push({ auditorDeptId: a.id!, targetDeptId: b.id!, isActive: true, isMutual: true } as any);
+          newPairings.push({ auditorDeptId: b.id!, targetDeptId: a.id!, isActive: true, isMutual: true } as any);
+          usedTargetIds.add(a.id!);
+          usedTargetIds.add(b.id!);
         }
+      }
+    }
+
+    // 2. PHASE 2: Headcount-First Swarm (Asymmetric / Remaining Mega Units)
+    // For units that didn't match mutually (too big/small) or in Asymmetric mode
+    const remainingTargets = sorted.filter(e => !usedTargetIds.has(e.id!));
+    const availableGroups = sorted.filter(e => e.auditors >= 2);
+    const burdenMap = new Map<string, number>();
+
+    for (const target of remainingTargets) {
+      if (usedTargetIds.has(target.id!)) continue;
+      
+      // Calculate needed auditors: 750 assets per person
+      const assetsPerAuditor = 750;
+      const totalAuditorsNeeded = Math.ceil(target.assets / assetsPerAuditor);
+      const assignedTeams: any[] = [];
+      
+      // Sort candidates by remaining asset capacity
+      const candidates = [...availableGroups]
+        .filter(g => g.id !== target.id)
+        .sort((a,b) => {
+          const capA = (a.auditors * assetsPerAuditor) - (burdenMap.get(a.id!) || 0);
+          const capB = (b.auditors * assetsPerAuditor) - (burdenMap.get(b.id!) || 0);
+          return capB - capA;
+        });
+
+      let currentAssignedTotal = 0;
+      for (const cand of candidates) {
+        if (currentAssignedTotal >= totalAuditorsNeeded) break;
+        
+        assignedTeams.push({ ...cand, isJoint: true });
+        const workloadShare = target.assets / Math.max(1, Math.min(candidates.length, totalAuditorsNeeded/2)); 
+        burdenMap.set(cand.id!, (burdenMap.get(cand.id!) || 0) + workloadShare);
+        
+        newPairings.push({ auditorDeptId: cand.id!, targetDeptId: target.id!, isActive: true, isMutual: false } as any);
+        currentAssignedTotal += cand.auditors;
+      }
+
+      if (assignedTeams.length > 0) {
+        newStrategicPlan.push({
+          target: target as any,
+          auditors: assignedTeams,
+          totalAuditorsInGroup: assignedTeams.reduce((sum, a) => sum + a.auditors, 0),
+          auditorSideAssets: assignedTeams.reduce((sum, a) => sum + a.assets, 0),
+          isSwarm: assignedTeams.length > 1
+        });
+        usedTargetIds.add(target.id!);
       }
     }
 
@@ -358,19 +356,35 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     if (!onBulkAddPermissions || simulatedPairings.length === 0) return;
     setIsProcessing(true);
     try {
-      const expandedPairings: Omit<CrossAuditPermission, 'id'>[] = [];
+      const finalPairings: Omit<CrossAuditPermission, 'id'>[] = [];
+      const processedRelations = new Set<string>();
+
       for (const pair of simulatedPairings) {
+        // Create a unique key for the relation (order-independent if mutual)
+        const sortedIds = [pair.auditorDeptId, pair.targetDeptId].sort();
+        const relationKey = pair.isMutual 
+          ? `mutual:${sortedIds[0]}:${sortedIds[1]}`
+          : `directed:${pair.auditorDeptId}:${pair.targetDeptId}`;
+
+        if (processedRelations.has(relationKey)) continue;
+        processedRelations.add(relationKey);
+
         const audEntity = entities.find(e => e.id === pair.auditorDeptId);
         const tgtEntity = entities.find(e => e.id === pair.targetDeptId);
         if (!audEntity || !tgtEntity) continue;
-        for (const audD of audEntity.members) {
-          for (const tgtD of tgtEntity.members) {
-            expandedPairings.push({ auditorDeptId: audD.id, targetDeptId: tgtD.id, isActive: true, isMutual: pair.isMutual });
-          }
-        }
+
+        // UNIVERSAL GROUP MODEL: Always save at the group level.
+        // Standalone depts now have their own group IDs from migration/consolidation.
+        finalPairings.push({
+          auditorGroupId: audEntity.id,
+          targetGroupId: tgtEntity.id,
+          isActive: true,
+          isMutual: pair.isMutual
+        });
       }
+
       if (onBulkRemovePermissions && permissions.length > 0) await onBulkRemovePermissions(permissions.map(p => p.id));
-      await onBulkAddPermissions(expandedPairings);
+      await onBulkAddPermissions(finalPairings);
 
       // PERSIST CONSTRAINTS (Locking them in)
       if (draftConstraints) {
@@ -385,8 +399,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       setDraftConstraints(null);
       localStorage.removeItem(SIMULATOR_ACTIVE_KEY);
       localStorage.removeItem(SIMULATOR_PAIRINGS_KEY);
-      await onLockPairing?.(expandedPairings.length);
-      showToast?.('Assignments and constraints committed and locked.');
+      
+      // Use logical count for lock info
+      await onLockPairing?.(finalPairings.length);
+      showToast?.('Group-level assignments and constraints committed and locked.');
     } catch (e) {
       console.error(e);
     } finally {
@@ -416,11 +432,19 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     }
     const map = new Map<string, any>();
     permissions.forEach(p => {
-      const audE = entities.find(e => e.id === p.auditorDeptId || e.members.some(m => m.id === p.auditorDeptId));
-      const tgtE = entities.find(e => e.id === p.targetDeptId || e.members.some(m => m.id === p.targetDeptId));
-      if (!audE || !tgtE) return;
-      const key = `${audE.id}-${tgtE.id}`;
-      if (!map.has(key)) map.set(key, { auditorEntityId: audE.id, targetEntityId: tgtE.id, isMutual: p.isMutual, rawPermIds: [] });
+      // Find the logical entity ID - strictly using Group IDs now
+      const rawAudId = p.auditorGroupId || p.auditorDeptId;
+      const rawTgtId = p.targetGroupId || p.targetDeptId;
+      if (!rawAudId || !rawTgtId) return;
+
+      const audEnt = entities.find(e => e.id === rawAudId);
+      const tgtEnt = entities.find(e => e.id === rawTgtId);
+      
+      const audId = audEnt?.id || rawAudId;
+      const tgtId = tgtEnt?.id || rawTgtId;
+      
+      const key = `${audId}-${tgtId}`;
+      if (!map.has(key)) map.set(key, { auditorEntityId: audId, targetEntityId: tgtId, isMutual: p.isMutual, rawPermIds: [] });
       map.get(key).rawPermIds.push(p.id);
     });
     return Array.from(map.values());
@@ -442,6 +466,39 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
         </div>
         <div className="flex items-center gap-3">
           <PrintButton onClick={() => printCrossAuditAssignments(entityPermissions, entities)} label="Print Plan" />
+          <PrintButton 
+            onClick={() => {
+              if (!feasibilityReport) {
+                showToast?.('Please run feasibility analysis first.', 'warning');
+                return;
+              }
+              const activePhase = phases?.find(p => p.status === 'Active') || phases?.[0];
+              printStrategicInspectionPlanApproval(
+                "SMK St. Thomas",
+                new Date().getFullYear(),
+                {
+                  totalInstitutionAssets: overallTotalAssets,
+                  inspectedAssets: 0,
+                  targetAssets: overallTotalAssets,
+                  actualPercentage: 0,
+                  targetPercentage: 100,
+                  isOnTrack: true
+                },
+                feasibilityReport,
+                entities,
+                entityPermissions.map(p => ({
+                  auditorEntityId: p.auditorEntityId,
+                  targetEntityId: p.targetEntityId,
+                  isMutual: p.isMutual
+                })),
+                { approver: "Principal / Director", supporter: currentUser?.name || "Administrator" },
+                auditGroups,
+                departments
+              );
+            }} 
+            label="Strategic Memo" 
+            variant="blue"
+          />
           <button onClick={() => setActiveModal('reset')} className="px-4 py-2.5 rounded-2xl border border-red-100 bg-red-50 text-red-500 text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-2">
             <RotateCcw className="w-4 h-4" /> Reset Cycle
           </button>
@@ -456,23 +513,20 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
               <div className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center mb-6">
                 <Zap className={`w-6 h-6 ${isSimulatorActive ? 'text-amber-500' : 'text-indigo-500'}`} />
               </div>
-              <h3 className="text-xl font-black text-slate-800 mb-2">Assignment Strategy</h3>
-              <p className="text-xs text-slate-500 leading-relaxed mb-8">All audit relationships are generated programmatically to ensure separation of duties and fairness.</p>
-
-              <div className="space-y-6">
                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Pairing Logic</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Institutional Flow</p>
                     <div className="flex bg-white/50 p-1 rounded-xl border border-slate-200 gap-1">
-                       <button onClick={() => setPairingMode('assets')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingMode === 'assets' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Assets</button>
-                       <button onClick={() => setPairingMode('assets_auditors')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingMode === 'assets_auditors' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Capacity</button>
+                       <button onClick={() => setPairingStrategy('asymmetric')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingStrategy === 'asymmetric' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Asymmetric</button>
+                       <button onClick={() => setPairingStrategy('mutual')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingStrategy === 'mutual' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Mutual</button>
+                       <button onClick={() => setPairingStrategy('hybrid')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingStrategy === 'hybrid' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Hybrid</button>
                     </div>
                  </div>
 
                  <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Institutional Flow</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Calculation Mode</p>
                     <div className="flex bg-white/50 p-1 rounded-xl border border-slate-200 gap-1">
-                       <button onClick={() => setPairingStrategy('asymmetric')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingStrategy === 'asymmetric' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Asymmetric (→)</button>
-                       <button onClick={() => setPairingStrategy('mutual')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingStrategy === 'mutual' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Mutual (⇄)</button>
+                       <button onClick={() => setPairingMode('assets')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingMode === 'assets' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Assets</button>
+                       <button onClick={() => setPairingMode('assets_auditors')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${pairingMode === 'assets_auditors' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400'}`}>Capacity</button>
                     </div>
                  </div>
 
@@ -501,7 +555,6 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                    </button>
                  )}
               </div>
-           </div>
 
            {exemptedDepts.length > 0 && (
              <div className="p-6 rounded-[28px] border border-rose-100 bg-rose-50/50">

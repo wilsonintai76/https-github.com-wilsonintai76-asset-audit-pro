@@ -165,33 +165,33 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
     const groupedDepts: Record<string, Department[]> = {};
     
     departments.filter(d => !d.isExempted).forEach(dept => {
+      // TRUST the auditGroupId. Every department is part of a group in the new architecture.
       const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
       groupedDepts[key].push(dept);
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
-      const isUnassigned = groupId.startsWith('unassigned_');
-      const deptIds = depts.map(d => d.id);
+      const isActuallyUnassigned = groupId.startsWith('unassigned_');
       const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
       
-      const name = isUnassigned 
-        ? depts[0].name 
-        : auditGroups.find(g => g.id === groupId)?.name || 'Unknown Group';
+      // Name Resolution: Group Record Name > First Dept Name
+      const groupRecord = auditGroups.find(g => g.id === groupId);
+      const name = groupRecord?.name || depts[0].name;
       
       return {
         name,
         assets: totalAssets,
         auditors: totalAuditors,
         memberCount: depts.length,
-        isJoint: !isUnassigned && depts.length > 0,
-        isConsolidated: !isUnassigned,
+        isJoint: !isActuallyUnassigned && depts.length > 1,
+        isConsolidated: !isActuallyUnassigned,
         id: groupId,
         members: depts
       };
     }).sort((a, b) => b.assets - a.assets);
-  }, [departments, auditGroups, schedules]);
+  }, [departments, auditGroups]);
 
   const overallTotalAssets = useMemo(() => {
      return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);

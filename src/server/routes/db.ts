@@ -619,7 +619,14 @@ db.get('/departments', async (c) => {
 db.post('/departments', rbacGuard('manage:departments'), async (c) => {
   const dept = await c.req.json();
   const id = dept.id || crypto.randomUUID();
+  const groupId = crypto.randomUUID(); // Auto-create a solo group
   try {
+    // 1. Create the Solo Group
+    await c.env.DB.prepare(
+      'INSERT INTO audit_groups (id, name) VALUES (?, ?)'
+    ).bind(groupId, dept.name).run();
+
+    // 2. Create the Department linked to that group
     await c.env.DB.prepare(
       'INSERT INTO departments (id, name, abbr, description, head_of_dept_id, audit_group_id, is_exempted) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(
@@ -628,10 +635,11 @@ db.post('/departments', rbacGuard('manage:departments'), async (c) => {
       dept.abbr,
       dept.description ?? null,
       dept.headOfDeptId ?? null,
-      dept.auditGroupId ?? null,
+      groupId, // Link to the new group
       dept.isExempted ? 1 : 0
     ).run();
-    return c.json({ id, ...dept });
+
+    return c.json({ id, ...dept, auditGroupId: groupId });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -834,6 +842,7 @@ db.post('/locations/clear', rbacGuard('admin:hub'), async (c) => {
   try {
     const deletes = [
       { id: 'schedules', sql: 'DELETE FROM audit_schedules' },
+      { id: 'perms',     sql: 'DELETE FROM cross_audit_permissions' }, // Must clear perms before groups
       { id: 'groups',    sql: 'DELETE FROM audit_groups' },
       { id: 'locations', sql: 'DELETE FROM locations' },
     ];
@@ -964,6 +973,8 @@ db.get('/permissions', async (c) => {
       id: p.id,
       auditorDeptId: p.auditor_dept_id,
       targetDeptId: p.target_dept_id,
+      auditorGroupId: p.auditor_group_id,
+      targetGroupId: p.target_group_id,
       isActive: p.is_active === 1,
       isMutual: p.is_mutual === 1
     })));
@@ -977,8 +988,8 @@ db.post('/permissions', async (c) => {
   const id = perm.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
-      'INSERT INTO cross_audit_permissions (id, auditor_dept_id, target_dept_id, is_active, is_mutual) VALUES (?, ?, ?, ?, ?)'
-    ).bind(id, perm.auditorDeptId, perm.targetDeptId, perm.isActive ? 1 : 0, perm.isMutual ? 1 : 0).run();
+      'INSERT INTO cross_audit_permissions (id, auditor_dept_id, target_dept_id, auditor_group_id, target_group_id, is_active, is_mutual) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(id, perm.auditorDeptId ?? null, perm.targetDeptId ?? null, perm.auditorGroupId ?? null, perm.targetGroupId ?? null, perm.isActive ? 1 : 0, perm.isMutual ? 1 : 0).run();
     return c.json({ id, ...perm });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -991,8 +1002,8 @@ db.post('/permissions/bulk', async (c) => {
     const statements = perms.map((p: any) => {
       const id = p.id || crypto.randomUUID();
       return c.env.DB.prepare(
-        'INSERT INTO cross_audit_permissions (id, auditor_dept_id, target_dept_id, is_active, is_mutual) VALUES (?, ?, ?, ?, ?)'
-      ).bind(id, p.auditorDeptId, p.targetDeptId, p.isActive ? 1 : 0, p.isMutual ? 1 : 0);
+        'INSERT INTO cross_audit_permissions (id, auditor_dept_id, target_dept_id, auditor_group_id, target_group_id, is_active, is_mutual) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(id, p.auditorDeptId ?? null, p.targetDeptId ?? null, p.auditorGroupId ?? null, p.targetGroupId ?? null, p.isActive ? 1 : 0, p.isMutual ? 1 : 0);
     });
     await c.env.DB.batch(statements);
     return c.json({ success: true, count: perms.length });
@@ -1024,8 +1035,13 @@ db.delete('/permissions/bulk', async (c) => {
 
 db.post('/permissions/clear', rbacGuard('system:settings'), async (c) => {
   try {
-    await c.env.DB.prepare('DELETE FROM cross_audit_permissions').run();
-    return c.json({ success: true, message: 'All cross-audit assignments cleared' });
+    // SYNCHRONIZED RESET: Clear pairings AND groups/links (User Requirement)
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM cross_audit_permissions'),
+      c.env.DB.prepare('UPDATE departments SET audit_group_id = NULL'),
+      c.env.DB.prepare('DELETE FROM audit_groups')
+    ]);
+    return c.json({ success: true, message: 'All cross-audit assignments and audit groups cleared' });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -1038,6 +1054,8 @@ db.patch('/permissions/:id', async (c) => {
   const values: any[] = [];
   if (updates.auditorDeptId !== undefined) { fields.push('auditor_dept_id = ?'); values.push(updates.auditorDeptId); }
   if (updates.targetDeptId !== undefined) { fields.push('target_dept_id = ?'); values.push(updates.targetDeptId); }
+  if (updates.auditorGroupId !== undefined) { fields.push('auditor_group_id = ?'); values.push(updates.auditorGroupId); }
+  if (updates.targetGroupId !== undefined) { fields.push('target_group_id = ?'); values.push(updates.targetGroupId); }
   if (updates.isActive !== undefined) { fields.push('is_active = ?'); values.push(updates.isActive ? 1 : 0); }
   if (updates.isMutual !== undefined) { fields.push('is_mutual = ?'); values.push(updates.isMutual ? 1 : 0); }
   if (fields.length === 0) return c.json({ success: true });
@@ -1236,7 +1254,15 @@ db.patch('/audit-groups/:id', rbacGuard('edit:team'), async (c) => {
 db.delete('/audit-groups/:id', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
-    await c.env.DB.prepare('DELETE FROM audit_groups WHERE id = ?').bind(id).run();
+    // We must handle foreign key dependencies manually or ensure they are cleared.
+    // 1. Delete associated cross_audit_permissions (auditor or target)
+    // 2. Nullify audit_group_id mapping in departments
+    // 3. Delete the group record
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM cross_audit_permissions WHERE auditor_group_id = ? OR target_group_id = ?').bind(id, id),
+      c.env.DB.prepare('UPDATE departments SET audit_group_id = NULL WHERE audit_group_id = ?').bind(id),
+      c.env.DB.prepare('DELETE FROM audit_groups WHERE id = ?').bind(id)
+    ]);
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -1615,7 +1641,23 @@ db.post('/system/initialize-defaults', rbacGuard('admin:hub'), async (c) => {
       WHERE id IN (SELECT DISTINCT department_id FROM locations)
     `).run();
 
-    return c.json({ success: true });
+    // 12. FORCE UNIVERSAL GROUPING: Ensure EVERY department has a group
+    // Find departments missing groups
+    const { results: orphanDepts } = await c.env.DB.prepare(
+      "SELECT id, name FROM departments WHERE audit_group_id IS NULL OR audit_group_id = ''"
+    ).all();
+
+    const groupStmts: any[] = [];
+    for (const d of (orphanDepts || []) as any[]) {
+      const gId = crypto.randomUUID();
+      groupStmts.push(c.env.DB.prepare("INSERT INTO audit_groups (id, name) VALUES (?, ?)").bind(gId, d.name));
+      groupStmts.push(c.env.DB.prepare("UPDATE departments SET audit_group_id = ? WHERE id = ?").bind(gId, d.id));
+    }
+    if (groupStmts.length > 0) {
+      await c.env.DB.batch(groupStmts);
+    }
+
+    return c.json({ success: true, groupsCreated: orphanDepts?.length || 0 });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }

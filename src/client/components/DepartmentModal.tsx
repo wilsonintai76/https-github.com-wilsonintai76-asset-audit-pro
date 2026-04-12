@@ -254,8 +254,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900">Cross-Audit Exemption</h4>
-                    <p className="text-[10px] text-slate-500">Exempt this unit from institutional cross-audit calculations.</p>
+                    <h4 className="text-xs font-bold text-slate-900">Internal Audit Mode</h4>
+                    <p className="text-[10px] text-slate-500">Enable if this unit performs its own internal inspections.</p>
                   </div>
                   <Switch 
                     checked={formData.isExempted}
@@ -266,7 +266,7 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
                    <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2">
                      <Ban className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                      <p className="text-[10px] text-amber-700 leading-tight">
-                       This department will be ignored by the grouping and pairing engine. Use for departments with no assets or auditors.
+                       This department will be ignored by the cross-audit grouping engine. Use for departments that perform their own internal inspections rather than participating in institutional cross-audits.
                      </p>
                    </div>
                 )}

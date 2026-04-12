@@ -90,7 +90,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
           <td class="center">${(dept.totalAssets || 0).toLocaleString()}</td>
           <td class="center">${locCount || '—'}</td>
           <td>${groupName !== '—' ? `<span class="badge-blue">${groupName}</span>` : '—'}</td>
-          <td class="center">${dept.isExempted ? '<span class="badge-red">Exempted</span>' : '<span class="badge-green">Included</span>'}</td>
+          <td class="center">${dept.isExempted ? '<span class="badge-amber">Internal Audit</span>' : '<span class="badge-green">Cross-Audit</span>'}</td>
         </tr>`;
     }).join('');
 
@@ -121,7 +121,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     td.center { text-align: center; }
     .sub { font-size: 10px; color: #94a3b8; }
     .na { font-style: italic; color: #cbd5e1; }
-    .badge-red { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
+    .badge-amber { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
     .badge-green { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
     .badge-blue { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; }
     .footer { margin-top: 24px; font-size: 9px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
@@ -141,8 +141,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
   </div>
   <div class="meta">
     <div class="meta-card"><div class="val">${departments.length}</div><div class="lbl">Total Departments</div></div>
-    <div class="meta-card"><div class="val">${departments.filter(d => !d.isExempted).length}</div><div class="lbl">Active (Included)</div></div>
-    <div class="meta-card"><div class="val">${departments.filter(d => d.isExempted).length}</div><div class="lbl">Exempted</div></div>
+    <div class="meta-card"><div class="val">${departments.filter(d => !d.isExempted).length}</div><div class="lbl">Cross-Audit Pool</div></div>
+    <div class="meta-card"><div class="val">${departments.filter(d => d.isExempted).length}</div><div class="lbl">Internal Audit Mode</div></div>
     <div class="meta-card"><div class="val">${departments.reduce((s, d) => s + (d.totalAssets || 0), 0).toLocaleString()}</div><div class="lbl">Total Assets</div></div>
   </div>
   <table>
@@ -154,7 +154,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
         <th class="center">Total Assets</th>
         <th class="center">Locations</th>
         <th>Audit Group</th>
-        <th class="center">Cross-Audit</th>
+        <th class="center">Audit Type</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -254,8 +254,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                         <div className="min-w-0">
                           <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
                             {dept.name}
-                            {dept.isExempted && <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[9px] font-black border border-rose-100 uppercase tracking-widest" title="Exempted from institutional cross-audits">Exempted</span>}
-                            {dept.isSystemExempted && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[9px] font-black border border-amber-100 uppercase tracking-widest" title="Automatically exempted: Unit has 0 Assets and 0 Auditors">System Exempted (Empty)</span>}
+                            {dept.isExempted && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[9px] font-black border border-amber-100 uppercase tracking-widest" title="This unit performs its own internal audits and is excluded from institutional cross-audit grouping.">Internal Audit Mode</span>}
+                            {dept.isSystemExempted && <span className="px-1.5 py-0.5 rounded bg-slate-50 text-slate-400 text-[9px] font-black border border-slate-100 uppercase tracking-widest" title="Automatically exempted: Unit has 0 Assets and 0 Auditors">System Exempted (Empty)</span>}
                           </div>
                           <div className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-[280px] break-words mt-0.5">{dept.description || 'No description provided'}</div>
                         </div>
@@ -318,9 +318,9 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                         <div className="flex gap-1 justify-start">
                           <button
                             onClick={() => onUpdate(dept.id, { isExempted: !dept.isExempted })}
-                            title={dept.isExempted ? 'Click to un-exempt (Include in Cross-Audits)' : 'Click to manually exempt (Exclude from Cross-Audits)'}
+                            title={dept.isExempted ? 'Switch to Cross-Audit Pool' : 'Switch to Internal Audit Mode'}
                             className={`w-9 h-9 flex items-center justify-center border rounded-xl transition-all active:scale-90 ${dept.isExempted
-                                ? 'bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100 shadow-sm'
+                                ? 'bg-amber-50 border-amber-200 text-amber-500 hover:bg-amber-100 shadow-sm'
                                 : 'bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100 shadow-sm'
                               }`}
                           >

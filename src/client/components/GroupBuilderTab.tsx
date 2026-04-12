@@ -115,23 +115,31 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
 
   const entities = useMemo(() => {
     const groupedDepts: Record<string, Department[]> = {};
-    departments.filter(d => !d.isExempted).forEach(dept => {
-      const groupExists = dept.auditGroupId && auditGroups.some(g => g.id === dept.auditGroupId);
-      const key = groupExists ? dept.auditGroupId! : 'unassigned_' + dept.id;
+    departments.filter(d => !d.isSystemExempted && !d.isExempted).forEach(dept => {
+      // Trust the auditGroupId if it exists. Every dept should have one in the new model.
+      // If it doesn't have one yet (e.g. before consolidation), we use a temporary key.
+      const key = dept.auditGroupId || 'unassigned_' + dept.id;
       if (!groupedDepts[key]) groupedDepts[key] = [];
       groupedDepts[key].push(dept);
     });
 
     return Object.entries(groupedDepts).map(([groupId, depts]) => {
-      const isUnassigned = groupId.startsWith('unassigned_');
+      const isActuallyUnassigned = groupId.startsWith('unassigned_');
       const totalAssets = depts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
-      const name = isUnassigned ? depts[0].name : auditGroups.find(g => g.id === groupId)?.name ?? depts[0].name;
-      const totalLocations = depts.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
-      const constitutesGroup = !isUnassigned;
-      const isStandalone = !constitutesGroup && totalAssets >= standaloneThresholdAssets;
       
-      // BBI Formula (Matched with backend): (Assets * 0.5) + (Locations * 100) + (Staff * 300)
+      // Name resolution: Group Record Name > Dept Name
+      const groupRecord = auditGroups.find(g => g.id === groupId);
+      const name = groupRecord?.name ?? depts[0].name;
+      
+      const totalLocations = depts.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
+      const constitutesGroup = !isActuallyUnassigned;
+      
+      // In the new model, even 1:1 "Standalone" units have a Group ID.
+      // We only consider it true 'Standalone' for UI labeling if it's high asset and the ONLY member.
+      const isStandalone = constitutesGroup && depts.length === 1 && totalAssets >= standaloneThresholdAssets;
+      
+      // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
       const bbi = (totalAssets * 0.5) + (totalLocations * 100) + (totalAuditors * 300);
 
       return { 
@@ -148,7 +156,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
         members: depts 
       };
     }).sort((a, b) => b.bbi - a.bbi);
-  }, [departments, auditGroups, maxAssetsPerDay]);
+  }, [departments, auditGroups, standaloneThresholdAssets]);
 
   const grandTotalAssets = useMemo(() => {
     return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);

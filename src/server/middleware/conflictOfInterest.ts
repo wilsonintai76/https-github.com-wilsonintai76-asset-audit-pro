@@ -73,6 +73,18 @@ export const auditAssignmentGuard = async (
     return next();
   }
 
+  // ── Resolve the site supervisor ID ───────────────────────────────────────
+  let supervisorId: string | null = (updates as any).supervisorId ?? null;
+  if (!supervisorId) {
+    const auditId = c.req.param('id');
+    if (auditId) {
+      const existing = await c.env.DB.prepare('SELECT supervisor_id FROM audit_schedules WHERE id = ?')
+        .bind(auditId)
+        .first<{ supervisor_id: string | null }>();
+      supervisorId = existing?.supervisor_id ?? null;
+    }
+  }
+
   // ── Rule 2: Conflict of interest per auditor ─────────────────────────────
   const today = new Date().toISOString().split('T')[0];
 
@@ -99,29 +111,63 @@ export const auditAssignmentGuard = async (
     const auditorDeptId = auditor?.department_id;
     if (!auditorDeptId) continue; // No dept set, cannot verify — allow
 
-    // Rule 2a: Own-department block
-    if (auditorDeptId === targetDeptId) {
+    // Fetch target department's exemption status (Internal Audit Mode)
+    const targetDept = await c.env.DB.prepare(
+      'SELECT is_exempted FROM departments WHERE id = ?'
+    ).bind(targetDeptId).first<{ is_exempted: number }>();
+    const isInternalAuditMode = targetDept?.is_exempted === 1;
+
+    // Rule 2a: Own-department block (Bypass allowed for ADMINS or departments in Internal Audit Mode)
+    const isAdmin = caller.roles?.includes('Admin') || caller.role === 'Admin';
+    if (auditorDeptId === targetDeptId && !isAdmin && !isInternalAuditMode) {
       return c.json(
         {
-          error: 'Conflict of interest: an auditor cannot be assigned to audit their own department',
+          error: 'Conflict of interest: an auditor cannot be assigned to audit their own department unless it is in Internal Audit Mode',
           code: 'SELF_DEPARTMENT',
         },
         409,
       );
     }
 
+    // Rule 2d: Site Supervisor Conflict (Integrity Rule)
+    if (auditorId === supervisorId) {
+      return c.json(
+        {
+          error: 'Conflict of interest: the selected officer is the site supervisor for this location and cannot act as its inspector',
+          code: 'SUPERVISOR_CONFLICT_INTERNAL',
+        },
+        409,
+      );
+    }
+
     // Rule 2b: Cross-audit permission required
-    // Checks both directed (A→B) and mutual (is_mutual=1 and B→A) permissions
+    // Bypass for Internal Audit Mode (Self-Audit)
+    if (isInternalAuditMode && auditorDeptId === targetDeptId) {
+      continue; 
+    }
+
+    // Checks both directed and mutual permissions at either Department or Group level.
     const perm = await c.env.DB.prepare(`
-      SELECT id FROM cross_audit_permissions
-      WHERE is_active = 1 AND (
-        (auditor_dept_id = ? AND target_dept_id = ?)
+      SELECT p.id 
+      FROM cross_audit_permissions p
+      JOIN departments d_aud ON d_aud.id = ?
+      JOIN departments d_tgt ON d_tgt.id = ?
+      WHERE p.is_active = 1 AND (
+        -- 1. Direct Department Match
+        (p.auditor_dept_id = d_aud.id AND p.target_dept_id = d_tgt.id)
         OR
-        (is_mutual = 1 AND auditor_dept_id = ? AND target_dept_id = ?)
+        (p.is_mutual = 1 AND p.auditor_dept_id = d_tgt.id AND p.target_dept_id = d_aud.id)
+        OR
+        -- 2. Group-Level Match (if both belong to audit groups)
+        (d_aud.audit_group_id IS NOT NULL AND d_tgt.audit_group_id IS NOT NULL AND (
+          (p.auditor_group_id = d_aud.audit_group_id AND p.target_group_id = d_tgt.audit_group_id)
+          OR
+          (p.is_mutual = 1 AND p.auditor_group_id = d_tgt.audit_group_id AND p.target_group_id = d_aud.audit_group_id)
+        ))
       )
       LIMIT 1
     `)
-      .bind(auditorDeptId, targetDeptId, targetDeptId, auditorDeptId)
+      .bind(auditorDeptId, targetDeptId)
       .first<{ id: string }>();
 
     if (!perm) {

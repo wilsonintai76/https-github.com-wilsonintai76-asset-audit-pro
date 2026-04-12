@@ -382,13 +382,10 @@ compute.post(
     }
 
     // --- LOGIC REFINEMENT: Burden Score & Parity ---
-    // Outlier Safeguard: Kolej Kediaman (Hostels) is always exempted due to extreme density
-    const HOSTEL_DEPT_NAME = 'UNIT PENGURUSAN KOLEJ KEDIAMAN';
     
     // 3. Separate standalones from pool
     // STANDALONE: >= 1000 assets OR >= 15 locations OR explicitly excluded AND meets min auditors
     const standaloneDepts = depts.filter(d => {
-      if (d.name === HOSTEL_DEPT_NAME) return false; // Hostels are exempted, not standalone entities in this logic
       if (d.is_exempted) return false;
       const isLarge = (d.total_assets || 0) >= threshold || (locationCountByDept[d.id] || 0) >= 15;
       const isExplicit = excludedDeptIds.includes(d.id);
@@ -397,7 +394,6 @@ compute.post(
 
     const pool = depts.filter(d => 
       !d.is_exempted && 
-      d.name !== HOSTEL_DEPT_NAME &&
       ((d.total_assets || 0) > 0 || (locationCountByDept[d.id] || 0) > 0) && 
       !standaloneDepts.some(s => s.id === d.id)
     );
@@ -560,14 +556,15 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
       console.warn('Parity could not be automatically enforced. Pairing might fail.');
     }
     
-    // 6. Create audit_groups and link departments
+    // 6. Create audit_groups for bundled units
     const createdGroups: { name: string; id: string; departments: string[]; totalAssets: number; totalLocations: number; auditors: number; burden: number }[] = [];
     const writeStmts: any[] = [];
+    let groupPrefixIdx = 0;
 
-    for (let i = 0; i < finalBundles.length; i++) {
-      const groupName = `Group ${String.fromCharCode(65 + i)}`;
+    const processBundle = (bundle: any[]) => {
+      const idx = groupPrefixIdx++;
+      const groupName = `Group ${String.fromCharCode(65 + (idx % 26))}${idx >= 26 ? Math.floor(idx / 26) : ''}`;
       const groupId = crypto.randomUUID();
-      const bundle = finalBundles[i];
       
       const gAssets = bundle.reduce((s, d) => s + (d.total_assets || 0), 0);
       const gLocs = bundle.reduce((s, d) => s + (locationCountByDept[d.id] || 0), 0);
@@ -586,8 +583,19 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
         totalAssets: gAssets,
         totalLocations: gLocs,
         auditors: gAuditors,
-        burden: Math.round(gBBI) // Keep 'burden' as the key for compatibility, but use BBI value
+        burden: Math.round(gBBI)
       });
+    };
+
+    // First process consolidated bundles
+    for (const bundle of finalBundles) {
+      processBundle(bundle);
+    }
+
+    // Now process any remaining standalone (large) departments into solo groups
+    // This follows the USER's request for 100% group consistency.
+    for (const dept of standaloneDepts) {
+      processBundle([dept]);
     }
 
     if (writeStmts.length > 0) {
@@ -597,10 +605,10 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
 
     return c.json({
       groups: createdGroups,
-      ungrouped: standaloneDepts.map(s => s.id),
+      ungrouped: [], // Always empty now
       createdCount: createdGroups.length,
       recommendations,
-      isParityEven: (standaloneDepts.length + createdGroups.length) % 2 === 0
+      isParityEven: createdGroups.length % 2 === 0
     });
   },
 );
@@ -1232,7 +1240,7 @@ compute.post(
   requirePermission('manage:system'),
   async (c) => {
     const db = c.env.DB;
-    const MODEL = '@cf/meta/llama-3-8b-instruct';
+    const MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8-fast';
 
     const [deptsRes, usersRes, phasesRes, instKPIsRes, settingRes, locCountsRes] = await Promise.all([
       db.prepare('SELECT id, name, total_assets FROM departments WHERE is_exempted = 0').all(),
@@ -1240,7 +1248,7 @@ compute.post(
       db.prepare('SELECT id, name, start_date, end_date FROM audit_phases ORDER BY start_date ASC').all(),
       db.prepare('SELECT phase_id, target_percentage FROM institution_kpi_targets').all(),
       db.prepare("SELECT value FROM system_settings WHERE id = 'audit_constraints'").first<{ value: string }>(),
-      db.prepare('SELECT department_id, count(*) as count FROM locations GROUP BY department_id').all()
+      db.prepare('SELECT department_id, count(*) as count, SUM(total_assets) as assets FROM locations GROUP BY department_id').all()
     ]);
  
     const depts = (deptsRes.results || []) as any[];
@@ -1251,8 +1259,12 @@ compute.post(
     const constraints = settingRes ? JSON.parse(settingRes.value) : {};
 
     const locationCountByDept: Record<string, number> = {};
+    const locationAssetsByDept: Record<string, number> = {};
     for (const l of locCounts) {
-      if (l.department_id) locationCountByDept[l.department_id] = l.count;
+      if (l.department_id) {
+        locationCountByDept[l.department_id] = l.count;
+        locationAssetsByDept[l.department_id] = l.assets || 0;
+      }
     }
  
     const today = new Date().toISOString().split('T')[0];
@@ -1278,16 +1290,19 @@ compute.post(
     const activeUnits = depts.filter(d => (d.total_assets || 0) > 0 || (auditorCountByDept[d.id] || 0) > 0);
 
     // --- MATHEMATICAL PRE-CALCULATION ---
-    const activeUnitStats = activeUnits.map(d => ({
-      name: d.name,
-      assets: d.total_assets || 0,
-      locations: locationCountByDept[d.id] || 0,
-      auditors: auditorCountByDept[d.id] || 0,
-      burden: (d.total_assets || 0) * 0.7 + (locationCountByDept[d.id] || 0) * 100,
-      capacityRatio: (auditorCountByDept[d.id] || 0) > 0 
-        ? Math.round(((d.total_assets || 0) + (locationCountByDept[d.id] || 0) * 10) / (auditorCountByDept[d.id] || 0)) 
-        : 'INF'
-    }));
+    const activeUnitStats = activeUnits.map(d => {
+      const effectiveAssets = Math.max(d.total_assets || 0, locationAssetsByDept[d.id] || 0);
+      return {
+        name: d.name,
+        assets: effectiveAssets,
+        locations: locationCountByDept[d.id] || 0,
+        auditors: auditorCountByDept[d.id] || 0,
+        burden: effectiveAssets * 0.7 + (locationCountByDept[d.id] || 0) * 100,
+        capacityRatio: (auditorCountByDept[d.id] || 0) > 0 
+          ? Math.round((effectiveAssets + (locationCountByDept[d.id] || 0) * 10) / (auditorCountByDept[d.id] || 0)) 
+          : 'INF'
+      };
+    });
 
     const globalAvgBurden = Math.round(activeUnitStats.reduce((s, u) => s + (typeof u.capacityRatio === 'number' ? u.capacityRatio : 0), 0) / activeUnits.length);
 
@@ -1308,7 +1323,7 @@ Infrastructure Stats:
 Unit Breakdown:
 ${activeUnitStats.slice(0, 20).map(u => `- ${u.name}: ${u.assets} assets, ${u.locations} locs, ${u.auditors} auds (Load Index: ${u.capacityRatio})`).join('\n')}
 
-CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR AFTER.
+CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR AFTER. Do NOT invent a Phase 4; only use the ${phases.length} phases provided: ${phases.map(p => p.name).join(', ')}.
 {
   "score": number,
   "riskLevel": "Low"|"Medium"|"High"|"Critical",
@@ -1324,7 +1339,8 @@ CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR 
   },
   "bottlenecks": string[],
   "recommendations": string[],
-  "exemptionRecommendations": []
+  "exemptionRecommendations": [],
+  "projections": { "Phase 1": "percentage_string", "Phase 2": "percentage_string", "Phase 3": "percentage_string" }
 }
 `;
 
@@ -1335,7 +1351,7 @@ CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR 
           { role: 'system', content: 'You are an Audit Strategy AI. You analyze resource constraints and logistical complexity vs goals. Respond with valid JSON only. The "score" field must be an integer from 0 to 100 representing feasibility percentage.' },
           { role: 'user', content: aiPrompt }
         ],
-        max_tokens: 1024
+        max_tokens: 4096
       });
 
       // Robust extraction: Handle if result is { response: string }, { result: string }, or raw string
@@ -1343,32 +1359,45 @@ CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR 
       if (typeof result === 'string') {
         rawResponse = result;
       } else if (result && typeof result === 'object') {
-        // AI models sometimes wrap the answer in 'response' or 'result' fields
         const obj = result as any;
-        rawResponse = obj.response || obj.result || JSON.stringify(result);
+        if (typeof obj.response === 'string') {
+          rawResponse = obj.response;
+        } else if (typeof obj.result === 'string') {
+          rawResponse = obj.result;
+        } else {
+          rawResponse = JSON.stringify(result);
+        }
       }
 
-      // Regex to find the widest possible JSON block {...}
+      // Ensure we have a string before trimming
+      rawResponse = (rawResponse || '').toString();
+
+      // 1. Strip markdown fences if present
+      rawResponse = rawResponse.trim().replace(/^```json\n?|\n?```$/g, '').trim();
+
+      // 2. Regex to find the widest possible JSON block {...}
       let jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
       
-      // If the extracted content itself was a stringified JSON (common in double-wrapped responses), 
-      // try to parse the whole thing first
       let parsed: any = null;
       try {
         // Case 1: The response is already the object we want
         if (typeof result === 'object' && result.score !== undefined) {
           parsed = result;
         } 
-        // Case 2: The response is a string that is perfect JSON
+        // Case 2: The response is a string that is perfect JSON (or contains one)
         else if (jsonMatch) {
           const extracted = jsonMatch[0];
           parsed = JSON.parse(extracted);
           
           // Re-check for nested 'response' inside the parsed string 
-          // (Handles the {"response": "{\"score\":...}"} case in the user screenshot)
+          // (Handles the {"response": "{\"score\":...}"} case)
           if (parsed.response && typeof parsed.response === 'string' && parsed.response.includes('{')) {
             const nestedMatch = parsed.response.match(/\{[\s\S]*\}/);
-            if (nestedMatch) parsed = JSON.parse(nestedMatch[0]);
+            if (nestedMatch) {
+              const nestedParsed = JSON.parse(nestedMatch[0]);
+              // If the nested object looks like our schema, use it
+              if (nestedParsed.score !== undefined) parsed = nestedParsed;
+            }
           }
         }
       } catch (e) {
@@ -1383,7 +1412,7 @@ CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR 
         }
       }
 
-      if (!parsed) {
+      if (!parsed || typeof parsed !== 'object') {
         throw new Error('AI response did not contain a valid JSON block.');
       }
       
@@ -1403,7 +1432,7 @@ CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR 
         bottlenecks: [`Analysis failed: ${err.message}`], 
         recommendations: ['Check Cloudflare AI quota/binding', 'Ensure all departments have asset data'], 
         projections: {},
-        rawText: `[Type: ${typeof result}] ` + (typeof result === 'string' ? result : JSON.stringify(result))?.substring(0, 800) || 'No response captured'
+        rawText: typeof result === 'string' ? result : JSON.stringify(result)
       });
     }
   }

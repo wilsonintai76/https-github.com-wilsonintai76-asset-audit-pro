@@ -90,7 +90,7 @@ const App: React.FC = () => {
     handleAddDepartmentMapping, handleDeleteDepartmentMapping,
     handleSyncLocationMappings, handleUpsertLocations,
     handleSetDeptTotalsFromMapping, handleUpdateUninspectedAssetCounts,
-    handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleResetPairingData,
+    handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleSaveFeasibilityReport, handleResetPairingData,
     showToast, closeToast, showError, customConfirm, customAlert
   } = appActions;
 
@@ -392,6 +392,8 @@ const App: React.FC = () => {
           onResetPairingData={handleResetPairingData}
           auditGroups={auditGroups}
           feasibilityReport={appData.feasibilityReport}
+          onSaveFeasibilityReport={handleSaveFeasibilityReport}
+          currentUser={currentUser}
         />
       )}
       {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}

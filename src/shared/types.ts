@@ -111,8 +111,10 @@ export interface AuditInsight {
 
 export interface CrossAuditPermission {
   id: string;
-  auditorDeptId: string;
-  targetDeptId: string;
+  auditorDeptId?: string | null;
+  targetDeptId?: string | null;
+  auditorGroupId?: string | null;
+  targetGroupId?: string | null;
   isActive: boolean;
   isMutual: boolean;
 }

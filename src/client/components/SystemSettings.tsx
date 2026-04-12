@@ -73,16 +73,18 @@ interface SystemSettingsProps {
   onDeleteAuditGroup: (id: string) => Promise<void>;
   onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
   onAutoConsolidate: (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => Promise<void>;
-  onRunStrategicPairing?: (payload: any) => Promise<{ pairings: any[] }>;
+  onRunStrategicPairing: (payload: any) => Promise<any>;
+  onSaveFeasibilityReport: (report: any) => void;
+  feasibilityReport: any;
   onBulkAddPermissions: (auditorDept: string, targetDept: string, isMutual: boolean) => Promise<void>;
   onBulkRemovePermissions: (ids: string[]) => Promise<void>;
   pairingLocked?: boolean;
   pairingLockInfo?: { lockedAt: string; lockedBy: string; pairingCount: number; cycleYear: number } | null;
   onLockPairing?: (pairingCount: number) => Promise<void>;
   onUnlockPairing?: () => Promise<void>;
-  onResetPairingData?: () => Promise<void>;
+  onResetPairingData?: () => void;
   showToast?: (message: string, type?: any) => void;
-  feasibilityReport?: any;
+  currentUser?: User | null;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -143,6 +145,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onBulkAddPermissions,
   onBulkRemovePermissions,
   onRunStrategicPairing,
+  onSaveFeasibilityReport,
+  feasibilityReport,
   pairingLocked,
   pairingLockInfo,
   onLockPairing,
@@ -153,7 +157,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onAutoCalculateTierTargets,
   showToast,
   locations,
-  feasibilityReport
+  currentUser
 }) => {
   const isAdmin = (userRoles || []).includes('Admin');
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -340,6 +344,9 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
           onUpdateInstitutionKPI={onUpdateInstitutionKPI}
           onAutoCalculateTierTargets={onAutoCalculateTierTargets}
           onUpdateFeasibility={onRunStrategicPairing}
+          onSaveFeasibilityReport={onSaveFeasibilityReport}
+          feasibilityReport={feasibilityReport}
+          showToast={showToast}
         />
         {isAdmin && (
           <div className="flex justify-end mt-2 pr-2">
@@ -449,6 +456,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation}
         onUpdateDailyInspectionCapacity={onUpdateDailyInspectionCapacity}
         showToast={showToast}
+        currentUser={currentUser}
       />
 
       {isAdmin && <RBACMatrix showToast={showToast} />}
