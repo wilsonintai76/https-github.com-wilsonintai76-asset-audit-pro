@@ -616,6 +616,29 @@ db.get('/departments', async (c) => {
   }
 });
 
+// Sync department asset totals from locations (Source of Truth)
+db.post('/departments/refresh', rbacGuard('manage:departments'), async (c) => {
+  try {
+    await c.env.DB.prepare(`
+      UPDATE departments 
+      SET total_assets = (
+        SELECT COALESCE(SUM(l.total_assets), 0) 
+        FROM locations l 
+        WHERE l.department_id = departments.id
+      ),
+      uninspected_asset_count = (
+        SELECT COALESCE(SUM(l.uninspected_asset_count), 0) 
+        FROM locations l 
+        WHERE l.department_id = departments.id
+      )
+      WHERE id IN (SELECT DISTINCT department_id FROM locations)
+    `).run();
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 db.post('/departments', rbacGuard('manage:departments'), async (c) => {
   const dept = await c.req.json();
   const id = dept.id || crypto.randomUUID();
@@ -919,6 +942,98 @@ db.post('/locations/bulk', rbacGuard('manage:locations'), async (c) => {
   }
 });
 
+db.post('/locations/upsert', rbacGuard('manage:locations'), async (c) => {
+  const locs = await c.req.json();
+  try {
+    const statements = locs.map((l: any) => {
+      const id = l.id || crypto.randomUUID();
+      return c.env.DB.prepare(`
+        INSERT INTO locations 
+        (id, name, abbr, department_id, building_id, level, description, supervisor_id, contact, total_assets, uninspected_asset_count, is_active, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(name, department_id) DO UPDATE SET
+          total_assets = EXCLUDED.total_assets,
+          uninspected_asset_count = COALESCE(EXCLUDED.uninspected_asset_count, uninspected_asset_count),
+          building_id = COALESCE(EXCLUDED.building_id, building_id),
+          level = COALESCE(EXCLUDED.level, level),
+          supervisor_id = COALESCE(EXCLUDED.supervisor_id, supervisor_id)
+      `).bind(
+        id,
+        l.name,
+        l.abbr || '',
+        l.departmentId || null,
+        l.buildingId || null,
+        l.level || null,
+        l.description || null,
+        l.supervisorId || null,
+        l.contact || null,
+        l.totalAssets ?? 0,
+        l.uninspectedAssetCount ?? 0,
+        l.isActive !== undefined ? (l.isActive ? 1 : 0) : 1,
+        l.status ?? 'Active'
+      );
+    });
+
+    // D1 batch limit is 100 statements
+    const CHUNK = 50;
+    for (let i = 0; i < statements.length; i += CHUNK) {
+      await c.env.DB.batch(statements.slice(i, i + CHUNK));
+    }
+    
+    return c.json({ success: true, count: locs.length });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.post('/locations/sync', rbacGuard('manage:locations'), async (c) => {
+  try {
+    // 1. Fetch current mappings
+    const { results: mappings } = await c.env.DB.prepare('SELECT source_name, target_department_id FROM department_mappings').all();
+    if (!mappings || mappings.length === 0) return c.json({ success: true, count: 0 });
+
+    const statements: any[] = [];
+    
+    for (const m of (mappings || []) as any[]) {
+      // Logic A: Find locations whose department name/abbr matches the source_name and move them to target_department_id.
+      // This handles active departments that are being merged/consolidated.
+      statements.push(c.env.DB.prepare(`
+        UPDATE locations 
+        SET department_id = ? 
+        WHERE department_id IN (
+          SELECT id FROM departments 
+          WHERE UPPER(name) = UPPER(?) OR UPPER(name) = UPPER(?) OR UPPER(abbr) = UPPER(?) OR UPPER(abbr) = UPPER(?)
+        )
+      `).bind(m.target_department_id, m.source_name, m.source_name.trim(), m.source_name, m.source_name.trim()));
+      
+      // Logic B: Handle locations where the name/abbr itself matches the source_name
+      // and they are currently assigned to "Software Development", have no department,
+      // or belong to a department that has been deleted (orphans).
+      statements.push(c.env.DB.prepare(`
+        UPDATE locations 
+        SET department_id = ? 
+        WHERE (UPPER(name) = UPPER(?) OR UPPER(abbr) = UPPER(?))
+        AND (
+          department_id IS NULL 
+          OR department_id NOT IN (SELECT id FROM departments)
+          OR department_id IN (SELECT id FROM departments WHERE name = 'Software Development')
+        )
+      `).bind(m.target_department_id, m.source_name, m.source_name));
+    }
+
+    if (statements.length > 0) {
+      const CHUNK = 100;
+      for (let i = 0; i < statements.length; i += CHUNK) {
+        await c.env.DB.batch(statements.slice(i, i + CHUNK));
+      }
+    }
+
+    return c.json({ success: true, rulesApplied: mappings.length });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // Department Mappings
 db.get('/department-mappings', async (c) => {
   try {
@@ -1028,6 +1143,15 @@ db.delete('/permissions/bulk', async (c) => {
     const placeholders = ids.map(() => '?').join(',');
     await c.env.DB.prepare(`DELETE FROM cross_audit_permissions WHERE id IN (${placeholders})`).bind(...ids).run();
     return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.post('/permissions/reset-only', async (c) => {
+  try {
+    await c.env.DB.prepare('DELETE FROM cross_audit_permissions').run();
+    return c.json({ success: true, message: 'All cross-audit assignments cleared' });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }

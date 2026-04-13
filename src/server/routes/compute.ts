@@ -317,11 +317,25 @@ compute.post(
 // Purges old auto-groups, re-runs the algorithm, writes new groups + dept links.
 // ─────────────────────────────────────────────────────────────────────────────
 const consolidateSchema = z.object({
-  threshold: z.number().int().min(0).default(1000), // Standalone Asset Threshold
+  threshold: z.number().int().min(0).default(1000), // Base Standalone Asset Threshold
   excludedDeptIds: z.array(z.string()).default([]),
   minAuditors: z.number().int().min(1).default(2),
-  pairingStrategy: z.enum(['mutual', 'asymmetric']).default('asymmetric'),
+  groupingMargin: z.number().min(0).max(0.5).default(0.15), // 10-15% margin
   useAI: z.boolean().default(false),
+  aiConsolidation: z.boolean().default(false),
+  minAuditorsPerGroup: z.number().int().min(1).default(10),
+  pairingMode: z.enum(['asymmetric', 'strict_mutual', 'hybrid']).default('strict_mutual'),
+  dryRun: z.boolean().default(false),
+});
+
+const commitDraftSchema = z.object({
+  groups: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    departments: z.array(z.string()),
+    tier: z.string().optional(),
+    isTaskForce: z.boolean().default(false)
+  }))
 });
 
 compute.post(
@@ -329,15 +343,14 @@ compute.post(
   requirePermission('manage:system'),
   zValidator('json', consolidateSchema),
   async (c) => {
-    const { threshold, excludedDeptIds, minAuditors, pairingStrategy, useAI } = c.req.valid('json');
+    const { threshold: baseThreshold, excludedDeptIds, minAuditors, minAuditorsPerGroup, groupingMargin, useAI, aiConsolidation, pairingMode, dryRun } = c.req.valid('json');
     const db = c.env.DB;
 
-    // 1. Purge existing auto-generated groups (names that start with 'Group ')
+    // 1. Purge existing auto-generated groups - Skip if dryRun
     const { results: existingGroups } = await db.prepare("SELECT id FROM audit_groups WHERE name LIKE 'Group %'").all();
     const oldGroupIds = ((existingGroups || []) as any[]).map((g) => g.id);
 
-    if (oldGroupIds.length > 0) {
-      // Unlink departments first to avoid FK issues
+    if (oldGroupIds.length > 0 && !dryRun) {
       const unlinkStmts = oldGroupIds.map((id: string) =>
         db.prepare('UPDATE departments SET audit_group_id = NULL WHERE audit_group_id = ?').bind(id),
       );
@@ -348,11 +361,11 @@ compute.post(
       await db.batch(deleteStmts);
     }
 
-    // 2. Fetch fresh department data, auditor counts, and location counts
+    // 2. Fetch fresh data
     const [freshDeptsRes, usersRes, locCountsRes] = await Promise.all([
       db.prepare('SELECT * FROM departments').all(),
       db.prepare(`
-        SELECT department_id, certification_expiry FROM users 
+        SELECT department_id, roles, certification_expiry FROM users 
         WHERE status = 'Active' 
           AND (
             JSON_EXTRACT(roles, '$') LIKE '%Auditor%'
@@ -371,7 +384,9 @@ compute.post(
     const auditorCountByDept: Record<string, number> = {};
     for (const u of users) {
       if (!u.department_id) continue;
-      if (u.certification_expiry && u.certification_expiry >= today) {
+      // Strict Auditor Definition: Must be Active and have an unexpired certification
+      const isCertified = u.certification_expiry && u.certification_expiry >= today;
+      if (isCertified) {
         auditorCountByDept[u.department_id] = (auditorCountByDept[u.department_id] || 0) + 1;
       }
     }
@@ -381,222 +396,309 @@ compute.post(
       if (l.department_id) locationCountByDept[l.department_id] = l.count;
     }
 
-    // --- LOGIC REFINEMENT: Burden Score & Parity ---
-    
-    // 3. Separate standalones from pool
-    // STANDALONE: >= 1000 assets OR >= 15 locations OR explicitly excluded AND meets min auditors
-    const standaloneDepts = depts.filter(d => {
-      if (d.is_exempted) return false;
-      const isLarge = (d.total_assets || 0) >= threshold || (locationCountByDept[d.id] || 0) >= 15;
-      const isExplicit = excludedDeptIds.includes(d.id);
-      return (isLarge || isExplicit) && (auditorCountByDept[d.id] || 0) >= minAuditors;
-    });
+    // Helper to identify UPKK
+    const isUPKK = (d: any) => d.abbr === 'UPKK' || d.name.includes('UPKK') || d.name.includes('PENGURUSAN KOLEJ KEDIAMAN');
 
-    const pool = depts.filter(d => 
+    // Filter relevant departments (exclude exempted, must have assets or locations)
+    const activeDepts = depts.filter(d => 
       !d.is_exempted && 
-      ((d.total_assets || 0) > 0 || (locationCountByDept[d.id] || 0) > 0) && 
-      !standaloneDepts.some(s => s.id === d.id)
+      ((d.total_assets || 0) > 0 || (locationCountByDept[d.id] || 0) > 0)
     );
 
-    // 4. Calculate Balanced Burden Index (BBI) & Target Bins
-    // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
-    // Target Magnitude for a full-day audit: 1,500 BBI
-    const getBBI = (d: any) => 
-      (d.total_assets || 0) * 0.5 + 
-      (locationCountByDept[d.id] || 0) * 100 + 
-      (auditorCountByDept[d.id] || 0) * 300;
+    // --- PARITY OPTIMIZATION ---
+    // Scan 800-1000 to find threshold that gives even entities
+    let bestThreshold = baseThreshold >= 800 && baseThreshold <= 1000 ? baseThreshold : 900;
+    const candidates = [900, 1000, 800, 850, 950, 750, 1050];
+    
+    const calculateEntityCount = (targetT: number) => {
+      const standalones = activeDepts.filter(d => {
+        const isTF = isUPKK(d);
+        if (isTF) return false; // Task forces always consolidated or handled separately
+        const meetsT = (d.total_assets || 0) >= targetT;
+        return meetsT && (auditorCountByDept[d.id] || 0) >= minAuditors;
+      });
+      const pool = activeDepts.filter(d => !standalones.some(s => s.id === d.id));
+      const totalPoolAssets = pool.reduce((sum, d) => sum + (d.total_assets || 0), 0);
+      const poolGroups = Math.max(1, Math.ceil(totalPoolAssets / targetT));
+      return standalones.length + poolGroups;
+    };
 
+    for (const cand of candidates) {
+      if (calculateEntityCount(cand) % 2 === 0) {
+        bestThreshold = cand;
+        break;
+      }
+    }
+
+    // 3. Separate standalones from pool using Optimized Threshold
+    const standaloneDepts = activeDepts.filter(d => {
+      if (isUPKK(d)) return false; 
+      const assets = d.total_assets || 0;
+      const isExplicit = excludedDeptIds.includes(d.id);
+      
+      // Margin logic: if within 15% of threshold, we only go standalone if we have enough auditors
+      const withinMargin = assets >= bestThreshold * (1 - groupingMargin);
+      const meetsThreshold = assets >= bestThreshold;
+      
+      return (meetsThreshold || isExplicit || (withinMargin && (auditorCountByDept[d.id] || 0) >= minAuditors)) && 
+             (auditorCountByDept[d.id] || 0) >= minAuditors;
+    });
+
+    const pool = activeDepts.filter(d => !standaloneDepts.some(s => s.id === d.id));
+
+    // 4. Consolidation Pool Identification
+    // Standalone departments are those that meet either the Asset or Auditor threshold
     const recommendations: { deptId: string; reason: string; action: 'exempt' | 'merge' }[] = [];
     
-    // Identify Auto-Exemption Recommendations
-    const filteredPool: any[] = [];
-    for (const d of pool) {
-      const bbi = getBBI(d);
-      if (bbi < 300) {
-        recommendations.push({ deptId: d.id, reason: `Ultra-low workload (BBI: ${Math.round(bbi)}). Logistically inefficient for cross-audit.`, action: 'exempt' });
-        filteredPool.push(d); // Still in pool until user accepts, but flagged
-      } else if (bbi > 10000) {
-        recommendations.push({ deptId: d.id, reason: `Mega-unit workload (BBI: ${Math.round(bbi)}). Overwhelms standard pairs.`, action: 'exempt' });
-        filteredPool.push(d);
-      } else {
-        filteredPool.push(d);
-      }
-    }
+    // Identify specialized groups (Task Force)
+    const taskForces = pool.filter(isUPKK);
+    const normalPool = pool.filter(d => !taskForces.some(tf => tf.id === d.id));
 
-    const totalPoolBBI = filteredPool.reduce((sum, d) => sum + getBBI(d), 0);
-    
-    // Target Bins based on total staff capacity (Min 2 per group)
-    const totalAuditors = filteredPool.reduce((sum, d) => sum + (auditorCountByDept[d.id] || 0), 0);
-    let targetBins = Math.max(1, Math.floor(totalAuditors / minAuditors));
-    // Also respect BBI density: dont make groups too huge
-    const bbiTargetBins = Math.ceil(totalPoolBBI / 1500);
-    targetBins = Math.min(targetBins, bbiTargetBins);
-    
-    // PARITY ENFORCEMENT: (Standalone + Bins) must be EVEN
-    // We aim for even total entities to ensure every unit has a cross-audit partner
-    if ((standaloneDepts.length + targetBins) % 2 !== 0) {
-      if (targetBins > 1) {
-        targetBins--;
-      } else if (targetBins === 1 && pool.length > 0) {
-        // If 1 bin makes it odd, try to push a standalone into the pool if possible, 
-        // but only if we have pool items to merge with.
-        if (standaloneDepts.length > 0) {
-           const smallestIdx = standaloneDepts.reduce((min, d, i, a) => 
-             (d.total_assets || 0) < (a[min].total_assets || 0) ? i : min, 0);
-           const pulledDept = standaloneDepts.splice(smallestIdx, 1)[0];
-           pool.push(pulledDept);
-           targetBins = 1;
-        } else {
-           // If 0 standalones and 1 bin, we stay at 1. Parity will be odd but we MUST form the group.
-           targetBins = 1;
-        }
-      } else {
-        targetBins++; 
-      }
-    }
+    // 5. Binning
+    // 5. Binning - Anchor only if we meet the Group-Level Manpower Baseline
+    const anchors = normalPool.filter(d => (auditorCountByDept[d.id] || 0) >= minAuditorsPerGroup);
+    const orphans = normalPool.filter(d => (auditorCountByDept[d.id] || 0) < minAuditorsPerGroup);
 
-    // AI-Categorization (Optional) - Refined for balanced sizes
-    let aiCategories: Record<string, string> = {};
-    if (useAI && pool.length > 0) {
+    const bins: any[][] = anchors.map(a => [a]);
+
+    // AI-Driven Consolidation Branch
+    if (aiConsolidation) {
       const MODEL = '@cf/meta/llama-3.1-8b-instruct';
-      const prompt = `Categorize these departments into semantic clusters. 
-Aim for exactly ${targetBins} balanced groups of roughly 1,000 asset-units each.
-      Departments: ${pool.map(d => `${d.name} (BBI: ${Math.round(getBBI(d))})`).join(', ')}
+      const prompt = `Cluster these departments into "Audit Groups" based on MANPOWER (Certified Staff) and WORKLOAD (Raw Assets).
 
-Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
+Constraint 1: Each Group MUST have SUM of CERTIFIED Auditors >= ${minAuditorsPerGroup} (Targeting 8-10).
+Constraint 2: Total number of Groups MUST be EVEN for 1:1 mutual pairing.
+Constraint 3: Balance the Workload (Assets) as evenly as possible among available groups.
+Constraint 4: Departments with high volume (Assets > ${bestThreshold}) that lack auditors MUST be merged with auditor-rich units.
+Constraint 5: Total Groups should be 6, 8, or 10.
+
+Departments:
+${activeDepts.map(d => `- ${d.name} (${d.abbr}): ${d.total_assets} assets, ${auditorCountByDept[d.id] || 0} staff, ID: ${d.id}`).join('\n')}
+
+Output ONLY a JSON array of groups:
+[
+  { "name": "Group A", "deptIds": ["id1", "id2"] },
+  ...
+]`;
 
       try {
         const result = await c.env.AI.run(MODEL, {
-          messages: [{ role: 'user', content: prompt }]
+          messages: [
+            { role: 'system', content: 'You are an Institutional Resource Optimizer. You cluster departments into balanced audit groups. Respond with valid JSON only. STICK TO EVEN NUMBERS FOR THE FINAL COUNT.' },
+            { role: 'user', content: prompt }
+          ]
         }) as { response: string };
-        aiCategories = JSON.parse(stripFences(result.response));
-      } catch (err) { console.error('AI Categorization failed:', err); }
+        let aiGroups = JSON.parse(result.response) as { name: string; deptIds: string[] }[];
+        
+        // --- PARITY GUARD ---
+        // If Mutual Pairing is intended, we MUST have an even number.
+        if (pairingMode === 'strict_mutual' && aiGroups.length % 2 !== 0 && aiGroups.length > 1) {
+          // Find the two smallest groups (by department count or asset count) and merge them
+          aiGroups.sort((a,b) => a.deptIds.length - b.deptIds.length);
+          const g1 = aiGroups.shift()!;
+          const g2 = aiGroups.shift()!;
+          aiGroups.push({
+            name: `${g1.name} & ${g2.name}`,
+            deptIds: [...g1.deptIds, ...g2.deptIds]
+          });
+        }
+
+        const finalProposedGroups: { name: string; id: string; departments: string[]; totalAssets: number; auditors: number; tier: string; isTaskForce: boolean }[] = [];
+        const aiWriteStmts: any[] = [];
+
+        for (const g of aiGroups) {
+          const groupId = crypto.randomUUID();
+          const bundleDepts = g.deptIds.map(dId => depts.find(dept => dept.id === dId)).filter(Boolean);
+          const totalAssets = bundleDepts.reduce((sum, d) => sum + (d?.total_assets || 0), 0);
+          const totalAuditors = bundleDepts.reduce((sum, d) => sum + (auditorCountByDept[d?.id || ''] || 0), 0);
+          const tier = totalAssets > 1000 ? 'Large' : totalAssets > 300 ? 'Medium' : 'Small';
+          const containsTF = bundleDepts.some(isUPKK);
+
+          if (!dryRun) {
+            aiWriteStmts.push(db.prepare('INSERT INTO audit_groups (id, name, created_at, tier) VALUES (?, ?, CURRENT_TIMESTAMP, ?)').bind(groupId, g.name, tier));
+            for (const d of bundleDepts) {
+              aiWriteStmts.push(db.prepare('UPDATE departments SET audit_group_id = ? WHERE id = ?').bind(groupId, d?.id).run());
+            }
+          }
+
+          finalProposedGroups.push({
+            name: g.name,
+            id: groupId,
+            departments: g.deptIds,
+            totalAssets,
+            auditors: totalAuditors,
+            tier,
+            isTaskForce: containsTF
+          });
+        }
+
+        if (aiWriteStmts.length > 0 && !dryRun) {
+          await db.batch(aiWriteStmts);
+        }
+
+        return c.json({ 
+          success: true, 
+          mode: 'ai_auditor_first', 
+          groups: finalProposedGroups,
+          createdCount: finalProposedGroups.length,
+          recommendations: [],
+          threshold: bestThreshold,
+          isParityEven: (finalProposedGroups.length % 2 === 0)
+        });
+      } catch (err) {
+        console.error('AI Consolidation failed, falling back to rule-based:', err);
+      }
     }
-
-    // 5. 'Anchor-Orphan' Bin Distribution
-    // ANCHORS: Units with >= minAuditors. 
-    // ORPHANS: Units with < minAuditors (must be merged).
-    const anchors = filteredPool.filter(d => (auditorCountByDept[d.id] || 0) >= minAuditors);
-    const orphans = filteredPool.filter(d => (auditorCountByDept[d.id] || 0) < minAuditors);
-
-    // Initial bins from anchors
-    const bins: any[][] = anchors.map(a => [a]);
     const binAuditors = anchors.map(a => auditorCountByDept[a.id] || 0);
-    const binBBIs = anchors.map(a => getBBI(a));
+    const binAssets = anchors.map(a => a.total_assets || 0);
 
-    // If no anchors, start with one empty bin
-    if (bins.length === 0 && orphans.length > 0) {
+    if (bins.length === 0 && (orphans.length > 0 || taskForces.length > 0)) {
       bins.push([]);
       binAuditors.push(0);
-      binBBIs.push(0);
+      binAssets.push(0);
     }
 
-    // Distribute orphans into bins to satisfy minAuditors and balance BBI
+    // Distribute orphans
     for (const orphan of orphans) {
-      const oBBI = getBBI(orphan);
-      const oAuditors = auditorCountByDept[orphan.id] || 0;
-
-      // Find bin that MOST needs this orphan (lowest BBI) 
-      // but prioritize satisfaction of minAuditors first
-      let bestBinIdx = -1;
+      let bestBinIdx = 0;
       let minAudCount = Infinity;
-
       for (let i = 0; i < bins.length; i++) {
         if (binAuditors[i] < minAudCount) {
           minAudCount = binAuditors[i];
           bestBinIdx = i;
         }
       }
-
-      // If all bins are at least at minAuditors, just pick lowest BBI
       if (minAudCount >= minAuditors) {
-        let minBBIValue = Infinity;
+        let minAssets = Infinity;
         for (let i = 0; i < bins.length; i++) {
-          if (binBBIs[i] < minBBIValue) {
-            minBBIValue = binBBIs[i];
+          if (binAssets[i] < minAssets) {
+            minAssets = binAssets[i];
             bestBinIdx = i;
           }
         }
       }
-
       bins[bestBinIdx].push(orphan);
-      binAuditors[bestBinIdx] += oAuditors;
-      binBBIs[bestBinIdx] += oBBI;
+      binAuditors[bestBinIdx] += auditorCountByDept[orphan.id] || 0;
+      binAssets[bestBinIdx] += orphan.total_assets || 0;
     }
 
-    // Final Validation: Merge bins that STILL don't meet the minAuditors policy
-    let finalBundles = bins.filter(b => b.length > 0);
-
-    // --- PARITY SAFEGUARD (POST-BINNING) ---
-    // Ensure (Standalone + Groups) is ALWAYS even.
-    let totalEntities = standaloneDepts.length + finalBundles.length;
-    if (totalEntities % 2 !== 0 && finalBundles.length > 0) {
-      // If we are odd, merge the smallest bundle into the second smallest 
-      finalBundles.sort((a, b) => {
-        const bbiA = a.reduce((sum, d) => sum + getBBI(d), 0);
-        const bbiB = b.reduce((sum, d) => sum + getBBI(d), 0);
-        return bbiA - bbiB;
-      });
-      
-      if (finalBundles.length >= 2) {
-        const orphan = finalBundles.shift()!;
-        finalBundles[0] = [...finalBundles[0], ...orphan];
-      } else if (standaloneDepts.length > 0) {
-        const orphan = finalBundles.shift()!;
-        const smallestStandaloneIdx = standaloneDepts.reduce((minIdx, d, idx, arr) => 
-          (d.total_assets || 0) < (arr[minIdx].total_assets || 0) ? idx : minIdx, 0);
-        finalBundles = [[standaloneDepts[smallestStandaloneIdx], ...orphan]];
-        standaloneDepts.splice(smallestStandaloneIdx, 1);
+    // Inject Task Forces into groups where support is needed or keep them for asymmetric later
+    for (const tf of taskForces) {
+      // Find group with highest asset load but low auditor count
+      let bestBinIdx = 0;
+      let maxBurdenRatio = -1;
+      for (let i = 0; i < bins.length; i++) {
+        const ratio = binAssets[i] / (binAuditors[i] || 1);
+        if (ratio > maxBurdenRatio) {
+          maxBurdenRatio = ratio;
+          bestBinIdx = i;
+        }
       }
-      // If finalBundles.length === 1 and standaloneDepts.length === 0, we remain odd (1).
-      // We do NOT discard the group.
+      bins[bestBinIdx].push(tf);
+      binAuditors[bestBinIdx] += auditorCountByDept[tf.id] || 0;
+      binAssets[bestBinIdx] += tf.total_assets || 0;
     }
-    // Re-verify strictly even
-    if ((standaloneDepts.length + finalBundles.length) % 2 !== 0) {
-      console.warn('Parity could not be automatically enforced. Pairing might fail.');
-    }
+
+    // Parity Enforcement (Strictly for Mutual Cross-Audit)
+    let finalBundles = bins.filter(b => b.length > 0);
+    const isTFBundle = (b: any[]) => b.some(isUPKK);
     
-    // 6. Create audit_groups for bundled units
-    const createdGroups: { name: string; id: string; departments: string[]; totalAssets: number; totalLocations: number; auditors: number; burden: number }[] = [];
+    // Non-Taskforce groups are the ones that enter the cross-audit matrix.
+    const getCrossAuditCount = () => {
+      const normalBundleCount = finalBundles.filter(b => !isTFBundle(b)).length;
+      return standaloneDepts.length + normalBundleCount;
+    };
+
+    // Hard Manpower Floor Enforcement
+    // Any group that is not a specialized task force and has < minAuditorsPerGroup MUST be merged.
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const smallBundle = finalBundles.find(b => 
+        !isTFBundle(b) && 
+        b.reduce((s,d) => s + (auditorCountByDept[d.id] || 0), 0) < minAuditorsPerGroup
+      );
+
+      if (smallBundle && finalBundles.length > 1) {
+        finalBundles = finalBundles.filter(b => b !== smallBundle);
+        // Merge into the bundle that currently has the lowest auditor count
+        finalBundles.sort((a,b) => 
+          a.reduce((s,d) => s + (auditorCountByDept[d.id] || 0), 0) - 
+          b.reduce((s,d) => s + (auditorCountByDept[d.id] || 0), 0)
+        );
+        finalBundles[0] = [...finalBundles[0], ...smallBundle];
+        changed = true;
+      }
+    }
+
+    const needsSymmetry = pairingMode === 'strict_mutual' || pairingMode === 'hybrid';
+
+    if (needsSymmetry && getCrossAuditCount() % 2 !== 0) {
+      const normalBundles = finalBundles.filter(b => !isTFBundle(b));
+      
+      if (normalBundles.length > 1) {
+        // Merge two smallest normal bundles to reduce count by 1
+        normalBundles.sort((a,b) => a.reduce((s,d)=>s+(d.total_assets||0),0) - b.reduce((s,d)=>s+(d.total_assets||0),0));
+        const orphan = normalBundles[0];
+        const target = normalBundles[1];
+        
+        // Update finalBundles: remove orphan, merge into target
+        finalBundles = finalBundles.filter(b => b !== orphan);
+        const targetIdx = finalBundles.findIndex(b => b === target);
+        finalBundles[targetIdx] = [...target, ...orphan];
+      } else if (normalBundles.length === 1 && finalBundles.length > 1) {
+        // Only one normal bundle exists. Merge it into a Task Force bundle.
+        // This effectively "hides" the normal bundle assets inside a TF group, removing it from cross-audit count.
+        const orphan = normalBundles[0];
+        const tfBundle = finalBundles.find(isTFBundle)!;
+        
+        finalBundles = finalBundles.filter(b => b !== orphan);
+        const tfIdx = finalBundles.findIndex(b => b === tfBundle);
+        finalBundles[tfIdx] = [...tfBundle, ...orphan];
+      }
+    }
+
+    // 6. Create Audit Groups & Assign Tiers
+    const createdGroups: { name: string; id: string; departments: string[]; totalAssets: number; auditors: number; tier: string; isTaskForce: boolean }[] = [];
     const writeStmts: any[] = [];
     let groupPrefixIdx = 0;
 
-    const processBundle = (bundle: any[]) => {
+    const getTier = (assets: number) => {
+      if (assets < bestThreshold / 3) return 'Small';
+      if (assets < bestThreshold) return 'Medium';
+      return 'Large';
+    };
+
+    const processBundle = (bundle: any[], isStandalone: boolean = false) => {
       const idx = groupPrefixIdx++;
       const groupName = `Group ${String.fromCharCode(65 + (idx % 26))}${idx >= 26 ? Math.floor(idx / 26) : ''}`;
       const groupId = crypto.randomUUID();
-      
-      const gAssets = bundle.reduce((s, d) => s + (d.total_assets || 0), 0);
-      const gLocs = bundle.reduce((s, d) => s + (locationCountByDept[d.id] || 0), 0);
-      const gAuditors = bundle.reduce((s, d) => s + (auditorCountByDept[d.id] || 0), 0);
-      const gBBI = bundle.reduce((s, d) => s + getBBI(d), 0);
+      const bundleAssets = bundle.reduce((s, d) => s + (d.total_assets || 0), 0);
+      const bundleAuditors = bundle.reduce((s, d) => s + (auditorCountByDept[d.id] || 0), 0);
+      const tier = getTier(bundleAssets);
+      const containsTF = bundle.some(isUPKK);
 
-      writeStmts.push(db.prepare('INSERT INTO audit_groups (id, name) VALUES (?, ?)').bind(groupId, groupName));
-      for (const dept of bundle) {
-        writeStmts.push(db.prepare('UPDATE departments SET audit_group_id = ? WHERE id = ?').bind(groupId, dept.id));
-      }
+       if (!dryRun) {
+         writeStmts.push(db.prepare('INSERT INTO audit_groups (id, name, tier) VALUES (?, ?, ?)').bind(groupId, groupName, tier));
+         for (const dept of bundle) {
+           writeStmts.push(db.prepare('UPDATE departments SET audit_group_id = ?, tier = ?, is_task_force = ? WHERE id = ?')
+             .bind(groupId, getTier(dept.total_assets || 0), isUPKK(dept) ? 1 : 0, dept.id));
+         }
+       }
 
       createdGroups.push({
         name: groupName,
         id: groupId,
         departments: bundle.map((d: any) => d.id),
-        totalAssets: gAssets,
-        totalLocations: gLocs,
-        auditors: gAuditors,
-        burden: Math.round(gBBI)
+        totalAssets: bundleAssets,
+        auditors: bundleAuditors,
+        tier,
+        isTaskForce: containsTF
       });
     };
 
-    // First process consolidated bundles
-    for (const bundle of finalBundles) {
-      processBundle(bundle);
-    }
-
-    // Now process any remaining standalone (large) departments into solo groups
-    // This follows the USER's request for 100% group consistency.
-    for (const dept of standaloneDepts) {
-      processBundle([dept]);
-    }
+    for (const bundle of finalBundles) processBundle(bundle);
+    for (const dept of standaloneDepts) processBundle([dept], true);
 
     if (writeStmts.length > 0) {
       const CHUNK = 100;
@@ -605,12 +707,59 @@ Return ONLY a JSON mapping: { "Dept Name": "Cluster Name" }`;
 
     return c.json({
       groups: createdGroups,
-      ungrouped: [], // Always empty now
       createdCount: createdGroups.length,
       recommendations,
-      isParityEven: createdGroups.length % 2 === 0
+      threshold: bestThreshold,
+      isParityEven: (createdGroups.length % 2 === 0)
     });
   },
+);
+
+compute.post(
+  '/consolidate/commit-draft',
+  requirePermission('manage:system'),
+  zValidator('json', commitDraftSchema),
+  async (c) => {
+    const { groups } = c.req.valid('json');
+    const db = c.env.DB;
+
+    // 1. Purge existing auto-generated groups
+    const { results: existingGroups } = await db.prepare("SELECT id FROM audit_groups WHERE name LIKE 'Group %'").all();
+    const oldGroupIds = ((existingGroups || []) as any[]).map((g: any) => g.id);
+
+    if (oldGroupIds.length > 0) {
+      const unlinkStmts = oldGroupIds.map((id: string) =>
+        db.prepare('UPDATE departments SET audit_group_id = NULL WHERE audit_group_id = ?').bind(id),
+      );
+      await db.batch(unlinkStmts);
+      const deleteStmts = oldGroupIds.map((id: string) =>
+        db.prepare('DELETE FROM audit_groups WHERE id = ?').bind(id),
+      );
+      await db.batch(deleteStmts);
+    }
+
+    // 2. Insert new groups and links
+    const writeStmts: any[] = [];
+    for (const group of groups) {
+      // Ensure we have a valid tier (fallback to Medium)
+      const tier = group.tier || 'Medium';
+      writeStmts.push(db.prepare('INSERT INTO audit_groups (id, name, tier) VALUES (?, ?, ?)').bind(group.id, group.name, tier));
+      
+      for (const deptId of group.departments) {
+         writeStmts.push(db.prepare('UPDATE departments SET audit_group_id = ?, tier = ?, is_task_force = ? WHERE id = ?')
+           .bind(group.id, tier, group.isTaskForce ? 1 : 0, deptId));
+      }
+    }
+
+    if (writeStmts.length > 0) {
+      const CHUNK = 100;
+      for (let i = 0; i < writeStmts.length; i += CHUNK) { 
+        await db.batch(writeStmts.slice(i, i + CHUNK)); 
+      }
+    }
+
+    return c.json({ success: true, count: groups.length });
+  }
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -643,8 +792,8 @@ compute.post(
       c.req.valid('json');
     const db = c.env.DB;
 
-    const [deptsRes, usersRes, instKPIsRes, permsRes, locCountsRes] = await Promise.all([
-      db.prepare('SELECT id, name, total_assets, is_exempted FROM departments').all(),
+    const [deptsRes, usersRes, instKPIsRes, permsRes, locCountsRes, groupsRes] = await Promise.all([
+      db.prepare('SELECT id, name, total_assets, is_exempted, audit_group_id, is_task_force FROM departments').all(),
       // Use json_each to filter eligible auditors in SQL — avoids JSON.parse() for every row in JS.
       db.prepare(`
         SELECT DISTINCT u.id, u.department_id, u.certification_expiry, u.roles
@@ -658,7 +807,8 @@ compute.post(
       `).all(),
       db.prepare('SELECT phase_id, target_percentage FROM institution_kpi_targets').all(),
       db.prepare('SELECT * FROM cross_audit_permissions WHERE is_active = 1').all(),
-      db.prepare('SELECT department_id, count(*) as count FROM locations GROUP BY department_id').all()
+      db.prepare('SELECT department_id, count(*) as count FROM locations GROUP BY department_id').all(),
+      db.prepare('SELECT * FROM audit_groups').all()
     ]);
 
     const depts = (deptsRes.results || []) as any[];
@@ -666,42 +816,66 @@ compute.post(
     const instKPIs = (instKPIsRes.results || []) as any[];
     const existingPerms = (permsRes.results || []) as any[];
     const locCounts = (locCountsRes.results || []) as any[];
+    const auditGroups = (groupsRes.results || []) as any[];
 
     const locCountByDept: Record<string, number> = {};
     for (const l of locCounts) {
       if (l.department_id) locCountByDept[l.department_id] = l.count;
     }
 
-    // Per-dept auditor counts (certified only)
+    // Per-dept auditor counts (lenient for pairing)
     const today = new Date().toISOString().split('T')[0];
     const auditorCountByDept: Record<string, number> = {};
     for (const u of users) {
       if (!u.department_id) continue;
-      const hasCert = u.certification_expiry && u.certification_expiry >= today;
-      if (hasCert) {
-        auditorCountByDept[u.department_id] = (auditorCountByDept[u.department_id] || 0) + 1;
-      }
+      // Leanient count: include all active Staff/Supervisors/Auditors
+      auditorCountByDept[u.department_id] = (auditorCountByDept[u.department_id] || 0) + 1;
     }
 
-    // Build entity list (non-exempted, has assets)
-    const entities = depts
-      .filter((d: any) => !d.is_exempted && (d.total_assets || 0) > 0)
-      .map((d: any) => {
-        const assets = d.total_assets || 0;
-        const auditors = auditorCountByDept[d.id] || 0;
-        const locs = locCountByDept[d.id] || 0;
-        // BBI Formula: (Assets * 0.5) + (Locations * 100) + (Staff * 300)
-        const bbi = (assets * 0.5) + (locs * 100) + (auditors * 300);
+    // Build Entity List (Aggregated by Group)
+    const entitiesByGroup: Record<string, any> = {};
+    
+    // 1. Initialize entities from audit groups
+    for (const group of auditGroups) {
+      entitiesByGroup[group.id] = {
+        id: group.id,
+        name: group.name,
+        assets: 0,
+        auditors: 0,
+        locs: 0,
+        isTaskForce: false,
+        isExempted: false,
+        deptIds: []
+      };
+    }
 
-        return {
-          id: d.id,
-          name: d.name,
-          assets,
-          auditors,
-          bbi: Math.round(bbi)
-        };
-      })
-      .sort((a, b) => b.bbi - a.bbi);
+    // 2. Map departments to groups and aggregate
+    for (const d of depts) {
+      const gId = d.audit_group_id;
+      if (!gId) continue;
+      
+      const entity = entitiesByGroup[gId];
+      if (!entity) continue;
+
+      const assets = d.total_assets || 0;
+      const auditors = auditorCountByDept[d.id] || 0;
+      const locs = locCountByDept[d.id] || 0;
+
+      entity.assets += assets;
+      entity.auditors += auditors;
+      entity.locs += locs;
+      entity.deptIds.push(d.id);
+      if (d.is_exempted) entity.isExempted = true;
+      if (d.is_task_force || d.abbr === 'UPKK' || d.name.includes('UPKK')) entity.isTaskForce = true;
+    }
+
+    // 3. Finalize entities for pairing
+    const entities = Object.values(entitiesByGroup)
+      .filter((e: any) => !e.isExempted && !e.isTaskForce && (e.assets > 0 || e.auditors > 0))
+      .sort((a: any, b: any) => b.assets - a.assets);
+
+    // Filtered list of departments representing the original input, for AI context if needed
+    // But pairing happens on entities.
 
     // 4. AI Strategic Insights (Optional)
     let aiPairingSuggestions: { auditorId: string; targetId: string }[] = [];
@@ -711,14 +885,13 @@ compute.post(
 Analyze these departments and suggest the 5 most "Logically Compatible" pairings.
 
 Rules:
-1. Technical Affinity: Pair Dept A and B if they have similar equipment or technical processes.
-2. Resource Equity: Use the Balanced Burden Index (BBI) to detect "High-Strain" departments.
-   BBI = (Assets * 0.5) + (Locations * 100) + (Staff * 300). Target BBI is ~1200.
-3. Asymmetric Delegation: If a department has a high BBI relative to its auditors, prioritize a ONE-WAY delegation where a stable department audits them.
+1. Auditor Capacity: Priority #1 is matching the Inspector's total certified staff count to the Target's asset volume.
+2. Even Workload: Aim for a ratio of ~200 assets per auditor. If a Target has high asset volume (e.g. 2000+), pair them with an Inspector group that has 10+ auditors.
+3. Asymmetric Delegation: If a group has very few auditors (baseline 8), pair them with low-asset targets.
 4. Social Sensitivity: If a department involves Hostels/Kediaman, prioritize gender-appropriate officer assignments.
 
-Available Depts (BBI includes Assets, Locations, and Staff):
-${entities.map((e, idx) => `${idx}. ${e.name}: ${e.assets} units, ${e.auditors} auditors, BBI: ${e.bbi}`).join('\n')}
+Available Depts:
+${entities.map((e, idx) => `${idx}. ${e.name}: ${e.assets} units, ${e.auditors} auditors`).join('\n')}
 
 Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (avoid self-auditing):
 [ { "auditorIdx": 0, "targetIdx": 1 }, ... ]`;
@@ -761,16 +934,16 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
 
     if (effectiveMode === 'strict_mutual') {
       // 1:1 Mutual Pairing Logic
-      const pool = entities.filter(e => e.assets > 0 && (e.auditors >= minAuditorsRequired || !strictAuditorRule));
+      const pool = entities.filter(e => e.assets > 0 && (e.auditors >= minAuditorsRequired || !strictAuditorRule || e.assets > 1000));
       const poolIds = pool.map(e => e.id);
       
       // Separate already paired if respectManualPairings is true
       const availableIds = respectManualPairings 
-        ? poolIds.filter(id => !existingPerms.some((p: any) => p.target_dept_id === id || p.auditor_dept_id === id))
+        ? poolIds.filter(id => !existingPerms.some((p: any) => p.target_group_id === id || p.auditor_group_id === id))
         : [...poolIds];
       
-      // Sort available by assets to pair similar sizes
-      const sortedAvailable = pool.filter(e => availableIds.includes(e.id)).sort((a,b) => b.bbi - a.bbi);
+      // Sort available by assets to pair similar sizes or by auditors
+      const sortedAvailable = pool.filter(e => availableIds.includes(e.id)).sort((a,b) => b.assets - a.assets);
       
       const pairs: [string, string][] = [];
       let cycle3: [string, string, string] | null = null;
@@ -804,13 +977,13 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
           auditorDeptId: idA, 
           targetDeptId: idB, 
           isMutual: true, 
-          burdenScore: Math.round(entB.assets / entA.auditors) 
+          burdenScore: Math.round(entB.assets / (entA.auditors || 1)) 
         });
         newPairings.push({ 
           auditorDeptId: idB, 
           targetDeptId: idA, 
           isMutual: true, 
-          burdenScore: Math.round(entA.assets / entB.auditors) 
+          burdenScore: Math.round(entA.assets / (entB.auditors || 1)) 
         });
         
         strategicPlan.push({ 
@@ -848,8 +1021,6 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
             targetId: tgt.id, targetName: tgt.name, 
             auditorId: aud.id, auditorName: aud.name, 
             auditorDeptAssets: aud.assets,
-            auditorBBI: aud.bbi,
-            targetBBI: tgt.bbi,
             isCycle: true,
             burdenScore: Math.round(tgt.assets / aud.auditors)
           });
@@ -859,8 +1030,8 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
     } else if (effectiveMode === 'assets') {
       const auditorPool = entities.filter((e) => e.auditors > 0);
       const finalTargets = respectManualPairings
-        ? entities.filter((e) => e.bbi > 0 && !existingPerms.some((p: any) => p.target_dept_id === e.id))
-        : entities.filter((e) => e.bbi > 0);
+        ? entities.filter((e: any) => e.assets > 0 && !existingPerms.some((p: any) => p.target_group_id === e.id))
+        : entities.filter((e: any) => e.assets > 0);
 
       const capacityMap = new Map<string, number>();
       auditorPool.forEach(a => {
@@ -903,8 +1074,8 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
       });
 
       const finalTargets = respectManualPairings
-        ? entities.filter((e) => e.assets > 0 && !existingPerms.some((p: any) => p.target_dept_id === e.id))
-        : entities.filter((e) => e.assets > 0);
+        ? entities.filter((e: any) => e.assets > 0 && !existingPerms.some((p: any) => p.target_group_id === e.id))
+        : entities.filter((e: any) => e.assets > 0);
 
       for (const target of finalTargets) {
         if (usedTargetIds.has(target.id)) continue;
@@ -920,8 +1091,8 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
           targetId: target.id, targetName: target.name, 
           auditorId: candidate.id, auditorName: candidate.name, 
           auditorDeptAssets: candidate.assets,
-          auditorBBI: candidate.bbi,
-          targetBBI: target.bbi
+          auditorCount: candidate.auditors,
+          targetAssets: target.assets
         });
         usedTargetIds.add(target.id);
       }
@@ -929,7 +1100,7 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
 
     // Projected KPI after these pairings
     const allActivePerms = simulate
-      ? [...existingPerms.map((p: any) => p.target_dept_id), ...newPairings.map((p) => p.targetDeptId)]
+      ? [...existingPerms.map((p: any) => p.target_group_id), ...newPairings.map((p) => p.targetDeptId)]
       : newPairings.map((p) => p.targetDeptId);
     const auditedTargets = new Set(allActivePerms);
     const projectedAssetsMet = Array.from(auditedTargets).reduce((sum, tid) => {
@@ -946,7 +1117,7 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
       // 2. Batch insert new normalized pairings
       const insertStmts = newPairings.map((p) =>
         db.prepare(
-          'INSERT INTO cross_audit_permissions (id, auditor_dept_id, target_dept_id, is_active, is_mutual) VALUES (?, ?, ?, 1, ?)'
+          'INSERT INTO cross_audit_permissions (id, auditor_group_id, target_group_id, is_active, is_mutual) VALUES (?, ?, ?, 1, ?)'
         ).bind(crypto.randomUUID(), p.auditorDeptId, p.targetDeptId, p.isMutual ? 1 : 0),
       );
       const CHUNK = 100;
@@ -1292,15 +1463,13 @@ compute.post(
     // --- MATHEMATICAL PRE-CALCULATION ---
     const activeUnitStats = activeUnits.map(d => {
       const effectiveAssets = Math.max(d.total_assets || 0, locationAssetsByDept[d.id] || 0);
+      const auditors = auditorCountByDept[d.id] || 0;
       return {
         name: d.name,
         assets: effectiveAssets,
         locations: locationCountByDept[d.id] || 0,
-        auditors: auditorCountByDept[d.id] || 0,
-        burden: effectiveAssets * 0.7 + (locationCountByDept[d.id] || 0) * 100,
-        capacityRatio: (auditorCountByDept[d.id] || 0) > 0 
-          ? Math.round((effectiveAssets + (locationCountByDept[d.id] || 0) * 10) / (auditorCountByDept[d.id] || 0)) 
-          : 'INF'
+        auditors: auditors,
+        capacityRatio: auditors > 0 ? Math.round(effectiveAssets / auditors) : effectiveAssets
       };
     });
 
@@ -1308,13 +1477,13 @@ compute.post(
 
     const aiPrompt = `Analyze the Strategic Feasibility of this audit plan. Provide two distinct perspectives:
 
-Perspective 1: MATHEMATICAL BALANCE (The "Math")
-Focus on Load vs Capacity. Identify units where the workload (Assets + Locations) is disproportionate to the Auditor headcount.
-- Global Avg Load/Auditor: ${globalAvgBurden} units
-- High Burden Threshold: > 800 units/auditor
+Perspective 1: CAPACITY BALANCE (Workload vs Staff)
+Identify groups where the raw asset volume is disproportionate to the Auditor headcount.
+- Goal: < 200 assets per certified auditor.
+- Warning: > 500 assets per certified auditor (Unsafe/High Strain).
 
-Perspective 2: THEMATIC SYNERGY (The "Theme")
-Focus on Functional Affinity. Evaluate if the grouping of these departments makes sense (e.g., Tech with Tech, Admin with Admin).
+Perspective 2: OPERATIONAL CONTINUITY
+Evaluate if the group size (minimum 8 auditors) is sufficient for institutional compliance.
 
 Infrastructure Stats:
 - Total Certified auditors: ${certifiedAuditors}

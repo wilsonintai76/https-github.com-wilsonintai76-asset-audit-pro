@@ -58,4 +58,35 @@ media.post('/settings/:key', async (c) => {
   return c.json({ success: true });
 });
 
+// GET /api/media/archives - List archived reports
+media.get('/archives/list', async (c) => {
+  const list = await c.env.MEDIA.list({ prefix: 'reports/' });
+  const items = list.objects.map(obj => ({
+    key: obj.key,
+    uploaded: obj.uploaded,
+    size: obj.size,
+    url: `/api/media/${obj.key.replace(/\//g, '%2F')}` // Handle slashes in key for URL
+  }));
+  return c.json({ items });
+});
+
+// POST /api/media/archive - Archive a report to R2
+media.post('/archive', async (c) => {
+  const { html, filename, type = 'StrategicMemo' } = await c.req.json();
+  
+  if (!html) {
+    return c.json({ error: 'No content to archive' }, 400);
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const safeFilename = filename?.replace(/[^a-z0-9.]/gi, '_') || `${type}_${timestamp}.html`;
+  const key = `reports/${safeFilename}`;
+
+  await c.env.MEDIA.put(key, html, {
+    httpMetadata: { contentType: 'text/html' },
+  });
+
+  return c.json({ success: true, key, url: `/api/media/${key.replace(/\//g, '%2F')}` });
+});
+
 export const mediaRoutes = media;

@@ -38,6 +38,7 @@ export const useAppData = () => {
   const [minAuditorsPerLocation, setMinAuditorsPerLocation] = useState<number>(2);
   const [dailyInspectionCapacity, setDailyInspectionCapacity] = useState<number>(150);
   const [standaloneThresholdAssets, setStandaloneThresholdAssets] = useState<number>(1000);
+  const [groupingMargin, setGroupingMargin] = useState<number>(0.15);
   const [pairingLocked, setPairingLocked] = useState<boolean>(() => {
     try { return localStorage.getItem('pairing_lock_active') === 'true'; } catch { return false; }
   });
@@ -59,6 +60,9 @@ export const useAppData = () => {
   const [activities, setActivities] = useState<SystemActivity[]>([]);
   const [crossAuditPermissions, setCrossAuditPermissions] = useState<CrossAuditPermission[]>([]);
   const [publicStats, setPublicStats] = useState<any>(null);
+  const [simulatedGroups, setSimulatedGroups] = useState<any[]>([]);
+  const [isGroupSimulatorActive, setIsGroupSimulatorActive] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   const [selectedDept, setSelectedDept] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
@@ -114,6 +118,7 @@ export const useAppData = () => {
           if (constraints.minAuditorsPerLocation) setMinAuditorsPerLocation(constraints.minAuditorsPerLocation);
           if (constraints.dailyInspectionCapacity) setDailyInspectionCapacity(constraints.dailyInspectionCapacity);
           if (constraints.standaloneThresholdAssets) setStandaloneThresholdAssets(constraints.standaloneThresholdAssets);
+          if (constraints.groupingMargin) setGroupingMargin(constraints.groupingMargin);
         }
         const pairingLock = settings.find(s => s.id === 'pairing_lock')?.value;
         if (pairingLock?.locked) { setPairingLocked(true); setPairingLockInfo(pairingLock); }
@@ -210,6 +215,7 @@ export const useAppData = () => {
     maxAssetsPerDay, setMaxAssetsPerDay, maxLocationsPerDay, setMaxLocationsPerDay,
     minAuditorsPerLocation, setMinAuditorsPerLocation, dailyInspectionCapacity, setDailyInspectionCapacity,
     standaloneThresholdAssets, setStandaloneThresholdAssets,
+    groupingMargin, setGroupingMargin,
     pairingLocked, setPairingLocked, pairingLockInfo, setPairingLockInfo,
     users, setUsers, departments, setDepartments, locations, setLocations,
     auditPhases, setAuditPhases, kpiTiers, setKpiTiers, kpiTierTargets, setKpiTierTargets,
@@ -218,7 +224,10 @@ export const useAppData = () => {
     toasts, setToasts, activities, setActivities, crossAuditPermissions, setCrossAuditPermissions,
     publicStats, setPublicStats, selectedDept, setSelectedDept, selectedStatus, setSelectedStatus,
     selectedPhaseId, setSelectedPhaseId, isSidebarOpen, setIsSidebarOpen,
-    confirmState, setConfirmState, feasibilityReport, setFeasibilityReport, loadAllData, loadPublicStats, initSession,
-    departmentNames, departmentsWithAssets, filteredSchedules, topDepartments
+    confirmState, setConfirmState, feasibilityReport, setFeasibilityReport,
+    loadAllData, loadPublicStats, initSession,
+    departmentNames, departmentsWithAssets, filteredSchedules, topDepartments,
+    simulatedGroups, setSimulatedGroups, isGroupSimulatorActive, setIsGroupSimulatorActive,
+    isProcessing, setIsProcessing
   };
 };

@@ -58,7 +58,8 @@ const App: React.FC = () => {
     activities, maxAssetsPerDay, auditGroups, institutionKPIs,
     buildings, kpiTierTargets, crossAuditPermissions,
     selectedDept, setSelectedDept, selectedStatus, setSelectedStatus,
-    selectedPhaseId, setSelectedPhaseId, isSidebarOpen, setIsSidebarOpen,
+    selectedPhaseId, setSelectedPhaseId, groupingMargin, setGroupingMargin,
+    isSidebarOpen, setIsSidebarOpen,
     confirmState, setConfirmState, toasts,
     certRenewalModalUser, setCertRenewalModalUser, showForcePasswordModal,
     setShowForcePasswordModal, showProfileCompleteModal, setShowProfileCompleteModal,
@@ -90,7 +91,7 @@ const App: React.FC = () => {
     handleAddDepartmentMapping, handleDeleteDepartmentMapping,
     handleSyncLocationMappings, handleUpsertLocations,
     handleSetDeptTotalsFromMapping, handleUpdateUninspectedAssetCounts,
-    handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleSaveFeasibilityReport, handleResetPairingData,
+    handleBulkDeleteAuditGroups, handleAutoConsolidate, handleCommitGroups, handleCancelGroupSimulation, handleRunStrategicPairing, handleSaveFeasibilityReport, handleResetPairingData, handleResetOnlyPermissions,
     showToast, closeToast, showError, customConfirm, customAlert
   } = appActions;
 
@@ -372,8 +373,10 @@ const App: React.FC = () => {
           onUpdateMaxAssetsPerDay={async (val) => { appData.setMaxAssetsPerDay(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay: val, maxLocationsPerDay: appData.maxLocationsPerDay, minAuditorsPerLocation: appData.minAuditorsPerLocation, dailyInspectionCapacity: appData.dailyInspectionCapacity, standaloneThresholdAssets: appData.standaloneThresholdAssets }); }}
           onUpdateMaxLocationsPerDay={async (val) => { appData.setMaxLocationsPerDay(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: val, minAuditorsPerLocation: appData.minAuditorsPerLocation, dailyInspectionCapacity: appData.dailyInspectionCapacity, standaloneThresholdAssets: appData.standaloneThresholdAssets }); }}
           onUpdateMinAuditorsPerLocation={async (val) => { appData.setMinAuditorsPerLocation(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: appData.maxLocationsPerDay, minAuditorsPerLocation: val, dailyInspectionCapacity: appData.dailyInspectionCapacity, standaloneThresholdAssets: appData.standaloneThresholdAssets }); }}
-          onUpdateDailyInspectionCapacity={async (val) => { appData.setDailyInspectionCapacity(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: appData.maxLocationsPerDay, minAuditorsPerLocation: appData.minAuditorsPerLocation, dailyInspectionCapacity: val, standaloneThresholdAssets: appData.standaloneThresholdAssets }); }}
-          onUpdateStandaloneThresholdAssets={async (val) => { appData.setStandaloneThresholdAssets(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: appData.maxLocationsPerDay, minAuditorsPerLocation: appData.minAuditorsPerLocation, dailyInspectionCapacity: appData.dailyInspectionCapacity, standaloneThresholdAssets: val }); }}
+          onUpdateDailyInspectionCapacity={async (val) => { appData.setDailyInspectionCapacity(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: appData.maxLocationsPerDay, minAuditorsPerLocation: appData.minAuditorsPerLocation, dailyInspectionCapacity: val, standaloneThresholdAssets: appData.standaloneThresholdAssets, groupingMargin: appData.groupingMargin }); }}
+          onUpdateStandaloneThresholdAssets={async (val) => { appData.setStandaloneThresholdAssets(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: appData.maxLocationsPerDay, minAuditorsPerLocation: appData.minAuditorsPerLocation, dailyInspectionCapacity: appData.dailyInspectionCapacity, standaloneThresholdAssets: val, groupingMargin: appData.groupingMargin }); }}
+          groupingMargin={appData.groupingMargin}
+          onUpdateGroupingMargin={async (val) => { appData.setGroupingMargin(val); await gateway.updateSystemSetting('audit_constraints', { maxAssetsPerDay, maxLocationsPerDay: appData.maxLocationsPerDay, minAuditorsPerLocation: appData.minAuditorsPerLocation, dailyInspectionCapacity: appData.dailyInspectionCapacity, standaloneThresholdAssets: appData.standaloneThresholdAssets, groupingMargin: val }); }}
           onRebalanceSchedule={handleRebalanceSchedule}
           schedules={appData.schedules}
           departmentMappings={appData.departmentMappings}
@@ -394,6 +397,12 @@ const App: React.FC = () => {
           feasibilityReport={appData.feasibilityReport}
           onSaveFeasibilityReport={handleSaveFeasibilityReport}
           currentUser={currentUser}
+          isGroupSimulatorActive={appData.isGroupSimulatorActive}
+          simulatedGroups={appData.simulatedGroups}
+          onCommitGroups={handleCommitGroups}
+          onCancelGroupSimulation={handleCancelGroupSimulation}
+          onUpdateSimulatedGroups={appData.setSimulatedGroups}
+          onResetOnlyPermissions={handleResetOnlyPermissions}
         />
       )}
       {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}

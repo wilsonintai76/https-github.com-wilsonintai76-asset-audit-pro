@@ -57,6 +57,8 @@ interface SystemSettingsProps {
   onUpdateDailyInspectionCapacity: (val: number) => void;
   standaloneThresholdAssets: number;
   onUpdateStandaloneThresholdAssets: (val: number) => void;
+  groupingMargin: number;
+  onUpdateGroupingMargin: (val: number) => void;
   onRebalanceSchedule: () => Promise<void>;
   schedules: AuditSchedule[];
   departmentMappings: DepartmentMapping[];
@@ -72,7 +74,7 @@ interface SystemSettingsProps {
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
   onDeleteAuditGroup: (id: string) => Promise<void>;
   onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
-  onAutoConsolidate: (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => Promise<void>;
+  onAutoConsolidate: (threshold: number, excludedIds: string[], minAuditors: number, margin: number, useAI: boolean, pairingMode: string, aiConsolidation: boolean, minAuditorsPerGroup: number, dryRun: boolean) => Promise<void>;
   onRunStrategicPairing: (payload: any) => Promise<any>;
   onSaveFeasibilityReport: (report: any) => void;
   feasibilityReport: any;
@@ -85,6 +87,21 @@ interface SystemSettingsProps {
   onResetPairingData?: () => void;
   showToast?: (message: string, type?: any) => void;
   currentUser?: User | null;
+  // Simulation props
+  isGroupSimulatorActive?: boolean;
+  simulatedGroups?: AuditGroup[];
+  onCommitGroups?: (
+    threshold: number, 
+    excludedDeptIds: string[], 
+    minAuditors: number, 
+    groupingMargin: number, 
+    useAI: boolean, 
+    pairingMode: string,
+    aiConsolidation: boolean,
+    minAuditorsPerGroup: number
+  ) => Promise<void>;
+  onCancelGroupSimulation?: () => void;
+  onUpdateSimulatedGroups?: (groups: AuditGroup[]) => void;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -127,6 +144,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onUpdateDailyInspectionCapacity,
   standaloneThresholdAssets,
   onUpdateStandaloneThresholdAssets,
+  groupingMargin,
+  onUpdateGroupingMargin,
   onRebalanceSchedule,
   schedules,
   departmentMappings,
@@ -157,7 +176,12 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   onAutoCalculateTierTargets,
   showToast,
   locations,
-  currentUser
+  currentUser,
+  isGroupSimulatorActive,
+  simulatedGroups,
+  onCommitGroups,
+  onCancelGroupSimulation,
+  onUpdateSimulatedGroups
 }) => {
   const isAdmin = (userRoles || []).includes('Admin');
   const [isProcessing, setIsProcessing] = React.useState(false);
@@ -189,7 +213,12 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   }, [users]);
 
   const totalInstitutionalAssets = React.useMemo(() => {
-    return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
+    return departments.reduce((sum, d) => {
+      const val = typeof d.totalAssets === 'string' 
+        ? parseInt(d.totalAssets.replace(/[^0-9]/g, ''), 10) 
+        : (d.totalAssets || 0);
+      return sum + (isNaN(val) ? 0 : val);
+    }, 0);
   }, [departments]);
 
   const handleUpdateDraftConstraints = (updates: Partial<typeof draftConstraints>) => {
@@ -277,32 +306,6 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         />
       )}
 
-      <div className="animate-in fade-in slide-in-from-top-4 duration-700">
-        <div className="flex items-center gap-3 mb-4 px-2">
-           <ShieldCheck className={`w-5 h-5 ${isSimulatorActive ? 'text-amber-500' : 'text-indigo-500'}`} />
-           <h3 className="text-xl font-black text-slate-800 tracking-tight">Global Institutional Strategy</h3>
-           {isSimulatorActive && (
-             <span className="px-3 py-1 bg-amber-100 text-amber-600 rounded-lg text-[10px] font-black uppercase tracking-widest animate-pulse">Draft Mode</span>
-           )}
-        </div>
-        <AuditConstraints
-          maxAssetsPerDay={currentMaxAssets}
-          onUpdateMaxAssetsPerDay={(v) => handleUpdateDraftConstraints({ maxAssetsPerDay: v })}
-          maxLocationsPerDay={currentMaxLocations}
-          onUpdateMaxLocationsPerDay={(v) => handleUpdateDraftConstraints({ maxLocationsPerDay: v })}
-          minAuditorsPerLocation={currentMinAuditors}
-          onUpdateMinAuditorsPerLocation={(v) => handleUpdateDraftConstraints({ minAuditorsPerLocation: v })}
-          dailyInspectionCapacity={currentDailyCapacity}
-          onUpdateDailyInspectionCapacity={(v) => handleUpdateDraftConstraints({ dailyInspectionCapacity: v })}
-          standaloneThresholdAssets={currentStandaloneThreshold}
-          onUpdateStandaloneThresholdAssets={(v) => handleUpdateDraftConstraints({ standaloneThresholdAssets: v })}
-          onAutoOptimize={handleAIAutoOptimize}
-          isOptimizing={isSuggestingAI}
-          activeAuditors={activeAuditorCount}
-          totalAssets={totalInstitutionalAssets}
-          isSimulatorActive={isSimulatorActive}
-        />
-      </div>
 
       <div className="relative">
         <AuditPhasesSettings
@@ -416,6 +419,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         pairingLocked={pairingLocked}
         onSuggestThresholds={handleAIAutoOptimize}
         isSuggestingAI={isSuggestingAI}
+        // Simulation props
+        isGroupSimulatorActive={isGroupSimulatorActive}
+        simulatedGroups={simulatedGroups}
+        onCommitGroups={onCommitGroups}
+        onCancelGroupSimulation={onCancelGroupSimulation}
+        onUpdateSimulatedGroups={onUpdateSimulatedGroups}
+        onUpdateStandaloneThresholdAssets={onUpdateStandaloneThresholdAssets}
+        onUpdateGroupingMargin={onUpdateGroupingMargin}
       />
 
       <CrossAuditManagement
@@ -432,10 +443,11 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateAuditGroup={onUpdateAuditGroup}
         onDeleteAuditGroup={onDeleteAuditGroup}
         onBulkDeleteAuditGroups={onBulkDeleteAuditGroups}
-        onAutoConsolidate={onAutoConsolidate}
+        onAutoConsolidate={onAutoConsolidate as any}
         onRunStrategicPairing={onRunStrategicPairing}
         onBulkAddPermissions={onBulkAddPermissions}
         onBulkRemovePermissions={onBulkRemovePermissions}
+        onRebalanceSchedule={onRebalanceSchedule}
         feasibilityReport={feasibilityReport}
         pairingLocked={pairingLocked}
         pairingLockInfo={pairingLockInfo}
@@ -456,6 +468,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         onUpdateMinAuditorsPerLocation={onUpdateMinAuditorsPerLocation}
         onUpdateDailyInspectionCapacity={onUpdateDailyInspectionCapacity}
         showToast={showToast}
+        schedules={schedules}
+        kpiTiers={kpiTiers}
+        kpiTierTargets={kpiTierTargets}
+        locations={locations}
         currentUser={currentUser}
       />
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Loader2, Sparkles, Users, ShieldCheck } from 'lucide-react';
+import { Loader2, Sparkles, Users, ShieldCheck, Layers } from 'lucide-react';
+import { AuditGroup } from '@shared/types';
 
 interface AuditConstraintsProps {
   maxAssetsPerDay: number;
@@ -12,11 +13,14 @@ interface AuditConstraintsProps {
   onUpdateDailyInspectionCapacity: (value: number) => void;
   standaloneThresholdAssets: number;
   onUpdateStandaloneThresholdAssets: (value: number) => void;
+  groupingMargin: number;
+  onUpdateGroupingMargin: (value: number) => void;
   onAutoOptimize?: () => Promise<void>;
   isOptimizing?: boolean;
   activeAuditors?: number;
   totalAssets?: number;
   isSimulatorActive?: boolean;
+  auditGroups?: AuditGroup[];
 }
 
 export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
@@ -30,22 +34,25 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
   onUpdateDailyInspectionCapacity,
   standaloneThresholdAssets,
   onUpdateStandaloneThresholdAssets,
+  groupingMargin,
+  onUpdateGroupingMargin,
   onAutoOptimize,
   isOptimizing = false,
   activeAuditors = 0,
   totalAssets = 0,
   isSimulatorActive = false,
+  auditGroups = [],
 }) => {
   // Hardcode policy to 2
   const policyMinAuditors = 2;
-  const BBI_DAILY_CAPACITY = 1500; // Standard target BBI per day per team
-
-  // Projection math (BBI-based)
+  // Projection math (Workload-based)
   const auditorTeams = Math.floor(activeAuditors / policyMinAuditors);
   
-  // Use either the explicit daily capacity or our BBI standard
-  const workloadCapacity = auditorTeams * (dailyInspectionCapacity || 150); 
-  const totalDailyBBICapacity = auditorTeams * BBI_DAILY_CAPACITY;
+  const DAILY_WORKLOAD_CAPACITY = 1500; // Standard target assets/load per day per team
+  
+  // Use either the explicit daily capacity or our workload standard
+  const workloadCapacity = auditorTeams * (dailyInspectionCapacity || DAILY_WORKLOAD_CAPACITY); 
+  const totalDailyCapacity = auditorTeams * DAILY_WORKLOAD_CAPACITY;
   
   const daysToFinish = workloadCapacity > 0 ? Math.ceil(totalAssets / workloadCapacity) : 0;
   const monthCompletion = totalAssets > 0 
@@ -94,26 +101,44 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
           </div>
 
           <div className="space-y-4">
-            <label className="text-xs font-black uppercase text-indigo-500 tracking-widest block">Standalone BBI Threshold</label>
+            <label className="text-xs font-black uppercase text-indigo-500 tracking-widest block font-bold">Standalone Workload Threshold (Assets)</label>
             <input 
               type="number"
-              min="100"
-              step="100"
+              min="500"
+              max="1500"
+              step="50"
               className="w-full px-4 py-4 bg-indigo-50/30 border-2 border-indigo-100/50 rounded-2xl text-base font-black text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all"
               value={standaloneThresholdAssets}
-              onChange={(e) => onUpdateStandaloneThresholdAssets(parseInt(e.target.value, 10) || 1500)}
+              onChange={(e) => onUpdateStandaloneThresholdAssets(parseInt(e.target.value, 10) || 1000)}
             />
-            <p className="text-[10px] text-indigo-400 font-bold leading-relaxed">Magnitude Trigger: Units with total BBI above this value will audit themselves autonomously.</p>
+            <p className="text-[10px] text-indigo-400 font-bold leading-relaxed">Magnitude Trigger: Recommended 800–1000 assets. Units above this audit themselves.</p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-xs font-black uppercase text-emerald-500 tracking-widest block">Grouping Margin (%)</label>
+            <div className="flex items-center gap-4">
+               <input 
+                type="range"
+                min="0.05"
+                max="0.25"
+                step="0.01"
+                className="flex-grow h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                value={groupingMargin}
+                onChange={(e) => onUpdateGroupingMargin(parseFloat(e.target.value))}
+              />
+              <span className="text-sm font-black text-slate-700 min-w-[3rem]">{Math.round((groupingMargin || 0) * 100)}%</span>
+            </div>
+            <p className="text-[10px] text-emerald-400 font-bold leading-relaxed">Safety Buffer: 10–15% margin to prevent rigid consolidation of frontline units.</p>
           </div>
 
           <div className="md:col-span-2 p-6 bg-slate-50 border border-slate-100 rounded-2xl opacity-60 pointer-events-none">
              <div className="flex items-center justify-between">
                 <div>
-                   <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Implicit Daily Capacity (BBI)</span>
-                   <span className="text-xl font-bold text-slate-600">{BBI_DAILY_CAPACITY.toLocaleString()} per team</span>
+                   <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Implicit Daily Capacity (Workload)</span>
+                   <span className="text-xl font-bold text-slate-600">{DAILY_WORKLOAD_CAPACITY.toLocaleString()} per team</span>
                 </div>
                 <div className="text-right">
-                   <span className="block text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Monthly Asset Target</span>
+                   <span className="block text-[10px] font-black uppercase text-indigo-400 tracking-widest mb-1">Projected Monthly Capacity</span>
                    <span className="text-xl font-bold text-slate-600">~{(workloadCapacity * 20).toLocaleString()}</span>
                 </div>
              </div>
@@ -130,24 +155,29 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
                <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl p-4 transition-all hover:bg-white/10">
                  <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center">
-                       <Users className="w-5 h-5 text-indigo-400" />
+                       <Layers className="w-5 h-5 text-indigo-400" />
                     </div>
                     <div>
-                       <span className="block text-2xl font-black">{activeAuditors}</span>
-                       <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Staff</span>
+                       <span className="block text-2xl font-black">{auditGroups.length}</span>
+                       <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest">Audit Groups</span>
                     </div>
                  </div>
                  <div className="text-right">
                     <span className="block text-xl font-black text-emerald-400">{auditorTeams}</span>
-                    <span className="block text-[8px] font-bold text-slate-500 uppercase">Teams (Fix 2)</span>
+                    <span className="block text-[8px] font-bold text-slate-500 uppercase">Available Teams</span>
                  </div>
                </div>
+               
+               <div className="px-1 flex justify-between items-center text-[8px] font-black uppercase text-slate-600 tracking-tighter">
+                  <span>Resource Pool: {activeAuditors} Staff</span>
+                  <span className="text-indigo-400">Coverage: {(auditorTeams / Math.max(1, auditGroups.length)).toFixed(1)}x per group</span>
+               </div>
 
-               <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">1-Month Projection</span>
+                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Efficiency Projection</span>
                     <span className={`text-xs font-black px-2 py-0.5 rounded-md ${monthCompletion > 80 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                      {monthCompletion}% Completion
+                      {monthCompletion}% Phase Completion
                     </span>
                   </div>
                   <div className="h-4 bg-white/5 rounded-full overflow-hidden mb-3 p-1">
@@ -156,9 +186,14 @@ export const AuditConstraints: React.FC<AuditConstraintsProps> = ({
                        style={{ width: `${monthCompletion}%` }}
                      ></div>
                   </div>
+                  <div className="flex justify-between items-center text-[10px] mb-2 px-1">
+                     <span className="text-slate-400">Capacity: {(workloadCapacity).toLocaleString()} / day</span>
+                     <span className="text-indigo-400 font-bold">Total Load: {(totalAssets).toLocaleString()} assets</span>
+                  </div>
                   <p className="text-[10px] text-slate-500 font-medium leading-normal italic">
-                    Based on 20 working days, your current capacity allows for {(workloadCapacity).toLocaleString()} assets per day. 
-                    {daysToFinish > 0 && ` Estimated total time: ${daysToFinish} days.`}
+                    {daysToFinish > 0 
+                      ? `Based on current staff, your team can complete the institutional audit in approximately ${daysToFinish} working days.`
+                      : 'Assign staff to see completion projections.'}
                   </p>
                </div>
             </div>

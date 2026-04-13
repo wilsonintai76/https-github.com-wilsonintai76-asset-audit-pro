@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS departments (
   is_exempted INTEGER DEFAULT 0,
   total_assets INTEGER DEFAULT 0,
   uninspected_asset_count INTEGER DEFAULT 0,
+  tier TEXT,
+  is_task_force INTEGER DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -152,6 +154,7 @@ CREATE TABLE IF NOT EXISTS audit_groups (
   name TEXT NOT NULL,
   description TEXT,
   color TEXT,
+  tier TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

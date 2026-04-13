@@ -841,186 +841,355 @@ export function exportInspectionSchedule(
 
 // ─── REPORT 6: Strategic Inspection Plan Approval (Management Grade) ──────────
 
-interface StrategicFeasibility {
-  score: number;
-  riskLevel: string;
-  bottlenecks: string[];
-  recommendations: string[];
-  exemptionRecommendations?: { unit: string; reason: string }[];
-}
-
-export function printStrategicInspectionPlanApproval(
+export function generateStrategicInspectionPlanHTML(
   institutionName: string,
-  cycleYear: number,
+  year: number,
   globalStats: GlobalStats,
-  feasibility: StrategicFeasibility | null,
+  feasibility: any,
   entities: Entity[],
-  pairings: EntityPermission[],
+  entityPermissions: EntityPermission[],
   signatures: { approver: string; supporter: string },
   auditGroups: any[],
-  allDepartments: any[]
-): void {
-  const getEntity = (id: string) => entities.find(e => e.id === id);
+  departments: any[],
+  phases: any[],
+  kpiTiers: any[],
+  kpiTierTargets: any[],
+  locations: any[],
+  schedules: any[] = [],
+  maxAssetsPerDay: number = 1000,
+  maxLocationsPerDay: number = 5
+): string {
+  const overallAuditors = departments.reduce((s, d) => s + (d.auditorCount || 0), 0);
+  const overallLocations = locations.length;
+  
+  const sortedPhases = [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const sortedTiers = [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets);
 
-  // Consolidate pairings: Group A -> Group B and Group B -> Group A into one row if mutual
-  const processedKeys = new Set<string>();
-  const consolidatedPairings: { auditor: string; target: string; isMutual: boolean; assets: number; targetAssets: number }[] = [];
+  // Helper detect task force
+  const isTaskForceDept = (d: any) =>
+    d.isTaskForce || d.is_task_force === 1 || d.is_task_force === true ||
+    d.abbr === 'UPKK' || (d.name && (d.name.includes('UPKK') || d.name.includes('PENGURUSAN KOLEJ KEDIAMAN')));
 
-  pairings.forEach(p => {
-    const key = `${p.auditorEntityId}-${p.targetEntityId}`;
-    const reverseKey = `${p.targetEntityId}-${p.auditorEntityId}`;
-    
-    if (processedKeys.has(key)) return;
-
-    const auditor = getEntity(p.auditorEntityId);
-    const target = getEntity(p.targetEntityId);
-
-    // Check if there is a reciprocal pair
-    const isMutual = p.isMutual || pairings.some(other => 
-      other.auditorEntityId === p.targetEntityId && 
-      other.targetEntityId === p.auditorEntityId && 
-      other.isMutual
-    );
-
-    consolidatedPairings.push({
-      auditor: auditor?.name || 'Unknown',
-      target: target?.name || 'Unknown',
-      isMutual: !!p.isMutual,
-      assets: auditor?.assets || 0,
-      targetAssets: target?.assets || 0
-    });
-
-    processedKeys.add(key);
-    if (isMutual) {
-      processedKeys.add(reverseKey);
-    }
-  });
-
-  const pairingRows = consolidatedPairings.map((p, i) => `
-    <tr>
-      <td class="center">${i + 1}</td>
-      <td><strong>${p.auditor}</strong></td>
-      <td class="center" style="font-size:7pt;color:${p.isMutual ? '#059669' : '#4f46e5'}">
-        <div style="font-weight:900;">${p.isMutual ? '↔' : '→'}</div>
-        ${p.isMutual ? 'MUTUAL / TIMBAL BALAS' : 'ONE-WAY / SOKONGAN'}
-      </td>
-      <td><strong>${p.target}</strong></td>
-      <td class="right">${fmt(p.targetAssets)}</td>
-    </tr>
-  `).join('');
-
-  // Analysis of Unit Consolidation
+  // 1. Group-to-Dept Mapping
   const groupRows = auditGroups.map((g, i) => {
-    const members = allDepartments.filter(d => d.auditGroupId === g.id);
-    if (members.length === 0) return '';
+    const depts = departments.filter(d => d.auditGroupId === g.id);
+    const names = depts.map(d => d.name).join(', ');
+    const assets = depts.reduce((s, d) => s + (d.totalAssets || 0), 0);
     return `
       <tr>
         <td class="center">${i + 1}</td>
         <td><strong>${g.name}</strong></td>
-        <td>${members.map(m => m.name).join(', ')}</td>
-        <td class="right">${fmt(members.reduce((sum, m) => sum + (m.totalAssets || 0), 0))}</td>
+        <td>${names || '<em style="color:#94a3b8;">Empty</em>'}</td>
+        <td class="right">${fmt(assets)}</td>
       </tr>
     `;
-  }).filter(Boolean).join('');
+  }).join('');
 
-  const bottleneckItems = (feasibility?.bottlenecks && feasibility.bottlenecks.length > 0)
-    ? feasibility.bottlenecks.map(b => `<li style="margin-bottom:2pt;">${b}</li>`).join('')
-    : '<li>Tiada kekangan utama dikenal pasti.</li>';
+  // 2. Standalone / Internal Audit Highlight
+  const internalAuditDepts = departments.filter(d => d.isExempted || (d as any).is_exempted === 1 || (d as any).is_exempted === true);
+  const taskForceDepts = departments.filter(d => {
+    const isIntAudit = d.isExempted || (d as any).is_exempted === 1 || (d as any).is_exempted === true;
+    return !isIntAudit && isTaskForceDept(d);
+  });
 
-  const recommendationItems = (feasibility?.recommendations && feasibility.recommendations.length > 0)
-    ? feasibility.recommendations.map(r => `<li style="margin-bottom:2pt;color:#1e40af;"><strong>Syor / Recommendation:</strong> ${r}</li>`).join('')
-    : '<li>Tiada syor khusus dijanakan.</li>';
+  const internalRows = internalAuditDepts.map((d, i) => {
+    const locCount = locations.filter(l => l.departmentId === d.id).length;
+    return `
+      <tr>
+        <td class="center">${i + 1}</td>
+        <td><strong>${d.name}</strong></td>
+        <td class="center">${fmt(d.totalAssets || 0)}</td>
+        <td class="center">${locCount}</td>
+        <td class="center">${d.auditorCount || 0}</td>
+        <td>Internal Regulatory Audit</td>
+      </tr>
+    `;
+  }).join('');
 
-  const html = `
-<style>
-  @media print {
-    .section { break-inside: avoid; margin-bottom: 12pt; }
-    h3 { margin-top: 10pt; margin-bottom: 5pt; font-size: 11pt; border-bottom: 1pt solid #eee; padding-bottom: 2pt; }
-    table { font-size: 8.5pt; margin-bottom: 10pt; }
-    td, th { padding: 4pt 6pt; }
-    .stat-box { padding: 8pt; }
-    .stat-value { font-size: 18pt; }
-  }
-  .section { margin-bottom: 15pt; }
-  .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15pt; margin-top: 10pt; }
-  .stat-box { border: 1pt solid #e2e8f0; border-radius: 12pt; background: #fff; }
-</style>
+  // 3. Department Distribution (Full Overview - Grouped)
+  const gMap: Record<string, { name: string; depts: any[]; assets: number; auditors: number }> = {};
+  departments.forEach(d => {
+    const gId = d.auditGroupId || 'standalone';
+    if (!gMap[gId]) {
+      const gObj = auditGroups.find(g => g.id === gId);
+      gMap[gId] = {
+        name: gObj?.name || (gId === 'standalone' ? 'Standalone / Ungrouped Units' : 'Group'),
+        depts: [],
+        assets: 0,
+        auditors: 0
+      };
+    }
+    gMap[gId].depts.push(d);
+    gMap[gId].assets += (d.totalAssets || 0);
+    gMap[gId].auditors += (d.auditorCount || 0);
+  });
 
-<div class="header" style="border-bottom: 2pt solid #111; padding-bottom: 5pt;">
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;">
-    <div style="text-align:left;">
-      <h1 style="font-size:16pt;margin-bottom:0;">MEMORANDUM KELULUSAN STRATEGI AUDIT</h1>
-      <h2 style="font-size:12pt;margin-top:0;color:#475569;font-weight:600;">STRATEGIC AUDIT PLAN APPROVAL MEMORANDUM</h2>
+  const sortedGroups = Object.values(gMap).sort((a, b) => {
+    if (a.name.includes('Standalone')) return 1;
+    if (b.name.includes('Standalone')) return -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const distributionRows = sortedGroups.map(group => {
+    const groupHdr = `
+      <tr style="background:#f8fafc;">
+        <td colspan="2" style="font-weight:900;padding:8pt 10pt;border-left:3pt solid #6366f1;color:#1e293b;font-size:9.5pt;">${group.name.toUpperCase()}</td>
+        <td class="right" style="font-weight:900;color:#1e293b;">${fmt(group.assets)}</td>
+        <td class="right" style="font-weight:900;color:#1e293b;">${fmt(group.auditors)}</td>
+      </tr>
+    `;
+    const rows = group.depts.map(d => `
+      <tr>
+        <td style="padding-left:25pt;color:#475569;font-weight:600;">${d.name}</td>
+        <td class="center" style="font-weight:700;color:#94a3b8;font-size:8pt;">${d.abbr || '-'}</td>
+        <td class="right" style="color:#64748b;">${fmt(d.totalAssets || 0)}</td>
+        <td class="right" style="color:#64748b;">${fmt(d.auditorCount || 0)}</td>
+      </tr>
+    `).join('');
+    return groupHdr + rows;
+  }).join('');
+
+  // 4. Phase Timeline Summary
+  const phaseTimeline = sortedPhases.map(p => `
+    <div class="stat-box" style="padding: 6pt; border-left: 2pt solid #6366f1;">
+      <div style="font-weight:800;font-size:8pt;color:#1e293b;">${p.name}</div>
+      <div style="font-size:7pt;color:#64748b;">${p.startDate} – ${p.endDate}</div>
     </div>
-    <div style="text-align:right;">
-      <div style="font-weight:900;font-size:12pt;">CONFIDENTIAL / SULIT</div>
+  `).join('');
+
+  // 5. KPI Tier Summary
+  const kpiSummary = sortedTiers.map(tier => {
+    const target = kpiTierTargets.find(t => t.tierId === tier.id);
+    return `
+      <div style="margin-bottom:4pt;border-bottom:1pt solid #f1f5f9;padding-bottom:2pt;">
+        <span style="font-weight:700;font-size:8pt;">${tier.name}</span>: 
+        <span style="font-weight:800;color:#4f46e5;">${target ? target.targetPercentage : 0}%</span> target 
+        <span style="font-size:7pt;color:#94a3b8;">(Min ${fmt(tier.minAssets || 0)} assets)</span>
+      </div>
+    `;
+  }).join('');
+
+  // ── KPI Phase Plan Logic (New) ──
+  const instTotal = departments.reduce((s, d) => s + (d.totalAssets || 0), 0);
+  const kpiPhaseRows = departments.sort((a, b) => (b.totalAssets || 0) - (a.totalAssets || 0)).map(dept => {
+    const deptPct = instTotal > 0 ? ((dept.totalAssets || 0) / instTotal) * 100 : 0;
+    const tier = sortedTiers.filter(t => deptPct >= t.minAssets).sort((a,b) => b.minAssets - a.minAssets)[0];
+    const deptAudits = schedules.filter(s => s.departmentId === dept.id);
+    const deptLocIds = new Set(locations.filter(l => l.departmentId === dept.id).map(l => l.id));
+    const allLocsScheduled = deptLocIds.size > 0 && Array.from(deptLocIds).every(lid => deptAudits.some(a => a.locationId === lid));
+
+    let reached100 = false;
+    const phaseCells = sortedPhases.map(phase => {
+      const targetPct = tier ? (kpiTierTargets.find(kt => kt.tierId === tier.id && kt.phaseId === phase.id)?.targetPercentage ?? 0) : 0;
+      const isReq = (dept.totalAssets || 0) > 0 && targetPct > 0 && !reached100;
+      if (targetPct >= 100) reached100 = true;
+
+      if (!isReq) return `<td class="center" style="color:#e2e8f0;font-size:12pt;opacity:0.3;">•</td>`;
+
+      const hasAudit = deptAudits.some(a => a.phaseId === phase.id) || allLocsScheduled;
+      const isComp = deptAudits.some(a => a.phaseId === phase.id && a.status === 'Completed');
+      const assets = Math.ceil((dept.totalAssets || 0) * targetPct / 100);
+
+      const color = isComp ? '#059669' : hasAudit ? '#2563eb' : '#e11d48';
+      const bg = isComp ? '#ecfdf5' : hasAudit ? '#eff6ff' : '#fff1f2';
+      const border = isComp ? '1pt solid #10b981' : hasAudit ? '1pt solid #bfdbfe' : '1pt dashed #fecdd3';
+
+      return `
+        <td class="center">
+          <div style="display:inline-block;padding:2pt 4pt;background:${bg};border:${border};border-radius:4pt;min-width:28pt;">
+            <div style="font-weight:900;color:${color};font-size:7.5pt;line-height:1;">${targetPct}%</div>
+            <div style="font-size:6pt;color:#64748b;margin-top:1pt;">${fmt(assets)}</div>
+          </div>
+        </td>
+      `;
+    }).join('');
+
+    const statusLabel = (dept.totalAssets || 0) === 0 ? 'EXEMPT' : allLocsScheduled || deptAudits.length > 0 ? 'READY' : 'INCOMPLETE';
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:800;font-size:8pt;">${dept.name}</div>
+          <div style="font-size:6.5pt;color:#94a3b8;font-weight:600;">${dept.abbr || ''}</div>
+        </td>
+        <td class="center">
+          <div style="font-weight:700;font-size:7.5pt;">${fmt(dept.totalAssets || 0)}</div>
+          <div style="font-size:6pt;color:#4f46e5;font-weight:800;text-transform:uppercase;">${tier?.name || '---'}</div>
+        </td>
+        ${phaseCells}
+        <td class="right" style="font-weight:900;font-size:7pt;color:${statusLabel === 'READY' ? '#059669' : '#f59e0b'}">${statusLabel}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const consolidatedPairings = entityPermissions.map(p => {
+    const aud = entities.find(e => e.id === p.auditorEntityId);
+    const tgt = entities.find(e => e.id === p.targetEntityId);
+    return {
+      auditor: aud?.name || '?',
+      target: tgt?.name || '?',
+      assets: aud?.assets || 0,
+      targetAssets: tgt?.assets || 0,
+      isMutual: p.isMutual
+    };
+  });
+
+  const bottleneckItems = feasibility?.bottlenecks?.map((b: string) => `<li>${b}</li>`).join('') || '<li>None identified.</li>';
+
+  return `
+<div class="header" style="display:flex;justify-content:space-between;align-items:center;">
+  <div>
+    <h1>Strategic Audit Plan Approval Memo</h1>
+    <p class="subtitle">Cycle Year: ${year} &nbsp;|&nbsp; Target Compliance: ${pct(globalStats.targetPercentage)}</p>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:8pt;font-weight:900;color:#6366f1;text-transform:uppercase;letter-spacing:1pt;">Official Strategic Record</div>
+    <div style="font-size:12pt;font-weight:900;color:#1e293b;">${institutionName}</div>
+  </div>
+</div>
+
+<div class="stat-row" style="display:grid;grid-template-columns: repeat(4, 1fr); gap:10pt; margin-bottom:15pt;">
+  <div class="stat-box" style="border:1pt solid #e2e8f0;border-radius:8pt;padding:10pt;background:#fff;">
+    <div class="stat-label" style="font-size:7pt;font-weight:800;color:#64748b;text-transform:uppercase;">Institutional Assets</div>
+    <div class="stat-value" style="font-size:16pt;font-weight:900;color:#1e293b;margin-top:2pt;">${fmt(globalStats.totalInstitutionAssets)}</div>
+  </div>
+  <div class="stat-box" style="border:1pt solid #e2e8f0;border-radius:8pt;padding:10pt;background:#fff;">
+    <div class="stat-label" style="font-size:7pt;font-weight:800;color:#64748b;text-transform:uppercase;">Resource Pool</div>
+    <div class="stat-value" style="font-size:16pt;font-weight:900;color:#1e293b;margin-top:2pt;">${overallAuditors} Officers</div>
+  </div>
+  <div class="stat-box" style="border:1pt solid #e2e8f0;border-radius:8pt;padding:10pt;background:#fff;">
+    <div class="stat-label" style="font-size:7pt;font-weight:800;color:#64748b;text-transform:uppercase;">Total Locations</div>
+    <div class="stat-value" style="font-size:16pt;font-weight:900;color:#1e293b;margin-top:2pt;">${overallLocations}</div>
+  </div>
+  <div class="stat-box" style="border:1pt solid #e2e8f0;border-radius:8pt;padding:10pt;background:#fff;border-color:${feasibility?.riskLevel === 'Low' ? '#10b981' : '#f59e0b'};">
+    <div class="stat-label" style="font-size:7pt;font-weight:800;color:#64748b;text-transform:uppercase;">Feasibility Score</div>
+    <div class="stat-value" style="font-size:16pt;font-weight:900;color:${feasibility?.riskLevel === 'Low' ? '#059669' : '#d97706'};margin-top:2pt;">${feasibility?.score}%</div>
+  </div>
+</div>
+
+<div class="section" style="display:grid;grid-template-columns: 1.5fr 1fr; gap:16pt;margin-bottom:15pt;">
+  <div>
+    <h3>1. PHASE EXECUTION TIMELINE</h3>
+    <div style="display:grid;grid-template-columns: repeat(3, 1fr); gap:8pt;margin-top:6pt;">
+      ${phaseTimeline || '<p style="color:#888;font-size:8pt;">No phase schedule defined.</p>'}
+    </div>
+  </div>
+  <div style="background:#f8fafc;padding:10pt;border-radius:10pt;border:1pt solid #e2e8f0;">
+    <h3 style="margin-top:0;">2. INSTITUTIONAL KPI PLAN</h3>
+    <div style="margin-top:6pt;">
+      ${kpiSummary || '<p style="color:#888;font-size:8pt;">No KPI tiers configured.</p>'}
+      <div style="margin-top:8pt;font-size:7.5pt;font-weight:900;color:#1e293b;text-transform:uppercase;">Institutional Target: ${pct(globalStats.targetPercentage)}</div>
     </div>
   </div>
 </div>
 
-<div style="margin: 10pt 0; line-height: 1.4; font-size: 9.5pt;">
-  <table style="border:none;">
-    <tr style="background:none;"><td style="width:100pt;border:none;font-weight:800;padding:2pt 0;">KEPADA / TO:</td><td style="border:none;padding:2pt 0;">${signatures.approver}</td></tr>
-    <tr style="background:none;"><td style="border:none;font-weight:800;padding:2pt 0;">DARIPADA / FROM:</td><td style="border:none;padding:2pt 0;">Urusetia Program Audit Silang Asset / Asset Cross-Audit Secretariat</td></tr>
-    <tr style="background:none;"><td style="border:none;font-weight:800;padding:2pt 0;">TARIKH / DATE:</td><td style="border:none;padding:2pt 0;">${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</td></tr>
-    <tr style="background:none;"><td style="border:none;font-weight:800;padding:2pt 0;">PERKARA / RE:</td><td style="border:none;font-weight:800;text-transform:uppercase;padding:2pt 0;">PERANCANGAN STRATEGIK DAN KPI AUDIT ASET TAHUN ${cycleYear}</td></tr>
+<div class="section" style="margin-bottom:15pt;">
+  <h3>3. KPI PHASE INSPECTION PLAN (DETAILED)</h3>
+  <div style="background:#f0f9ff;padding:8pt;border-radius:8pt;font-size:7.5pt;color:#0369a1;margin-bottom:10pt;font-weight:600;border:1pt solid #bae6fd;">
+    Keperluan fasa pemeriksaan mengikut tier KPI. Setiap peratusan menunjukkan sasaran kumulatif aset yang perlu diliputi.
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Department / Unit</th>
+        <th style="width:50pt;" class="center">Assets / Tier</th>
+        ${sortedPhases.map(p => `<th class="center" style="width:40pt;">${p.name}</th>`).join('')}
+        <th style="width:50pt;" class="right">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${kpiPhaseRows}
+    </tbody>
   </table>
 </div>
 
-<div class="divider"></div>
+<div class="section" style="margin-bottom:15pt;">
+  <h3>4. TABURAN SUMBER JABATAN / DEPARTMENT RESOURCE DISTRIBUTION</h3>
+  <p style="font-size:8.5pt;margin-bottom:6pt;">Institutional resource detail by audit group and constituent unit:</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Group / Department</th>
+        <th style="width:60pt;" class="center">Abbr.</th>
+        <th style="width:80pt;" class="right">Assets</th>
+        <th style="width:80pt;" class="right">Auditors</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${distributionRows}
+    </tbody>
+  </table>
+</div>
 
-<div class="section">
-  <h3>1. RINGKASAN EKSEKUTIF / EXECUTIVE SUMMARY</h3>
-  <div class="stat-row">
-    <div class="stat-box" style="border-left: 4pt solid #6366f1;">
-      <div class="stat-label" style="font-size:8pt;font-weight:800;color:#64748b;">SKOR KEBOLEHLAKSANAAN / FEASIBILITY SCORE</div>
-      <div class="stat-value" style="font-size:20pt;font-weight:900;color:#1e293b;margin:2pt 0;">${feasibility?.score || 0}%</div>
-      <div class="stat-sub" style="font-size:8pt;font-weight:700;color:#6366f1;">Risk Level: ${feasibility?.riskLevel || 'Unknown'}</div>
-    </div>
-    <div class="stat-box" style="border-left: 4pt solid #10b981;">
-      <div class="stat-label" style="font-size:8pt;font-weight:800;color:#64748b;">SASARAN INSTITUSI / INSTITUTIONAL TARGET</div>
-      <div class="stat-value" style="font-size:20pt;font-weight:900;color:#1e293b;margin:2pt 0;">${globalStats.targetPercentage}%</div>
-      <div class="stat-sub" style="font-size:8pt;font-weight:700;color:#059669;">${fmt(globalStats.targetAssets)} Assets Total</div>
-    </div>
-  </div>
-  
-  <div style="margin-top:10pt;padding:8pt;background:#f8fafc;border:1pt solid #e2e8f0;border-radius:10pt;">
-    <h4 style="margin:0 0 4pt 0;font-size:8.5pt;text-transform:uppercase;color:#475569;">Syor AI / AI Recommendations:</h4>
+<div class="page-break"></div>
+
+<div class="section" style="margin-bottom:15pt;">
+  <h3>5. JABATAN AUDIT DALAMAN / INTERNAL AUDIT DEPARTMENT</h3>
+  <p style="font-size:8.5pt;margin-bottom:6pt;">The following units are proposed for **Internal/Regulatory Audit** based on asset volume or specialty status:</p>
+  ${internalAuditDepts.length === 0 ? '<p style="font-size:8pt;color:#94a3b8;font-style:italic;">Tiada jabatan ditetapkan sebagai Audit Dalaman.</p>' : `
+    <table>
+      <thead>
+        <tr>
+          <th style="width:25pt;" class="center">Bil</th>
+          <th>Unit / Department</th>
+          <th class="center">Total Assets</th>
+          <th class="center">Locs</th>
+          <th class="center">Personnel</th>
+          <th>Justification</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${internalRows}
+      </tbody>
+    </table>
+  `}
+
+  <div style="margin-top:12pt;background:#f8fafc;padding:8pt;border-radius:8pt;border:1pt solid #e2e8f0;">
+    <h4 style="margin:0 0 4pt 0;font-size:8.5pt;text-transform:uppercase;color:#475569;">Analisis Kekangan / Bottleneck Analysis:</h4>
     <ul style="padding-left:15pt;font-size:8pt;margin:0;">
-      ${recommendationItems}
+      ${bottleneckItems}
     </ul>
   </div>
 </div>
 
-<div class="section">
-  <h3>2. KEKANGAN DAN GABUNGAN UNIT / CONSTRAINTS & UNIT CONSOLIDATION</h3>
-  <p style="font-size:8.5pt;margin-bottom:6pt;">Analisis sumber telah mengenal pasti kekangan berikut dan mencadangkan penggabungan unit untuk meningkatkan kecekapan:</p>
-  
-  <div style="margin-bottom:10pt;">
-    <h4 style="font-size:8.5pt;margin-bottom:4pt;">Jadual Penggabungan Unit / Consolidation Table:</h4>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:30pt;" class="center">Bil</th>
-          <th>Kumpulan Audit / Audit Group</th>
-          <th>Unit Terlibat / Involved Units</th>
-          <th class="right">Jumlah Aset / Total Assets</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${groupRows}
-      </tbody>
-    </table>
+${taskForceDepts.length > 0 ? `
+<div class="section" style="margin-bottom:15pt;">
+  <h3>6. UNIT TUGAS KHAS / SPECIAL TASK FORCE UNITS</h3>
+  <div style="background:#eff6ff;padding:8pt;border-radius:8pt;font-size:7.5pt;color:#1e40af;margin-bottom:10pt;font-weight:600;border:1pt solid #bfdbfe;">
+    Jabatan ini mempunyai skala operasi yang besar dan ditetapkan sebagai unit Tugas Khas dalam struktur audit silang.
   </div>
-
-  <h4 style="font-size:8.5pt;margin-bottom:4pt;">Analisis Kekangan / Bottleneck Analysis:</h4>
-  <ul style="padding-left:18pt;font-size:8.5pt;margin-top:0;">
-    ${bottleneckItems}
-  </ul>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30pt;" class="center">Bil</th>
+        <th>Jabatan / Unit</th>
+        <th class="center">Jumlah Aset</th>
+        <th class="center">Lokasi</th>
+        <th class="center">Pegawai</th>
+        <th class="right">Skor BBI</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${taskForceDepts.map((d, i) => {
+        const locCount = locations.filter(l => l.departmentId === d.id).length;
+        const bbi = Math.round((d.totalAssets || 0) * 0.5 + locCount * 100 + (d.auditorCount || 0) * 300);
+        return `
+          <tr>
+            <td class="center">${i + 1}</td>
+            <td><strong>${d.name}</strong></td>
+            <td class="center">${fmt(d.totalAssets || 0)}</td>
+            <td class="center">${locCount}</td>
+            <td class="center">${d.auditorCount || 0}</td>
+            <td class="right"><strong>${fmt(bbi)}</strong></td>
+          </tr>
+        `;
+      }).join('')}
+    </tbody>
+  </table>
 </div>
+` : ''}
 
-<div class="section">
-  <h3>3. STRATEGI PEMADANAN AUDIT / STRATEGIC AUDIT PAIRING</h3>
+<div class="section" style="margin-bottom:15pt;">
+  <h3>${taskForceDepts.length > 0 ? '7' : '6'}. STRATEGI PEMADANAN AUDIT / STRATEGIC AUDIT PAIRING</h3>
   <p style="font-size:8.5pt;margin-bottom:6pt;">Strategi pemadanan telah diringkaskan untuk keberkesanan (Mutual pairings are consolidated):</p>
   <table>
     <thead>
@@ -1053,8 +1222,8 @@ export function printStrategicInspectionPlanApproval(
   </table>
 </div>
 
-<div class="section" style="margin-top:15pt;background:#fff7ed;padding:12pt;border:1pt solid #ffedd5;border-radius:10pt;">
-  <h3 style="margin-top:0;color:#9a3412;border:none;">4. PROTOKOL INTEGRITI DAN KEPATUHAN / INTEGRITY PROTOCOLS</h3>
+<div class="section" style="margin-top:15pt;background:#fff7ed;padding:12pt;border:1pt solid #ffedd5;border-radius:10pt;margin-bottom:15pt;">
+  <h3 style="margin-top:0;color:#9a3412;border:none;">${taskForceDepts.length > 0 ? '8' : '7'}. PROTOKOL INTEGRITI DAN KEPATUHAN / INTEGRITY PROTOCOLS</h3>
   <p style="font-size:8.5pt;margin-bottom:0;color:#9a3412;">
     <strong>KAWALAN KESELAMATAN:</strong> Sistem telah mengunci tugasan untuk mengelakkan "Self-Audit".<br>
     <strong>KONFLIK KEPETINGAN:</strong> Site Supervisor <strong>TIDAK DIBENARKAN</strong> secara mutlak untuk menjadi Pemeriksa bagi lokasi tersebut.<br>
@@ -1063,8 +1232,8 @@ export function printStrategicInspectionPlanApproval(
 </div>
 
 ${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.length > 0 ? `
-<div class="section">
-  <h3>6. CADANGAN PENGECUALIAN POLISI / PROPOSED POLICY EXCEPTIONS</h3>
+<div class="section" style="margin-bottom:15pt;">
+  <h3>${taskForceDepts.length > 0 ? '9' : '8'}. CADANGAN PENGECUALIAN POLISI / PROPOSED POLICY EXCEPTIONS</h3>
   <table>
     <thead>
       <tr>
@@ -1074,7 +1243,7 @@ ${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.
       </tr>
     </thead>
     <tbody>
-      ${feasibility.exemptionRecommendations.map((ex, i) => `
+      ${feasibility.exemptionRecommendations.map((ex: any, i: number) => `
         <tr>
           <td class="center">${i + 1}</td>
           <td><strong>${ex.unit}</strong></td>
@@ -1086,8 +1255,10 @@ ${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.
 </div>
 ` : ''}
 
+<div class="page-break"></div>
+
 <div class="section">
-  <h3>${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.length > 0 ? '7' : '6'}. PERAKUAN DAN KELULUSAN / RECOMMENDATION AND APPROVAL</h3>
+  <h3>${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.length > 0 ? (taskForceDepts.length > 0 ? '10' : '9') : (taskForceDepts.length > 0 ? '9' : '8')}. PERAKUAN DAN KELULUSAN / RECOMMENDATION AND APPROVAL</h3>
   <div style="margin-top:10pt;display:grid;grid-template-columns: 1fr 1fr; gap:20pt;">
     
     <div style="border:1pt solid #cbd5e1;padding:12pt;border-radius:10pt;background:#f8fafc;">
@@ -1133,6 +1304,42 @@ ${feasibility?.exemptionRecommendations && feasibility.exemptionRecommendations.
   Dokumen ini dijanakan secara digital oleh Sistem <strong>Inspect-able</strong> AI Strategy Engine.<br>
 </div>
   `;
-
+}
+export function printStrategicInspectionPlanApproval(
+  institutionName: string,
+  year: number,
+  globalStats: GlobalStats,
+  feasibility: any,
+  entities: Entity[],
+  entityPermissions: EntityPermission[],
+  signatures: { approver: string; supporter: string },
+  auditGroups: any[],
+  departments: any[],
+  phases: any[],
+  kpiTiers: any[],
+  kpiTierTargets: any[],
+  locations: any[],
+  schedules: any[] = [],
+  maxAssetsPerDay: number = 1000,
+  maxLocationsPerDay: number = 5
+): void {
+  const html = generateStrategicInspectionPlanHTML(
+    institutionName,
+    year,
+    globalStats,
+    feasibility,
+    entities,
+    entityPermissions,
+    signatures,
+    auditGroups,
+    departments,
+    phases,
+    kpiTiers,
+    kpiTierTargets,
+    locations,
+    schedules,
+    maxAssetsPerDay,
+    maxLocationsPerDay
+  );
   openPrint('Strategic Audit Plan Approval Memo', html);
 }

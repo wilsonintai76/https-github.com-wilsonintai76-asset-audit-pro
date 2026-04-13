@@ -54,6 +54,12 @@ interface AppActionsProps {
   setConfirmState: React.Dispatch<React.SetStateAction<any>>;
   setFeasibilityReport: React.Dispatch<React.SetStateAction<any>>;
   setCrossAuditPermissions: React.Dispatch<React.SetStateAction<CrossAuditPermission[]>>;
+  isGroupSimulatorActive: boolean;
+  setIsGroupSimulatorActive: React.Dispatch<React.SetStateAction<boolean>>;
+  simulatedGroups: any[];
+  setSimulatedGroups: React.Dispatch<React.SetStateAction<any[]>>;
+  isProcessing: boolean;
+  setIsProcessing: React.Dispatch<React.SetStateAction<boolean>>;
   certRenewalModalUser: User | null;
   setCertRenewalModalUser: React.Dispatch<React.SetStateAction<User | null>>;
   setShowForcePasswordModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -70,12 +76,14 @@ interface AppActionsProps {
   rbacMatrix: any;
   maxAssetsPerDay: number;
   maxLocationsPerDay: number;
-  minAuditorsPerLocation: number;
-  dailyInspectionCapacity: number;
+  standaloneThresholdAssets: number;
+  groupingMargin: number;
   setMaxAssetsPerDay: React.Dispatch<React.SetStateAction<number>>;
   setMaxLocationsPerDay: React.Dispatch<React.SetStateAction<number>>;
   setMinAuditorsPerLocation: React.Dispatch<React.SetStateAction<number>>;
   setDailyInspectionCapacity: React.Dispatch<React.SetStateAction<number>>;
+  setStandaloneThresholdAssets: React.Dispatch<React.SetStateAction<number>>;
+  setGroupingMargin: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const useAppActions = (props: AppActionsProps) => {
@@ -86,6 +94,8 @@ export const useAppActions = (props: AppActionsProps) => {
     setKpiTierTargets, setInstitutionKPIs, setDepartmentMappings, 
     setAuditGroups, setBuildings, setActivities, setNotifications, setToasts,
     setPairingLocked, setPairingLockInfo, setIsSidebarOpen, setConfirmState, setFeasibilityReport, setCrossAuditPermissions,
+    setIsGroupSimulatorActive, setSimulatedGroups,
+    isProcessing, setIsProcessing,
     certRenewalModalUser, setCertRenewalModalUser, setShowForcePasswordModal, setShowProfileCompleteModal,
     loadAllData, setConnectionErrorMessage, rbacMatrix, departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets, maxAssetsPerDay
   } = props;
@@ -302,6 +312,24 @@ export const useAppActions = (props: AppActionsProps) => {
 
   const handleBulkRemovePermissions = async (ids: string[]) => {
     try { await gateway.bulkDeletePermissions(ids); setCrossAuditPermissions(await gateway.getPermissions()); }
+    catch (e) { showError(e); }
+  };
+
+  const handleClearAllPermissions = async () => {
+    try { await gateway.clearAllPermissions(); setCrossAuditPermissions([]); }
+    catch (e) { showError(e); }
+  };
+
+  const handleResetOnlyPermissions = async () => {
+    try { 
+      await gateway.resetOnlyPermissions(); 
+      const perms = await gateway.getPermissions();
+      setCrossAuditPermissions(perms);
+    } catch (e) { showError(e); }
+  };
+
+  const handleUpdatePermission = async (id: string, updates: Partial<CrossAuditPermission>) => {
+    try { await gateway.updatePermission(id, updates); setCrossAuditPermissions(await gateway.getPermissions()); }
     catch (e) { showError(e); }
   };
 
@@ -588,14 +616,43 @@ export const useAppActions = (props: AppActionsProps) => {
     catch (e) { showError(e); }
   };
 
-  const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number, useAI: boolean) => {
+  const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number, margin: number, useAI: boolean, pairingMode: string = 'asymmetric', aiConsolidation: boolean = false, minAuditorsPerGroup: number = 10, dryRun: boolean = false) => {
     try { 
-      const res = await gateway.autoConsolidateAuditGroups(threshold, excludedIds, minAuditors, useAI); 
-      setAuditGroups(await gateway.getAuditGroups()); 
-      setDepartments(await gateway.getDepartments());
-      showToast(useAI ? 'Thematic consolidation complete' : 'Mathematical consolidation complete'); 
+      const res = await gateway.autoConsolidateAuditGroups(threshold, excludedIds, minAuditors, margin, useAI, pairingMode, aiConsolidation, minAuditorsPerGroup, dryRun) as any; 
+      
+      if (dryRun && res?.groups) {
+        setSimulatedGroups(res.groups);
+        setIsGroupSimulatorActive(true);
+        showToast('Grouping Simulation Draft Generated', 'info');
+      } else {
+        setAuditGroups(await gateway.getAuditGroups()); 
+        setDepartments(await gateway.getDepartments());
+        setIsGroupSimulatorActive(false);
+        setSimulatedGroups([]);
+        showToast(aiConsolidation ? 'Auditor-first AI balancing complete' : (useAI ? 'Thematic consolidation complete' : 'Mathematical consolidation complete')); 
+      }
       return res;
     } catch (e) { showError(e); }
+  };
+
+  const handleCommitGroups = async (groups: any[]) => {
+    try {
+      setIsProcessing(true);
+      // Persist the exact groups from simulation draft
+      await gateway.commitConsolidationDraft(groups);
+      
+      setAuditGroups(await gateway.getAuditGroups());
+      setDepartments(await gateway.getDepartments());
+      setIsGroupSimulatorActive(false);
+      setSimulatedGroups([]);
+      showToast('Institutional Groups Committed & Locked', 'success');
+    } catch (e) { showError(e); }
+  };
+
+  const handleCancelGroupSimulation = () => {
+    setIsGroupSimulatorActive(false);
+    setSimulatedGroups([]);
+    showToast('Simulation Draft Discarded');
   };
 
   const handleRunStrategicPairing = async (payload: any) => {
@@ -669,10 +726,10 @@ export const useAppActions = (props: AppActionsProps) => {
     handleUpdateKPITier, handleUpdateKPITierTarget, handleUpdateInstitutionKPI, handleAutoCalculateTierTargets,
     handleDeleteKPITier, handleAddDepartmentMapping, handleDeleteDepartmentMapping, handleAddAuditGroup,
     handleUpdateAuditGroup, handleUpdateBuilding, handleDeleteBuilding, handleBulkAddBuildings,
-    handleDeleteAuditGroup, handleBulkDeleteAuditGroups, handleAutoConsolidate, handleRunStrategicPairing, handleSaveFeasibilityReport, handleSetDeptTotalsFromMapping,
+    handleDeleteAuditGroup, handleBulkDeleteAuditGroups, handleAutoConsolidate, handleCommitGroups, handleCancelGroupSimulation, handleRunStrategicPairing, handleSaveFeasibilityReport, handleSetDeptTotalsFromMapping,
     handleUpsertLocations, handleSyncLocationMappings, handleAddMember, handleBulkAddMembers, handleUpdateMember,
     handleRequestRenewal, handleApproveCert, handleIssueCertForRenewal, handleUpdateDashboardConfig,
     handleUpdateUserStatus, handleUpdateUserRoles, handleResetUserPassword, handleBulkActivateStaff,
-    handleDeleteMember, handleAddBuilding
+    handleDeleteMember, handleAddBuilding, handleResetOnlyPermissions
   };
 };

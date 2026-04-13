@@ -244,6 +244,10 @@ class DataGateway {
     return this.rpc<{ success: boolean }>(h => (api as any).db.permissions.clear.$post({}, { headers: h }));
   }
 
+  async resetOnlyPermissions(): Promise<{ success: boolean }> {
+    return this.rpc<{ success: boolean }>(h => (api as any).db.permissions['reset-only'].$post({}, { headers: h }));
+  }
+
   async updatePermission(id: string, updates: Partial<CrossAuditPermission>) {
     await this.rpc<unknown>(h => (api as any).db.permissions[':id'].$patch({ param: { id }, json: updates as any }, { headers: h }));
   }
@@ -332,8 +336,12 @@ class DataGateway {
     return this.rpc(h => (api as any).compute['auto-tier-targets'].$post({ json: { tierId } }, { headers: h }));
   }
 
-  async autoConsolidateAuditGroups(threshold: number, excludedDeptIds: string[], minAuditors: number, useAI: boolean) {
-    return this.rpc(h => (api as any).compute.consolidate.$post({ json: { threshold, excludedDeptIds, minAuditors, useAI } }, { headers: h }));
+  async autoConsolidateAuditGroups(threshold: number, excludedDeptIds: string[], minAuditors: number, groupingMargin: number, useAI: boolean, pairingMode: string = 'asymmetric', aiConsolidation: boolean = false, minAuditorsPerGroup: number = 10, dryRun: boolean = false) {
+    return this.rpc(h => (api as any).compute.consolidate.$post({ json: { threshold, excludedDeptIds, minAuditors, groupingMargin, useAI, pairingMode, aiConsolidation, minAuditorsPerGroup, dryRun } }, { headers: h }));
+  }
+
+  async commitConsolidationDraft(groups: any[]) {
+    return this.rpc(h => (api as any).compute.consolidate['commit-draft'].$post({ json: { groups } }, { headers: h }));
   }
 
   async generateStrategicPairings(payload: { mode: string; minAuditors: number; strictAuditorRule: boolean; autoPairingMutual: boolean; respectManualPairings: boolean; simulate: boolean; useAI: boolean }) {

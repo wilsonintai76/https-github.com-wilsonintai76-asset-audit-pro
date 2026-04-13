@@ -52,6 +52,8 @@ export interface Department {
   auditorCount?: number;
   isExempted?: boolean;
   isSystemExempted?: boolean;
+  tier?: 'Small' | 'Medium' | 'Large';
+  isTaskForce?: boolean;
 }
 
 export interface AuditGroup {
@@ -59,6 +61,7 @@ export interface AuditGroup {
   name: string;
   description?: string;
   color?: string;
+  tier?: 'Small' | 'Medium' | 'Large';
 }
 
 export interface Building {
