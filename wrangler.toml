@@ -27,6 +27,10 @@ database_id = "8b9169fb-4b7b-4ea1-a7a6-eb8572f083ee"
 binding = "BACKUP"
 bucket_name = "inspect-able-backups"
 
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "inspect-able-media"
+
 # KV Namespace — config, RBAC matrix, user-role cache, session registry and buildings cache.
 # Create with: wrangler kv:namespace create SETTINGS
 # Then replace the id below with the output ID.

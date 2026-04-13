@@ -25,6 +25,9 @@ interface StrategyControlsProps {
   pairingLocked: boolean;
   exemptedDepts: Department[];
   onCancelDraft: () => void;
+  pairingAssetMargin: number;
+  pairingAuditorMargin: number;
+  onUpdatePairingMargins: (assets: number, auditors: number) => void;
 }
 
 export const StrategyControls: React.FC<StrategyControlsProps> = ({
@@ -49,7 +52,10 @@ export const StrategyControls: React.FC<StrategyControlsProps> = ({
   handleCommitSimulation,
   pairingLocked,
   exemptedDepts,
-  onCancelDraft
+  onCancelDraft,
+  pairingAssetMargin,
+  pairingAuditorMargin,
+  onUpdatePairingMargins
 }) => {
   return (
     <div className="lg:w-1/3 space-y-8">
@@ -140,29 +146,62 @@ export const StrategyControls: React.FC<StrategyControlsProps> = ({
                      </div>
                    </div>
 
+                   {/* Matching Gap Controls */}
+                   <div className="space-y-3 pt-4 border-t border-slate-200/50">
+                      <div className="flex items-center justify-between">
+                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Asset Matching Gap</label>
+                         <span className="text-[11px] font-black text-indigo-500 italic">± {pairingAssetMargin}</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="5000" 
+                        step="100"
+                        value={pairingAssetMargin}
+                        onChange={(e) => onUpdatePairingMargins(parseInt(e.target.value), pairingAuditorMargin)}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-400"
+                      />
+                   </div>
+
+                   <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                         <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Auditor Matching Gap</label>
+                         <span className="text-[11px] font-black text-emerald-500 italic">± {pairingAuditorMargin} staff</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="20" 
+                        step="1"
+                        value={pairingAuditorMargin}
+                        onChange={(e) => onUpdatePairingMargins(pairingAssetMargin, parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-400"
+                      />
+                   </div>
+
                    <label className="flex items-center justify-between cursor-pointer group pt-2">
-                      <span className="text-[10px] font-black uppercase text-slate-500">Ideal Staffing Simulation</span>
-                     <input type="checkbox" className="sr-only peer" checked={simulateIdealStaffing} onChange={() => setSimulateIdealStaffing(!simulateIdealStaffing)} />
-                     <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-indigo-600 relative after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
-                  </label>
+                       <span className="text-[10px] font-black uppercase text-slate-500">Ideal Staffing Simulation</span>
+                      <input type="checkbox" className="sr-only peer" checked={simulateIdealStaffing} onChange={() => setSimulateIdealStaffing(!simulateIdealStaffing)} />
+                      <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:bg-indigo-600 relative after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                   </label>
                 </div>
              </div>
 
              {isSimulatorActive ? (
-               <div className="pt-6 space-y-3">
-                  <button onClick={handleCommitSimulation} disabled={isProcessing} className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-black transition-all">
-                    {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
-                    Commit & Lock
-                  </button>
-                  <button onClick={onCancelDraft} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
-                    Cancel Draft
-                  </button>
-               </div>
+                <div className="pt-6 space-y-3">
+                   <button onClick={handleCommitSimulation} disabled={isProcessing} className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-black transition-all">
+                     {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+                     Commit & Lock
+                   </button>
+                   <button onClick={onCancelDraft} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
+                     Cancel Draft
+                   </button>
+                </div>
              ) : (
-               <button onClick={handleRunSimulator} disabled={isProcessing || pairingLocked} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all disabled:opacity-50 mt-6">
-                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                 {pairingLocked ? 'Pairing Locked' : 'Run Auto-Pairing'}
-               </button>
+                <button onClick={handleRunSimulator} disabled={isProcessing || pairingLocked} className="w-full py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2 hover:bg-indigo-700 transition-all disabled:opacity-50 mt-6">
+                  {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  {pairingLocked ? 'Pairing Locked' : 'Run Auto-Pairing'}
+                </button>
              )}
           </div>
 

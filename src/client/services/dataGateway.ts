@@ -336,8 +336,8 @@ class DataGateway {
     return this.rpc(h => (api as any).compute['auto-tier-targets'].$post({ json: { tierId } }, { headers: h }));
   }
 
-  async autoConsolidateAuditGroups(threshold: number, excludedDeptIds: string[], minAuditors: number, groupingMargin: number, useAI: boolean, pairingMode: string = 'asymmetric', aiConsolidation: boolean = false, minAuditorsPerGroup: number = 10, dryRun: boolean = false) {
-    return this.rpc(h => (api as any).compute.consolidate.$post({ json: { threshold, excludedDeptIds, minAuditors, groupingMargin, useAI, pairingMode, aiConsolidation, minAuditorsPerGroup, dryRun } }, { headers: h }));
+  async autoConsolidateAuditGroups(threshold: number, excludedDeptIds: string[], minAuditors: number, groupingMargin: number, useAI: boolean, pairingMode: string = 'asymmetric', aiConsolidation: boolean = false, minAuditorsPerGroup: number = 10, dryRun: boolean = false, auditorMargin: number = 3) {
+    return this.rpc(h => (api as any).compute.consolidate.$post({ json: { threshold, excludedDeptIds, minAuditors, groupingMargin, useAI, pairingMode, aiConsolidation, minAuditorsPerGroup, dryRun, auditorMargin } }, { headers: h }));
   }
 
   async commitConsolidationDraft(groups: any[]) {

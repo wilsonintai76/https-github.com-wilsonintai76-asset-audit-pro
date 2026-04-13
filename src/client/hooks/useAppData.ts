@@ -39,6 +39,7 @@ export const useAppData = () => {
   const [dailyInspectionCapacity, setDailyInspectionCapacity] = useState<number>(150);
   const [standaloneThresholdAssets, setStandaloneThresholdAssets] = useState<number>(1000);
   const [groupingMargin, setGroupingMargin] = useState<number>(0.15);
+  const [groupingAuditorMargin, setGroupingAuditorMargin] = useState<number>(3);
   const [pairingLocked, setPairingLocked] = useState<boolean>(() => {
     try { return localStorage.getItem('pairing_lock_active') === 'true'; } catch { return false; }
   });
@@ -119,6 +120,7 @@ export const useAppData = () => {
           if (constraints.dailyInspectionCapacity) setDailyInspectionCapacity(constraints.dailyInspectionCapacity);
           if (constraints.standaloneThresholdAssets) setStandaloneThresholdAssets(constraints.standaloneThresholdAssets);
           if (constraints.groupingMargin) setGroupingMargin(constraints.groupingMargin);
+          if (constraints.groupingAuditorMargin) setGroupingAuditorMargin(constraints.groupingAuditorMargin);
         }
         const pairingLock = settings.find(s => s.id === 'pairing_lock')?.value;
         if (pairingLock?.locked) { setPairingLocked(true); setPairingLockInfo(pairingLock); }
@@ -228,6 +230,7 @@ export const useAppData = () => {
     loadAllData, loadPublicStats, initSession,
     departmentNames, departmentsWithAssets, filteredSchedules, topDepartments,
     simulatedGroups, setSimulatedGroups, isGroupSimulatorActive, setIsGroupSimulatorActive,
-    isProcessing, setIsProcessing
+    isProcessing, setIsProcessing,
+    groupingAuditorMargin, setGroupingAuditorMargin
   };
 };

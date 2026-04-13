@@ -84,6 +84,8 @@ interface AppActionsProps {
   setDailyInspectionCapacity: React.Dispatch<React.SetStateAction<number>>;
   setStandaloneThresholdAssets: React.Dispatch<React.SetStateAction<number>>;
   setGroupingMargin: React.Dispatch<React.SetStateAction<number>>;
+  groupingAuditorMargin: number;
+  setGroupingAuditorMargin: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const useAppActions = (props: AppActionsProps) => {
@@ -616,9 +618,9 @@ export const useAppActions = (props: AppActionsProps) => {
     catch (e) { showError(e); }
   };
 
-  const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number, margin: number, useAI: boolean, pairingMode: string = 'asymmetric', aiConsolidation: boolean = false, minAuditorsPerGroup: number = 10, dryRun: boolean = false) => {
+  const handleAutoConsolidate = async (threshold: number, excludedIds: string[], minAuditors: number, margin: number, useAI: boolean, pairingMode: string = 'asymmetric', aiConsolidation: boolean = false, minAuditorsPerGroup: number = 10, dryRun: boolean = false, auditorMargin: number = 3) => {
     try { 
-      const res = await gateway.autoConsolidateAuditGroups(threshold, excludedIds, minAuditors, margin, useAI, pairingMode, aiConsolidation, minAuditorsPerGroup, dryRun) as any; 
+      const res = await gateway.autoConsolidateAuditGroups(threshold, excludedIds, minAuditors, margin, useAI, pairingMode, aiConsolidation, minAuditorsPerGroup, dryRun, auditorMargin) as any; 
       
       if (dryRun && res?.groups) {
         setSimulatedGroups(res.groups);

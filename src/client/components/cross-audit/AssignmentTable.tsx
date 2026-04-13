@@ -59,7 +59,13 @@ export const AssignmentTable: React.FC<AssignmentTableProps> = ({
                       <td className="px-6 py-4">
                          <div className="flex flex-col">
                             <span className="text-sm font-black text-slate-800">{aud?.name || 'Unknown'}</span>
-                           {aud && <span className="text-[10px] font-bold text-indigo-400">{aud.auditors} Staff Registered</span>}
+                           {aud && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] font-bold text-indigo-400">{aud.auditors} Staff</span>
+                                <span className="text-[10px] font-bold text-indigo-400/70">·</span>
+                                <span className="text-[10px] font-bold text-emerald-500">{aud.assets?.toLocaleString()} Assets</span>
+                              </div>
+                           )}
                          </div>
                       </td>
                       <td className="px-6 py-4 text-center">
@@ -97,7 +103,13 @@ export const AssignmentTable: React.FC<AssignmentTableProps> = ({
                             ) : (
                               <span className="text-sm font-black text-slate-800">{tgt?.name || 'Unknown'}</span>
                             )}
-                           {tgt && <span className="text-[10px] font-bold text-emerald-500">{tgt.assets?.toLocaleString()} Total Assets</span>}
+                            {tgt && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] font-bold text-emerald-500">{tgt.assets?.toLocaleString()} Assets</span>
+                                <span className="text-[10px] font-bold text-indigo-400/70">·</span>
+                                <span className="text-[10px] font-bold text-indigo-400">{tgt.auditors} Staff</span>
+                              </div>
+                            )}
                          </div>
                       </td>
                       <td className="px-6 py-4 text-right">

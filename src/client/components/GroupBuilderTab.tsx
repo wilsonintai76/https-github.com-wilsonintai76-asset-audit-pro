@@ -7,7 +7,7 @@ import { printUnitConsolidation } from '../lib/printUtils';
 interface GroupBuilderTabProps {
   departments: (Department & { locationCount?: number, auditorCount?: number })[];
   auditGroups: AuditGroup[];
-  onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors: number, margin: number, useAI: boolean, pairingMode: string, aiConsolidation: boolean, minAuditorsPerGroup: number, dryRun: boolean) => Promise<any>;
+  onAutoConsolidate?: (threshold: number, excludedIds: string[], minAuditors: number, margin: number, useAI: boolean, pairingMode: string, aiConsolidation: boolean, minAuditorsPerGroup: number, dryRun: boolean, auditorMargin: number) => Promise<any>;
   onAddAuditGroup?: (group: Omit<AuditGroup, 'id'>) => Promise<AuditGroup | null>;
   onDeleteAuditGroup?: (id: string) => Promise<void>;
   onBulkDeleteAuditGroups?: (ids: string[]) => Promise<void>;
@@ -29,6 +29,8 @@ interface GroupBuilderTabProps {
   groupingMargin?: number;
   onUpdateStandaloneThresholdAssets: (val: number) => void;
   onUpdateGroupingMargin: (val: number) => void;
+  groupingAuditorMargin?: number;
+  onUpdateGroupingAuditorMargin?: (val: number) => void;
   pairingLocked?: boolean;
 }
 
@@ -52,9 +54,11 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   onCommitGroups,
   onCancelGroupSimulation,
   onUpdateSimulatedGroups,
+  onUpdateGroupingMargin,
   groupingMargin = 0.15,
   onUpdateStandaloneThresholdAssets,
-  onUpdateGroupingMargin,
+  groupingAuditorMargin = 3,
+  onUpdateGroupingAuditorMargin,
 }) => {
   const [useAI, setUseAI] = useState<boolean>(() => localStorage.getItem('group_builder_use_ai') === 'true');
   const [pairingCompatibility, setPairingCompatibility] = useState<'asymmetric' | 'strict_mutual' | 'hybrid'>(() => (localStorage.getItem('group_builder_pairing_mode') as any) || 'strict_mutual');
@@ -65,6 +69,12 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
   const groupsInitialized = auditGroups.length > 0;
 
   const { initLocked, initLockReason } = useMemo(() => {
+    // If we're actively simulating/grouping in draft mode, we allow tweaking margins
+    // to support "what-if" analysis even if the official setup is locked.
+    if (isGroupSimulatorActive) {
+      return { initLocked: false, initLockReason: '' };
+    }
+
     if (pairingLocked) {
       return { initLocked: true, initLockReason: 'Audit pairing has been committed and is locked. Reset the configuration first.' };
     }
@@ -72,7 +82,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
       return { initLocked: true, initLockReason: 'System is locked due to active audit assignments.' };
     }
     return { initLocked: false, initLockReason: '' };
-  }, [pairingLocked, isSystemLocked]);
+  }, [pairingLocked, isSystemLocked, isGroupSimulatorActive]);
 
   const handleRunAutoConsolidate = async () => {
     if (!onAutoConsolidate) return;
@@ -86,7 +96,7 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
       localStorage.setItem('group_builder_min_auditors_group', minAuditorsPerGroup.toString());
       localStorage.setItem('group_builder_asset_threshold', standaloneThresholdAssets.toString());
       
-      const res = await onAutoConsolidate(threshold, [], minAuditors, groupingMargin, useAI, pairingCompatibility, aiConsolidation, minAuditorsPerGroup, true);
+      const res = await onAutoConsolidate(threshold, [], minAuditors, groupingMargin, useAI, pairingCompatibility, aiConsolidation, minAuditorsPerGroup, true, groupingAuditorMargin);
       if (res?.recommendations) {
         setRecommendations(res.recommendations);
       }
@@ -329,6 +339,24 @@ export const GroupBuilderTab: React.FC<GroupBuilderTabProps> = ({
                     disabled={initLocked}
                     className={`w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-300 ${initLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                   />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-slate-500">Auditor Parity Gap</span>
+                    <span className="text-[11px] font-black text-emerald-500 italic">± {groupingAuditorMargin} staff</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="10" 
+                    step="1"
+                    value={groupingAuditorMargin}
+                    onChange={(e) => onUpdateGroupingAuditorMargin?.(parseInt(e.target.value))}
+                    disabled={initLocked}
+                    className={`w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500 ${initLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  />
+                  <p className="text-[8px] text-slate-400 italic">Tolerance for manpower balancing.</p>
                 </div>
 
                 <div className="flex flex-col gap-2">

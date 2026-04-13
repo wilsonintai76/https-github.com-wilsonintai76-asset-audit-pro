@@ -74,6 +74,9 @@ interface CrossAuditManagementProps {
   schedules?: any[];
   onRebalanceSchedule?: () => Promise<void>;
   onResetOnlyPermissions?: () => Promise<void>;
+  pairingAssetMargin?: number;
+  pairingAuditorMargin?: number;
+  onUpdatePairingMargins?: (assets: number, auditors: number) => void;
 }
 
 export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({ 
@@ -120,7 +123,10 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
   schedules = [],
   onRebalanceSchedule,
   onResetOnlyPermissions,
-  currentUser
+  currentUser,
+  pairingAssetMargin = 500,
+  pairingAuditorMargin = 3,
+  onUpdatePairingMargins
 }) => {
   const [strategicPlan, setStrategicPlan] = useState<StrategicPair[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -279,7 +285,7 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const handleRunSimulator = () => {
     setIsProcessing(true);
-    if (!draftConstraints) { setDraftConstraints({ maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, pairingLocked }); }
+    if (!draftConstraints) { setDraftConstraints({ maxAssetsPerDay, maxLocationsPerDay, minAuditorsPerLocation, pairingLocked, pairingAssetMargin, pairingAuditorMargin } as any); }
     const workloadPool = entities.filter(e => e.bbi > 0).sort((a, b) => b.assets - a.assets);
     const auditorPool = entities.filter(e => e.bbi > 0 && (simulateIdealStaffing || e.auditors >= 2));
     if (workloadPool.length === 0) { showToast?.('No entities found.', 'error'); setIsProcessing(false); return; }
@@ -291,11 +297,19 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
     const candidates = [...auditorPool].sort((a,b) => b.assets - a.assets);
 
     if (pairingStrategy === 'mutual' || pairingStrategy === 'hybrid') {
-      const tolerance = pairingStrategy === 'mutual' ? 100000 : 200;
+      const isMutualMode = pairingStrategy === 'mutual';
       for (let i = 0; i < candidates.length - 1; i++) {
         const a = candidates[i];
         if (usedTargetIds.has(a.id!)) continue;
-        const bIdx = candidates.findIndex((e, idx) => idx > i && !usedTargetIds.has(e.id!) && Math.abs(e.assets - a.assets) <= tolerance);
+        
+        // Match both Assets AND Auditor count within respective margins
+        const bIdx = candidates.findIndex((e, idx) => 
+          idx > i && 
+          !usedTargetIds.has(e.id!) && 
+          Math.abs(e.assets - a.assets) <= pairingAssetMargin &&
+          Math.abs(e.auditors - a.auditors) <= pairingAuditorMargin
+        );
+        
         if (bIdx !== -1) {
           const b = candidates[bIdx];
           newPairings.push({ auditorGroupId: a.id!, targetGroupId: b.id!, isActive: true, isMutual: true } as any);
@@ -381,33 +395,44 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       });
 
       const finalPairings: any[] = [];
-      const usedAuditors = new Set<string>();
-      const usedTargets = new Set<string>();
+      const committedIds = new Set<string>();
       let hasConflict = false;
 
-      relationshipMap.forEach((rel) => {
+      // Group by mutual first to prioritize them, then directed
+      const sortedKeys = Array.from(relationshipMap.keys()).sort((a, b) => {
+        const relA = relationshipMap.get(a);
+        const relB = relationshipMap.get(b);
+        if (relA.isMutual && !relB.isMutual) return -1;
+        if (!relA.isMutual && relB.isMutual) return 1;
+        return 0;
+      });
+
+      sortedKeys.forEach((key) => {
+        const rel = relationshipMap.get(key);
         if (rel.isMutual) {
-          if (usedAuditors.has(rel.id1) || usedAuditors.has(rel.id2) || usedTargets.has(rel.id1) || usedTargets.has(rel.id2)) {
+          if (committedIds.has(rel.id1) || committedIds.has(rel.id2)) {
             hasConflict = true;
+            return;
           }
           finalPairings.push({ auditorGroupId: rel.id1, targetGroupId: rel.id2, isActive: true, isMutual: true });
-          finalPairings.push({ auditorGroupId: rel.id2, targetGroupId: rel.id1, isActive: true, isMutual: true });
-          usedAuditors.add(rel.id1); usedAuditors.add(rel.id2);
-          usedTargets.add(rel.id1); usedTargets.add(rel.id2);
+          committedIds.add(rel.id1);
+          committedIds.add(rel.id2);
         } else {
           rel.directions.forEach((dir: string) => {
             const [a, t] = dir.split('->');
-            if (usedAuditors.has(a) || usedTargets.has(t)) {
+            if (committedIds.has(a) || committedIds.has(t)) {
               hasConflict = true;
+              return;
             }
             finalPairings.push({ auditorGroupId: a, targetGroupId: t, isActive: true, isMutual: false });
-            usedAuditors.add(a); usedTargets.add(t);
+            committedIds.add(a);
+            committedIds.add(t);
           });
         }
       });
 
       if (hasConflict) {
-        console.warn("Deduplication identified overlapping assignments. Cleaning up for 1:1 integrity.");
+        showToast?.('Conflict Resolution: Some overlapping assignments were dropped for 1:1 integrity.', 'info');
       }
 
       await onBulkAddPermissions(finalPairings);
@@ -428,12 +453,30 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
 
   const activePairingsForStats = useMemo(() => isSimulatorActive ? simulatedPairings : permissions.filter(p => p.isActive).map(p => ({ targetDeptId: p.targetDeptId || p.targetGroupId })), [isSimulatorActive, simulatedPairings, permissions]);
   const projectedAssetsMet = useMemo(() => {
-    const auditedTargets = new Set(activePairingsForStats.map(p => p.targetDeptId || (p as any).targetGroupId));
+    const auditedTargets = new Set<string>();
+    
+    if (isSimulatorActive) {
+      // Simulation: current logic handles them as A->B and B->A records (separate directions)
+      simulatedPairings.forEach(p => {
+        const tgtId = p.targetGroupId || (p as any).targetDeptId;
+        if (tgtId) auditedTargets.add(tgtId);
+      });
+    } else {
+      // Committed: handles single-record mutual pairs
+      permissions.filter(p => p.isActive).forEach(p => {
+        const audId = p.auditorGroupId || p.auditorDeptId;
+        const tgtId = p.targetGroupId || p.targetDeptId;
+        if (tgtId) auditedTargets.add(tgtId);
+        // If it's mutual, the auditor's department is ALSO covered (by the target)
+        if (p.isMutual && audId) auditedTargets.add(audId);
+      });
+    }
+
     return Array.from(auditedTargets).reduce((sum, tid) => {
       const ent = entities.find(e => e.id === tid);
       return sum + (ent?.assets || 0);
     }, 0);
-  }, [activePairingsForStats, entities]);
+  }, [isSimulatorActive, simulatedPairings, permissions, entities]);
 
   const projectedKPIPercentage = overallTotalAssets === 0 ? 0 : (projectedAssetsMet / overallTotalAssets) * 100;
 
@@ -468,17 +511,30 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
       if (p.isMutual) record.isMutual = true;
     });
 
-    // Final pass to ensure icons match the presence of reciprocals
-    const results = Array.from(map.values()).map(r => {
+    // Final pass to ensure icons match the presence of reciprocals OR the isMutual flag
+    const results: any[] = [];
+    const renderedIds = new Set<string>();
+
+    Array.from(map.values()).forEach(r => {
       const hasReciprocal = r.directions.has(`${r.auditorEntityId}->${r.targetEntityId}`) && 
                             r.directions.has(`${r.targetEntityId}->${r.auditorEntityId}`);
-      // Special override: If it's technically a swarm/many-to-many, we split it later? 
-      // No, for the table, one row per relationship. 
-      // But wait! If A audits B AND A audits C, that's two relationship rows. Correct.
-      return {
+      
+      const isMutual = r.isMutual || hasReciprocal;
+
+      // STRICT 1:1 VIEW ENFORCEMENT
+      // If either group in this pairing has already appeared in another row (as auditor or target),
+      // we SKIP this row to keep the UI clean and respect parity.
+      if (renderedIds.has(r.auditorEntityId) || renderedIds.has(r.targetEntityId)) {
+        return;
+      }
+
+      results.push({
         ...r,
-        isMutual: r.isMutual && hasReciprocal
-      };
+        isMutual
+      });
+
+      renderedIds.add(r.auditorEntityId);
+      renderedIds.add(r.targetEntityId);
     });
 
     return results;
@@ -526,6 +582,9 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
           isProcessing={isProcessing} handleRunSimulator={handleRunSimulator}
           handleCommitSimulation={handleCommitSimulation} pairingLocked={pairingLocked}
           exemptedDepts={exemptedDepts} onCancelDraft={() => { setIsSimulatorActive(false); setSimulatedPairings([]); }}
+          pairingAssetMargin={pairingAssetMargin}
+          pairingAuditorMargin={pairingAuditorMargin}
+          onUpdatePairingMargins={onUpdatePairingMargins}
         />
 
         <div className="lg:w-2/3 space-y-8">
@@ -552,11 +611,30 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
              auditorFilter={auditorFilter} setAuditorFilter={setAuditorFilter}
              targetFilter={targetFilter} setTargetFilter={setTargetFilter}
              onToggleMutual={(p) => {
-                const audId = p.auditorEntityId; 
-                const tgtId = p.targetEntityId; 
-                const willBeMutual = !p.isMutual;
+                 const audId = p.auditorEntityId; 
+                 const tgtId = p.targetEntityId; 
+                 const willBeMutual = !p.isMutual;
 
-                setSimulatedPairings(prev => {
+                 if (willBeMutual) {
+                   // COLLISION GUARD: To become mutual, both must be free of secondary links
+                   const audIsBusyElsewhere = simulatedPairings.some(item => {
+                     const itemAudId = item.auditorGroupId || (item as any).auditorDeptId;
+                     const itemTgtId = item.targetGroupId || (item as any).targetDeptId;
+                     return (itemAudId === audId && itemTgtId !== tgtId) || (itemTgtId === audId && itemAudId !== tgtId);
+                   });
+                   const tgtIsBusyElsewhere = simulatedPairings.some(item => {
+                     const itemAudId = item.auditorGroupId || (item as any).auditorDeptId;
+                     const itemTgtId = item.targetGroupId || (item as any).targetDeptId;
+                     return (itemAudId === tgtId && itemTgtId !== audId) || (itemTgtId === tgtId && itemAudId !== audId);
+                   });
+
+                   if (audIsBusyElsewhere || tgtIsBusyElsewhere) {
+                     showToast?.('Cannot toggle Mutual: One or both entities have other active pairings.', 'error');
+                     return;
+                   }
+                 }
+
+                 setSimulatedPairings(prev => {
                   let up = [...prev];
                   if (willBeMutual) {
                     // Turn ON: Update primary and ensure reciprocal
@@ -594,10 +672,22 @@ export const CrossAuditManagement: React.FC<CrossAuditManagementProps> = ({
                 });
              }}
              onUpdateTarget={(p, newTgtId) => {
-                const audId = p.auditorEntityId;
-                const oldTgtId = p.targetEntityId;
-                
-                setSimulatedPairings(prev => {
+                 const audId = p.auditorEntityId;
+                 const oldTgtId = p.targetEntityId;
+                 
+                 // COLLISION GUARD: New target must not be already busy in ANY role
+                 const isNewTargetBusy = simulatedPairings.some(item => {
+                    const itemAudId = item.auditorGroupId || (item as any).auditorDeptId;
+                    const itemTgtId = item.targetGroupId || (item as any).targetDeptId;
+                    return itemAudId === newTgtId || itemTgtId === newTgtId;
+                 });
+
+                 if (isNewTargetBusy && newTgtId !== audId) {
+                   showToast?.('Selected target already has an assignment.', 'error');
+                   return;
+                 }
+
+                 setSimulatedPairings(prev => {
                   // SHIFT: Update the primary link and break mutuality
                   let up = prev.map(item => {
                     const itemAudId = item.auditorGroupId || (item as any).auditorDeptId;

@@ -325,7 +325,8 @@ const consolidateSchema = z.object({
   aiConsolidation: z.boolean().default(false),
   minAuditorsPerGroup: z.number().int().min(1).default(10),
   pairingMode: z.enum(['asymmetric', 'strict_mutual', 'hybrid']).default('strict_mutual'),
-  dryRun: z.boolean().default(false),
+   dryRun: z.boolean().default(false),
+  auditorMargin: z.number().int().min(1).default(3),
 });
 
 const commitDraftSchema = z.object({
@@ -343,7 +344,7 @@ compute.post(
   requirePermission('manage:system'),
   zValidator('json', consolidateSchema),
   async (c) => {
-    const { threshold: baseThreshold, excludedDeptIds, minAuditors, minAuditorsPerGroup, groupingMargin, useAI, aiConsolidation, pairingMode, dryRun } = c.req.valid('json');
+    const { threshold: baseThreshold, excludedDeptIds, minAuditors, minAuditorsPerGroup, groupingMargin, useAI, aiConsolidation, pairingMode, dryRun, auditorMargin } = c.req.valid('json');
     const db = c.env.DB;
 
     // 1. Purge existing auto-generated groups - Skip if dryRun
@@ -466,11 +467,12 @@ compute.post(
       const MODEL = '@cf/meta/llama-3.1-8b-instruct';
       const prompt = `Cluster these departments into "Audit Groups" based on MANPOWER (Certified Staff) and WORKLOAD (Raw Assets).
 
-Constraint 1: Each Group MUST have SUM of CERTIFIED Auditors >= ${minAuditorsPerGroup} (Targeting 8-10).
+Constraint 1: Each Group MUST have SUM of CERTIFIED Auditors between ${minAuditorsPerGroup - auditorMargin} and ${minAuditorsPerGroup + auditorMargin} (Targeting ${minAuditorsPerGroup}).
 Constraint 2: Total number of Groups MUST be EVEN for 1:1 mutual pairing.
 Constraint 3: Balance the Workload (Assets) as evenly as possible among available groups.
 Constraint 4: Departments with high volume (Assets > ${bestThreshold}) that lack auditors MUST be merged with auditor-rich units.
-Constraint 5: Total Groups should be 6, 8, or 10.
+Constraint 5: Maintain Auditor Parity Margin: ensure groups have roughly equal staffing levels (within ±${auditorMargin}).
+Constraint 6: Total Groups should be 6, 8, or 10.
 
 Departments:
 ${activeDepts.map(d => `- ${d.name} (${d.abbr}): ${d.total_assets} assets, ${auditorCountByDept[d.id] || 0} staff, ID: ${d.id}`).join('\n')}
@@ -562,13 +564,25 @@ Output ONLY a JSON array of groups:
     for (const orphan of orphans) {
       let bestBinIdx = 0;
       let minAudCount = Infinity;
-      for (let i = 0; i < bins.length; i++) {
-        if (binAuditors[i] < minAudCount) {
-          minAudCount = binAuditors[i];
-          bestBinIdx = i;
+      
+      // Target: Balance auditors towards minAuditorsPerGroup
+      // If a bin is below target, try to fill it. 
+      // If all are above target, pick the one with lowest asset burden.
+      const belowTargetBins = bins.map((_, i) => i).filter(i => binAuditors[i] < minAuditorsPerGroup + auditorMargin);
+      
+      if (belowTargetBins.length > 0) {
+        // Find the most "needy" bin in the parity range
+        let lowMatchIdx = belowTargetBins[0];
+        let lowestStaff = binAuditors[lowMatchIdx];
+        for (const idx of belowTargetBins) {
+          if (binAuditors[idx] < lowestStaff) {
+            lowestStaff = binAuditors[idx];
+            lowMatchIdx = idx;
+          }
         }
-      }
-      if (minAudCount >= minAuditors) {
+        bestBinIdx = lowMatchIdx;
+      } else {
+        // All bins are already well-staffed, pick by asset burden
         let minAssets = Infinity;
         for (let i = 0; i < bins.length; i++) {
           if (binAssets[i] < minAssets) {
@@ -577,6 +591,7 @@ Output ONLY a JSON array of groups:
           }
         }
       }
+      
       bins[bestBinIdx].push(orphan);
       binAuditors[bestBinIdx] += auditorCountByDept[orphan.id] || 0;
       binAssets[bestBinIdx] += orphan.total_assets || 0;
@@ -1099,10 +1114,20 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
     }
 
     // Projected KPI after these pairings
-    const allActivePerms = simulate
-      ? [...existingPerms.map((p: any) => p.target_group_id), ...newPairings.map((p) => p.targetDeptId)]
-      : newPairings.map((p) => p.targetDeptId);
-    const auditedTargets = new Set(allActivePerms);
+    const auditedTargets = new Set<string>();
+    
+    // Add existing ones
+    for (const p of existingPerms) {
+      if (p.target_group_id) auditedTargets.add(p.target_group_id);
+      if (p.is_mutual && p.auditor_group_id) auditedTargets.add(p.auditor_group_id);
+    }
+    
+    // Add new ones
+    for (const p of newPairings) {
+      if (p.targetDeptId) auditedTargets.add(p.targetDeptId);
+      if (p.isMutual && p.auditorDeptId) auditedTargets.add(p.auditorDeptId);
+    }
+
     const projectedAssetsMet = Array.from(auditedTargets).reduce((sum, tid) => {
       const e = entities.find((e) => e.id === tid);
       return sum + (e?.assets || 0);
@@ -1114,8 +1139,20 @@ Return ONLY a JSON array of best pairs based on THEIR INDEX in the names list (a
       // 1. Clear existing active pairings to prevent duplication
       await db.prepare('DELETE FROM cross_audit_permissions WHERE is_active = 1').run();
 
-      // 2. Batch insert new normalized pairings
-      const insertStmts = newPairings.map((p) =>
+      // 2. Collapse reciprocals for the DB save
+      const collapsed = new Map<string, any>();
+      newPairings.forEach(p => {
+        const key = [p.auditorDeptId, p.targetDeptId].sort().join('<=>');
+        if (!collapsed.has(key)) {
+          collapsed.set(key, p);
+        } else if (p.isMutual) {
+          // If we find the reciprocal and it's marked mutual, the relationship is mutual
+          collapsed.get(key).isMutual = true;
+        }
+      });
+
+      // 3. Batch insert new normalized pairings
+      const insertStmts = Array.from(collapsed.values()).map((p) =>
         db.prepare(
           'INSERT INTO cross_audit_permissions (id, auditor_group_id, target_group_id, is_active, is_mutual) VALUES (?, ?, ?, 1, ?)'
         ).bind(crypto.randomUUID(), p.auditorDeptId, p.targetDeptId, p.isMutual ? 1 : 0),

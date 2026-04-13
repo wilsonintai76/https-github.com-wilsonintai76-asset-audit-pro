@@ -78,6 +78,11 @@ media.post('/archive', async (c) => {
     return c.json({ error: 'No content to archive' }, 400);
   }
 
+  if (!c.env.MEDIA) {
+    console.error("R2 MEDIA binding missing");
+    return c.json({ error: 'Storage service unavailable (Binding missing)' }, 503);
+  }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const safeFilename = filename?.replace(/[^a-z0-9.]/gi, '_') || `${type}_${timestamp}.html`;
   const key = `reports/${safeFilename}`;
