@@ -1450,13 +1450,14 @@ compute.post(
     const db = c.env.DB;
     const MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8-fast';
 
-    const [deptsRes, usersRes, phasesRes, instKPIsRes, settingRes, locCountsRes] = await Promise.all([
+    const [deptsRes, usersRes, phasesRes, instKPIsRes, settingRes, locCountsRes, schedulesRes] = await Promise.all([
       db.prepare('SELECT id, name, total_assets FROM departments WHERE is_exempted = 0').all(),
       db.prepare("SELECT id, department_id, certification_expiry FROM users WHERE status = 'Active'").all(),
       db.prepare('SELECT id, name, start_date, end_date FROM audit_phases ORDER BY start_date ASC').all(),
       db.prepare('SELECT phase_id, target_percentage FROM institution_kpi_targets').all(),
       db.prepare("SELECT value FROM system_settings WHERE id = 'audit_constraints'").first<{ value: string }>(),
-      db.prepare('SELECT department_id, count(*) as count, SUM(total_assets) as assets FROM locations GROUP BY department_id').all()
+      db.prepare('SELECT department_id, count(*) as count, SUM(total_assets) as assets FROM locations GROUP BY department_id').all(),
+      db.prepare("SELECT phase_id, status, count(*) as count FROM audit_schedules GROUP BY phase_id, status").all()
     ]);
  
     const depts = (deptsRes.results || []) as any[];
@@ -1464,7 +1465,11 @@ compute.post(
     const phases = (phasesRes.results || []) as any[];
     const instKPIs = (instKPIsRes.results || []) as any[];
     const locCounts = (locCountsRes.results || []) as any[];
+    const schedules = (schedulesRes.results || []) as any[];
     const constraints = settingRes ? JSON.parse(settingRes.value) : {};
+
+    const minAuditorsPerLocation = constraints.minAuditorsPerLocation || 2;
+    const dailyInspectionCapacity = constraints.dailyInspectionCapacity || 1500; // Total assets one team can do/day
 
     const locationCountByDept: Record<string, number> = {};
     const locationAssetsByDept: Record<string, number> = {};
@@ -1483,16 +1488,36 @@ compute.post(
       }
     });
 
-    const certifiedAuditors = Object.values(auditorCountByDept).reduce((a, b) => a + b, 0);
+    const totalCertifiedAuditors = Object.values(auditorCountByDept).reduce((a, b) => a + b, 0);
+    const effectivePairs = Math.floor(totalCertifiedAuditors / minAuditorsPerLocation);
+    const workforceDailyCapacity = effectivePairs * dailyInspectionCapacity;
 
     const institutionTotalAssets = depts.reduce((sum, d) => sum + (d.total_assets || 0), 0);
+
+    const historicalProgress = phases.map(p => {
+      const completed = schedules.find(s => s.phase_id === p.id && s.status === 'Completed')?.count || 0;
+      const total = schedules.filter(s => s.phase_id === p.id).reduce((sum, s) => sum + (s.count || 0), 0);
+      return { name: p.name, completed, total };
+    });
     
-    const phaseData = phases.map(p => {
-      const target = instKPIs.find(k => k.phase_id === p.id)?.target_percentage || 0;
+    const phaseMetrics = phases.map(p => {
+      const targetPct = instKPIs.find(k => k.phase_id === p.id)?.target_percentage || 0;
+      const targetAssets = Math.ceil(institutionTotalAssets * targetPct / 100);
       const start = new Date(p.start_date);
       const end = new Date(p.end_date);
       const workDays = Math.round(Math.max(1, (end.getTime() - start.getTime()) / 86400000) * 5 / 7);
-      return { name: p.name, target, workDays };
+      
+      const dailyRateRequired = workDays > 0 ? Math.ceil(targetAssets / workDays) : targetAssets;
+      const utilization = workforceDailyCapacity > 0 ? (dailyRateRequired / workforceDailyCapacity) * 100 : 0;
+      
+      return { 
+        name: p.name, 
+        targetPct, 
+        targetAssets, 
+        workDays, 
+        dailyRateRequired, 
+        utilization: Math.round(utilization) 
+      };
     });
 
     const activeUnits = depts.filter(d => (d.total_assets || 0) > 0 || (auditorCountByDept[d.id] || 0) > 0);
@@ -1508,45 +1533,32 @@ compute.post(
         auditors: auditors,
         capacityRatio: auditors > 0 ? Math.round(effectiveAssets / auditors) : effectiveAssets
       };
-    });
+    }).sort((a,b) => b.assets - a.assets);
 
-    const globalAvgBurden = Math.round(activeUnitStats.reduce((s, u) => s + (typeof u.capacityRatio === 'number' ? u.capacityRatio : 0), 0) / activeUnits.length);
+    const aiPrompt = `Analyze the Strategic Feasibility of this audit plan using the provided Resource Utilization metrics.
 
-    const aiPrompt = `Analyze the Strategic Feasibility of this audit plan. Provide two distinct perspectives:
+Calculated Resource Constraints:
+- Certified Staff Headcount: ${totalCertifiedAuditors}
+- Effective Teams (at ${minAuditorsPerLocation} per location): ${effectivePairs}
+- Institution Daily Inspection Capacity: ${workforceDailyCapacity} assets/day
+- Global Average Load Index: ${Math.round(institutionTotalAssets / (totalCertifiedAuditors || 1))} assets/auditor
 
-Perspective 1: CAPACITY BALANCE (Workload vs Staff)
-Identify groups where the raw asset volume is disproportionate to the Auditor headcount.
-- Goal: < 200 assets per certified auditor.
-- Warning: > 500 assets per certified auditor (Unsafe/High Strain).
+Phase-Specific Pressure:
+${phaseMetrics.map(pm => `- ${pm.name}: Target ${pm.targetPct}% (${pm.targetAssets} assets) over ${pm.workDays} days. Required rate: ${pm.dailyRateRequired} assets/day. Utilization: ${pm.utilization}%`).join('\n')}
 
-Perspective 2: OPERATIONAL CONTINUITY
-Evaluate if the group size (minimum 8 auditors) is sufficient for institutional compliance.
+Institutional Progress (Historical/Current):
+${historicalProgress.map(hp => `- ${hp.name}: ${hp.completed}/${hp.total} audits completed`).join('\n')}
 
-Infrastructure Stats:
-- Total Certified auditors: ${certifiedAuditors}
-- Total Assets: ${institutionTotalAssets}
+High-Impact Units (Top 15):
+${activeUnitStats.slice(0, 15).map(u => `- ${u.name}: ${u.assets} assets, ${u.auditors} auds (Load Index: ${u.capacityRatio})`).join('\n')}
 
-Unit Breakdown:
-${activeUnitStats.slice(0, 20).map(u => `- ${u.name}: ${u.assets} assets, ${u.locations} locs, ${u.auditors} auds (Load Index: ${u.capacityRatio})`).join('\n')}
-
-CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR AFTER. Do NOT invent a Phase 4; only use the ${phases.length} phases provided: ${phases.map(p => p.name).join(', ')}.
+CRITICAL: Return ONLY a raw JSON object. Use the Utilization metrics to determine the Feasibility Score. If a phase has >100% utilization, the risk level MUST be "High" or "Critical".
 {
   "score": number,
   "riskLevel": "Low"|"Medium"|"High"|"Critical",
-  "mathematicalAnalysis": {
-    "summary": string,
-    "logisticalRisks": string[],
-    "loadBalanceScore": number
-  },
-  "thematicAnalysis": {
-    "summary": string,
-    "synergyObservations": string[],
-    "affinityScore": number
-  },
   "bottlenecks": string[],
   "recommendations": string[],
-  "exemptionRecommendations": [],
-  "projections": { "Phase 1": "percentage_string", "Phase 2": "percentage_string", "Phase 3": "percentage_string" }
+  "projections": { ${phases.map(p => `"${p.name}": "percentage_string"`).join(', ')} }
 }
 `;
 
@@ -1554,10 +1566,11 @@ CRITICAL: Return ONLY a raw JSON object matching this schema. NO TEXT BEFORE OR 
     try {
       result = await c.env.AI.run(MODEL, {
         messages: [
-          { role: 'system', content: 'You are an Audit Strategy AI. You analyze resource constraints and logistical complexity vs goals. Respond with valid JSON only. The "score" field must be an integer from 0 to 100 representing feasibility percentage.' },
+          { role: 'system', content: 'You are a Deterministic Audit Strategy AI. You analyze resource gaps using calculated utilization rates. Respond with valid JSON only. Set temperature to 0 for consistency.' },
           { role: 'user', content: aiPrompt }
         ],
-        max_tokens: 4096
+        max_tokens: 4096,
+        temperature: 0
       });
 
       // Robust extraction: Handle if result is { response: string }, { result: string }, or raw string
