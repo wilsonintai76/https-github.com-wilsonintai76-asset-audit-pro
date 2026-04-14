@@ -383,7 +383,7 @@ db.get('/users', async (c) => {
       certificationIssued: u.certification_issued,
       certificationExpiry: u.certification_expiry,
       renewalRequested: u.renewal_requested ?? null,
-      gender: u.gender ?? null,
+      gender: u.gender !== null && u.gender !== undefined ? Number(u.gender) : 1,
       lastActive: u.last_active,
     })));
   } catch (err: any) {

@@ -743,9 +743,13 @@ export const useAppActions = (props: AppActionsProps) => {
 
   const handleUpdateMember = async (id: string, updates: Partial<User>) => {
     try { 
-      const updated = await gateway.updateUser(id, updates); 
-      setUsers(await gateway.getUsers()); 
-      if (currentUser?.id === id) setCurrentUser(updated);
+      await gateway.updateUser(id, updates); 
+      const freshUsers = await gateway.getUsers();
+      setUsers(freshUsers); 
+      if (currentUser?.id === id) {
+        const freshSelf = freshUsers.find(u => u.id === id);
+        if (freshSelf) setCurrentUser(freshSelf);
+      }
       showToast('Profile updated'); 
     } catch (e) { showError(e); }
   };

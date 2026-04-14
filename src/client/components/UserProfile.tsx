@@ -15,6 +15,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
     contactNumber: user.contactNumber || '',
     departmentId: user.departmentId || '',
     designation: user.designation || 'Staff',
+    gender: user.gender !== undefined ? Number(user.gender) : 1,
   });
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -215,6 +216,26 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                         </select>
                       </div>
                     </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Institutional Gender Rendering</label>
+                       <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-200">
+                         {([1, 0] as const).map(g => (
+                           <button
+                             key={g}
+                             type="button"
+                             onClick={() => setFormData({ ...formData, gender: g })}
+                             className={`flex-1 py-2 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${
+                               formData.gender === g 
+                                 ? 'bg-white text-blue-600 shadow-sm border border-slate-100' 
+                                 : 'text-slate-400 hover:text-slate-600'
+                             }`}
+                           >
+                             <span className="text-base">{g === 1 ? '♂' : '♀'}</span>
+                             {g === 1 ? 'Male' : 'Female'}
+                           </button>
+                         ))}
+                       </div>
+                    </div>
                   </div>
 
                   <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100/50 flex items-start gap-4">
@@ -274,10 +295,25 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, departments, onU
                           <span className="font-semibold text-emerald-900">{user.designation || 'Staff'}</span>
                         </div>
                         <div>
-                          <span className="text-emerald-600/60 font-bold uppercase tracking-wider block mb-1">System Roles</span>
+                          <span className="text-emerald-600/60 font-bold uppercase tracking-wider block mb-1">Institutional Roles</span>
                           <span className="font-semibold text-emerald-900">{user.roles.join(', ')}</span>
                         </div>
+                        <div>
+                          <span className="text-emerald-600/60 font-bold uppercase tracking-wider block mb-1">Gender Marker</span>
+                          <span className={`font-semibold ${Number(user.gender) === 0 && user.gender !== null ? 'text-rose-600' : 'text-blue-600'}`}>
+                            {Number(user.gender) === 0 && user.gender !== null ? '♀ Female' : '♂ Male'}
+                          </span>
+                        </div>
                       </div>
+
+                      <button 
+                        type="button" 
+                        onClick={() => onUpdate(user.id, { gender: Number(user.gender) === 0 && user.gender !== null ? 1 : 0 })}
+                        className="mt-6 px-4 py-2 bg-white border border-emerald-200 text-emerald-700 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-50 transition-all active:scale-95 shadow-sm inline-flex items-center gap-2"
+                      >
+                         <RotateCw className="w-3 h-3" />
+                         Toggle Gender Symbol
+                      </button>
                     </div>
                   </div>
                 </div>

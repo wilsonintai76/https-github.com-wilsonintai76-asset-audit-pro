@@ -478,12 +478,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           key={g}
                           type="button"
                           onClick={() => setFormData({ ...formData, gender: g })}
-                          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
                             formData.gender === g 
                               ? 'bg-white text-blue-600 shadow-sm border border-slate-100' 
                               : 'text-slate-400 hover:text-slate-600'
                           }`}
                         >
+                          <span className="text-base">{g === 1 ? '♂' : '♀'}</span>
                           {g === 1 ? 'Male' : 'Female'}
                         </button>
                       ))}
@@ -551,15 +552,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={() => onUpdateMember(user.id, { gender: user.gender === 0 ? 1 : 0 })}
+                        type="button"
+                        onClick={() => onUpdateMember(user.id, { gender: Number(user.gender) === 0 ? 1 : 0 })}
                         title="Toggle Gender"
-                        className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg border transition-all active:scale-95 ${
-                          user.gender === 0
+                        className={`px-3 py-1.5 text-xs font-black rounded-lg border transition-all active:scale-95 shadow-sm inline-flex items-center justify-center min-w-10 ${
+                          Number(user.gender) === 0 && user.gender !== null && user.gender !== undefined
                             ? 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100'
                             : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'
                         }`}
                       >
-                        {user.gender === 0 ? 'Female' : 'Male'}
+                        <span className="text-base leading-none">{(Number(user.gender) === 0 && user.gender !== null && user.gender !== undefined) ? '♀' : '♂'}</span>
                       </button>
                     </td>
                     <td className="px-6 py-4">

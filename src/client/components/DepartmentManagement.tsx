@@ -58,7 +58,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     const stats: Record<string, { male: number; female: number; unknown: number; total: number }> = {};
     
     // Filter relevant users once
-    const relevantUsers = users.filter(u => u.roles.includes('Auditor') || u.roles.includes('Supervisor') || u.roles.includes('Coordinator'));
+    const today = new Date().toISOString().split('T')[0];
+    const relevantUsers = users.filter(u => u.status === 'Active' && u.certificationExpiry && u.certificationExpiry >= today);
     
     // Group and count in one pass
     relevantUsers.forEach(u => {
@@ -67,9 +68,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       
       const s = stats[u.departmentId];
       s.total++;
-      if (u.gender === 1) s.male++;
-      else if (u.gender === 0) s.female++;
-      else s.unknown++;
+      if (u.gender === 0) s.female++;
+      else s.male++; // Default NULL/Blank/1 to Male
     });
     
     return stats;
@@ -134,7 +134,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       const locCount = (locations || []).filter(l => l.departmentId === dept.id).length;
       const stats = deptGenderStats[dept.id] || { male: 0, female: 0, unknown: 0, total: 0 };
       const reqs = deptGenderRequirements[dept.id] || [];
-      const reqSymbols = reqs.map(r => r === 'Male Only' ? '<span style="color:#2563eb; font-weight:bold;">M</span>' : '<span style="color:#db2777; font-weight:bold;">F</span>').join(' ');
+      const reqSymbols = reqs.map(r => r === 'Male Only' ? '<span style="color:#2563eb; font-weight:900; font-size:14px;">♂</span>' : '<span style="color:#db2777; font-weight:900; font-size:14px;">♀</span>').join(' ');
       
       return `
         <tr>
@@ -143,7 +143,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
           <td class="center">
             <div style="font-weight:bold; font-size:11px;">${stats.total}</div>
             <div style="font-size:9px; color:#64748b;">
-              <span style="color:#2563eb">M${stats.male}</span> <span style="color:#db2777">F${stats.female}</span>
+              <span style="color:#2563eb; font-weight:bold;">♂${stats.male}</span> <span style="color:#db2777; font-weight:bold;">♀${stats.female}</span>
             </div>
           </td>
           <td class="center">
@@ -348,13 +348,13 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                                return (
                                  <>
                                    {stats.male > 0 && (
-                                     <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600" title="Male Officers">
-                                       M {stats.male}
+                                     <span className="flex items-center gap-0.5 text-[11px] font-bold text-blue-600" title="Male Officers">
+                                       ♂ {stats.male}
                                      </span>
                                    )}
                                    {stats.female > 0 && (
-                                     <span className="flex items-center gap-0.5 text-[10px] font-bold text-rose-500" title="Female Officers">
-                                       F {stats.female}
+                                     <span className="flex items-center gap-0.5 text-[11px] font-bold text-rose-500" title="Female Officers">
+                                       ♀ {stats.female}
                                      </span>
                                    )}
                                    {stats.unknown > 0 && (
@@ -389,11 +389,11 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                             })()}
                           </span>
                           <div className="flex gap-1 text-[10px]">
-                             {(deptGenderRequirements[dept.id] || []).map(r => (
-                               <span key={r} title={r} className={`text-[10px] font-black ${r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}`}>
-                                 {r === 'Male Only' ? 'M' : 'F'}
-                               </span>
-                             ))}
+                              {(deptGenderRequirements[dept.id] || []).map(r => (
+                                <span key={r} title={r} className={`text-[12px] font-black leading-none ${r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}`}>
+                                  {r === 'Male Only' ? '♂' : '♀'}
+                                </span>
+                              ))}
                           </div>
                         </div>
                       </div>
