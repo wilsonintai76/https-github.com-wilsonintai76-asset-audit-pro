@@ -1,5 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
-import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, SystemActivity, AuditGroup, Building, SystemSetting } from '@shared/types';
+import { AuditSchedule, User, Department, Location, CrossAuditPermission, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, DepartmentMapping, LocationMapping, SystemActivity, AuditGroup, Building, SystemSetting } from '@shared/types';
 import { api, getAuthHeaders } from './honoClient';
 
 class DataGateway {
@@ -208,6 +208,19 @@ class DataGateway {
 
   async deleteDepartmentMapping(id: string): Promise<void> {
     await this.rpc<unknown>(h => (api as any).db['department-mappings'][':id'].$delete({ param: { id } }, { headers: h }));
+  }
+
+  // --- LOCATION MAPPINGS ---
+  async getLocationMappings(): Promise<LocationMapping[]> {
+    return this.rpcOrNull<LocationMapping[]>(h => (api as any).db['location-mappings'].$get({}, { headers: h })) as Promise<LocationMapping[]>;
+  }
+
+  async addLocationMapping(mapping: Omit<LocationMapping, 'id'>): Promise<LocationMapping> {
+    return this.rpc<LocationMapping>(h => (api as any).db['location-mappings'].$post({ json: mapping as any }, { headers: h }));
+  }
+
+  async deleteLocationMapping(id: string): Promise<void> {
+    await this.rpc<unknown>(h => (api as any).db['location-mappings'][':id'].$delete({ param: { id } }, { headers: h }));
   }
 
   // --- ACTIVITIES ---

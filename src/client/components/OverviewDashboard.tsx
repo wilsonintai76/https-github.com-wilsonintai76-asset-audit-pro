@@ -30,6 +30,7 @@ interface OverviewDashboardProps {
   buildings?: Building[];
   openAuditThreshold?: number;
   users?: User[];
+  onRebalance?: () => void;
 }
 
 function BarFill({ pct, className }: { pct: number; className: string }) {
@@ -65,7 +66,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   kpiTierTargets = [],
   strictAuditorRule = false,
   openAuditThreshold = 500,
-  users = []
+  users = [],
+  onRebalance
 }) => {
   const { t } = useLanguage();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
@@ -456,6 +458,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               openAuditThreshold={openAuditThreshold}
               users={users}
               buildings={buildings}
+              onRebalance={onRebalance}
+              isAdmin={currentUser.roles?.includes('Admin')}
             />
           )}
 

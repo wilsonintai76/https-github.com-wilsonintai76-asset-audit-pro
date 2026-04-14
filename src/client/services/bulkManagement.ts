@@ -1,5 +1,6 @@
 import { gateway } from './dataGateway';
-import { AuditSchedule, User, Department, Location } from '@shared/types';
+import { AuditSchedule, User, Department, Location, LocationMapping, Building } from '@shared/types';
+import { normalizationService } from './normalizationService';
 
 export const bulkManagement = {
   /**
@@ -139,7 +140,9 @@ export const bulkManagement = {
     newLocs: Omit<Location, 'id'>[],
     currentDepartments: Department[],
     currentUsers: User[],
-    currentLocations: Location[]
+    currentLocations: Location[],
+    locationMappings: LocationMapping[] = [],
+    buildings: Building[] = []
   ) {
     const deptNameToId = new Map<string, string>(currentDepartments.map(d => [d.name.toUpperCase().trim(), d.id]));
     const validDeptIds = new Set(currentDepartments.map(d => d.id.toLowerCase().trim()));
@@ -180,27 +183,94 @@ export const bulkManagement = {
       userNameToId.set(name.toUpperCase().trim(), addedUser.id);
     }
 
-    const resolvedLocs: Omit<Location, 'id'>[] = newLocs.map(loc => ({
-      ...loc,
-      departmentId: deptNameToId.get(loc.departmentId.toUpperCase().trim()) || loc.departmentId,
-      supervisorId: userNameToId.get((loc.supervisorId || '').toUpperCase().trim()) || null,
-    }));
+    // --- SMART MAPPING & NORMALIZATION ---
+    // Create a reverse lookup for mappings: rawName -> locationId
+    const mappingLookup = new Map<string, string>();
+    locationMappings.forEach(m => {
+      mappingLookup.set(m.sourceName.toUpperCase().trim(), m.targetLocationId);
+    });
 
-    const existingLocsMap = new Map(currentLocations.map(l => [`${l.name.toUpperCase()}|${l.departmentId}`, l]));
+    // Create a lookup for existing locations by Name + Dept to allow normalization matching
+    const existingLocNamesMap = new Map<string, Location>();
+    currentLocations.forEach(l => {
+      existingLocNamesMap.set(`${l.name.toUpperCase().trim()}|${l.departmentId}`, l);
+    });
+
+    const bldgNameToId = new Map<string, string>(buildings.map(b => [b.name.toUpperCase().trim(), b.id]));
+
+    const resolvedLocs: (Omit<Location, 'id'> & { id?: string })[] = newLocs.map(loc => {
+      const rawName = loc.name.toUpperCase().trim();
+      const mappedId = mappingLookup.get(rawName);
+      
+      let finalDeptId = deptNameToId.get(loc.departmentId.toUpperCase().trim()) || loc.departmentId;
+      let finalSupervisorId = userNameToId.get((loc.supervisorId || '').toUpperCase().trim()) || null;
+
+      const description = `Original: ${loc.name}`;
+
+      // If we have an explicit mapping, use it
+      if (mappedId) {
+        const target = currentLocations.find(l => l.id === mappedId);
+        if (target) {
+          return {
+            ...loc,
+            id: target.id,
+            name: target.name,
+            departmentId: target.departmentId,
+            buildingId: target.buildingId,
+            level: target.level,
+            description: target.description || description,
+            supervisorId: target.supervisorId || finalSupervisorId,
+          };
+        }
+      }
+
+      // If no explicit mapping, try automated normalization
+      const parsed = normalizationService.parseLocationString(loc.name);
+      const normalizedKey = `${parsed.roomName.toUpperCase().trim()}|${finalDeptId}`;
+      const normalizationMatch = existingLocNamesMap.get(normalizedKey);
+
+      if (normalizationMatch) {
+        // We found a match based on normalized name!
+        return {
+          ...loc,
+          id: normalizationMatch.id,
+          name: normalizationMatch.name,
+          departmentId: normalizationMatch.departmentId,
+          buildingId: normalizationMatch.buildingId,
+          level: normalizationMatch.level,
+          description: normalizationMatch.description || description,
+          supervisorId: normalizationMatch.supervisorId || finalSupervisorId
+        };
+      }
+
+      // No match found - prepare for creation with parsed components
+      const bldgId = bldgNameToId.get(parsed.buildingName.toUpperCase().trim()) || null;
+
+      return {
+        ...loc,
+        name: parsed.roomName,
+        buildingId: bldgId,
+        level: parsed.level,
+        departmentId: finalDeptId,
+        description,
+        supervisorId: finalSupervisorId,
+      };
+    });
+
     const locsToAdd: Omit<Location, 'id'>[] = [];
-    const locsToUpdate: { id: string, updates: Partial<Location> }[] = [];
+    const locsToUpsert: Omit<Location, 'id'>[] = []; // Locations we matched will be upserted to update assets
 
     const latestLocsFromImport = new Map<string, Omit<Location, 'id'>>();
-    resolvedLocs.forEach(loc => latestLocsFromImport.set(`${loc.name.toUpperCase()}|${loc.departmentId}`, loc));
-
-    latestLocsFromImport.forEach((loc, key) => {
-      const existingLoc = existingLocsMap.get(key);
-      if (!existingLoc) {
+    resolvedLocs.forEach(loc => {
+      if (loc.id) {
+        locsToUpsert.push(loc as Location);
+      } else {
         locsToAdd.push(loc);
       }
     });
 
     if (locsToAdd.length > 0) await gateway.bulkAddLocations(locsToAdd);
+    if (locsToUpsert.length > 0) await gateway.upsertLocations(locsToUpsert);
 
     return {
       success: true,

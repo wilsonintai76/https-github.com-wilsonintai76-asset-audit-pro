@@ -11,10 +11,12 @@ import {
   DepartmentMapping, 
   SystemActivity, 
   AuditGroup, 
-  Building,
-  AppNotification,
+
   DashboardConfig,
-  AppView
+  AppView,
+  LocationMapping,
+  Building,
+  AppNotification
 } from '@shared/types';
 import { gateway } from '../services/dataGateway';
 import { awaitSessionRegistered } from '../services/honoClient';
@@ -57,6 +59,7 @@ export const useAppData = () => {
   const [kpiTierTargets, setKpiTierTargets] = useState<KPITierTarget[]>([]);
   const [institutionKPIs, setInstitutionKPIs] = useState<InstitutionKPITarget[]>([]);
   const [departmentMappings, setDepartmentMappings] = useState<DepartmentMapping[]>([]);
+  const [locationMappings, setLocationMappings] = useState<LocationMapping[]>([]);
   const [auditGroups, setAuditGroups] = useState<AuditGroup[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -112,6 +115,8 @@ export const useAppData = () => {
       setAuditPhases(phasesData); setKpiTiers(kpiTiersData); setDepartmentMappings(departmentMappingsData);
       setActivities(activitiesData); setAuditGroups(auditGroupsData); setInstitutionKPIs(institutionKPIsData);
       setBuildings(buildingsData); setCrossAuditPermissions(permsData);
+      
+      try { setLocationMappings(await gateway.getLocationMappings()); } catch (e) { console.warn(e); }
 
       try {
         const settings = await gateway.getSystemSettings();
@@ -234,6 +239,7 @@ export const useAppData = () => {
     users, setUsers, departments, setDepartments, locations, setLocations,
     auditPhases, setAuditPhases, kpiTiers, setKpiTiers, kpiTierTargets, setKpiTierTargets,
     institutionKPIs, setInstitutionKPIs, departmentMappings, setDepartmentMappings,
+    locationMappings, setLocationMappings,
     auditGroups, setAuditGroups, buildings, setBuildings, notifications, setNotifications,
     toasts, setToasts, activities, setActivities, crossAuditPermissions, setCrossAuditPermissions,
     publicStats, setPublicStats, selectedDept, setSelectedDept, selectedStatus, setSelectedStatus,

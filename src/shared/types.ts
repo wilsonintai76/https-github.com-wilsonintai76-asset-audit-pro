@@ -163,6 +163,13 @@ export interface DepartmentMapping {
   targetDepartmentId: string;
 }
 
+export interface LocationMapping {
+  id: string;
+  sourceName: string;
+  targetLocationId: string;
+  createdAt?: string;
+}
+
 export interface SystemActivity {
   id: string;
   type: 'SCHEDULE_DATE' | 'AUDITOR_ASSIGNED' | 'LOCATION_CREATED' | 'LOCATION_UPDATED' | 'LOCATION_ARCHIVED' | 'LOCATION_DELETED' | 'AUDIT_COMPLETED' | 'ADMIN_RESET' | 'CREATE' | 'UPDATE' | 'DELETE' | 'ARCHIVE' | 'LOGIN_TASK_COMPLETED';

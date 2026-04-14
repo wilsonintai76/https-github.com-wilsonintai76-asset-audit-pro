@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { CrossAuditPermission, Department, User, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup, AssignmentMode } from '@shared/types';
+import { CrossAuditPermission, Department, User, AuditPhase, KPITier, KPITierTarget, InstitutionKPITarget, UserRole, Location, AuditSchedule, DepartmentMapping, AuditGroup, AssignmentMode, LocationMapping, Building } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
 import { CrossAuditManagement } from './CrossAuditManagement';
 import { AuditPhasesSettings } from './AuditPhasesSettings';
@@ -67,10 +67,13 @@ interface SystemSettingsProps {
   onAddDepartmentMapping: (mapping: Omit<DepartmentMapping, 'id'>) => Promise<void>;
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
-  onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
   onSetDeptTotalsFromMapping: (totals: Record<string, number>) => Promise<void>;
   onUpdateUninspectedAssets: (updates: { id: string, uninspectedCount: number }[], deptExtras?: Record<string, number>) => Promise<void>;
   locations: Location[];
+  buildings: Building[];
+  locationMappings: LocationMapping[];
+  onAddLocationMapping: (mapping: Omit<LocationMapping, 'id'>) => Promise<void>;
+  onDeleteLocationMapping: (id: string) => Promise<void>;
   auditGroups: AuditGroup[];
   onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
@@ -91,21 +94,10 @@ interface SystemSettingsProps {
   currentUser?: User | null;
   // Simulation props
   isGroupSimulatorActive?: boolean;
-  simulatedGroups?: AuditGroup[];
-  onCommitGroups?: (
-    threshold: number, 
-    excludedDeptIds: string[], 
-    minAuditors: number, 
-    groupingMargin: number, 
-    useAI: boolean, 
-    pairingMode: string,
-    aiConsolidation: boolean,
-    minAuditorsPerGroup: number,
-    dryRun: boolean,
-    auditorMargin: number
-  ) => Promise<void>;
+  simulatedGroups?: any[];
+  onCommitGroups?: (groups: any[]) => Promise<void>;
   onCancelGroupSimulation?: () => void;
-  onUpdateSimulatedGroups?: (groups: AuditGroup[]) => void;
+  onUpdateSimulatedGroups?: (groups: any[]) => void;
   assignmentMode: AssignmentMode;
   onUpdateAssignmentMode: (mode: AssignmentMode) => void;
   openAuditThreshold: number;
@@ -179,13 +171,17 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   pairingLocked,
   pairingLockInfo,
   onLockPairing,
-  onUnlockPairing,
   kpiTierTargets,
   institutionKPIs,
   onUpdateInstitutionKPI,
   onAutoCalculateTierTargets,
   showToast,
   locations,
+  buildings,
+  locationMappings,
+  onAddLocationMapping,
+  onDeleteLocationMapping,
+  onUnlockPairing,
   currentUser,
   isGroupSimulatorActive,
   simulatedGroups,
@@ -311,11 +307,14 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
         <DataManagementWorkflow
           departments={departments}
           departmentMappings={departmentMappings}
+          locationMappings={locationMappings}
           locations={locations}
           onBulkAddDepts={onBulkAddDepts}
           onBulkActivateStaff={onBulkActivateStaff}
           onAddDepartmentMapping={onAddDepartmentMapping}
           onDeleteDepartmentMapping={onDeleteDepartmentMapping}
+          onAddLocationMapping={onAddLocationMapping}
+          onDeleteLocationMapping={onDeleteLocationMapping}
           onSyncLocationMappings={onSyncLocationMappings}
           onUpsertLocations={onUpsertLocations}
           onSetDeptTotalsFromMapping={onSetDeptTotalsFromMapping}
@@ -465,6 +464,10 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             maxAssetsPerDay={maxAssetsPerDay}
             maxLocationsPerDay={maxLocationsPerDay}
             openAuditThreshold={openAuditThreshold}
+            users={users}
+            buildings={buildings}
+            onRebalance={onRebalanceSchedule}
+            isAdmin={isAdmin}
           />
           
           {isAdmin && (

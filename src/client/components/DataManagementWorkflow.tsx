@@ -1,10 +1,9 @@
-
 import React, { useRef } from 'react';
-import { Button } from './ui/button';
 import Papa from 'papaparse';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
-import type { Department, Location, DepartmentMapping } from '@shared/types';
+import type { Department, Location, DepartmentMapping, LocationMapping } from '@shared/types';
 import { MappingRules } from './MappingRules';
+import { LocationMappingRules } from './LocationMappingRules';
 import { FileSpreadsheet, UserCheck, RefreshCw, CheckCircle, AlertCircle, ArrowRight, Info } from 'lucide-react';
 
 const ASSET_BUILTIN_MAP: Record<string, string> = {
@@ -32,10 +31,13 @@ const ASSET_BUILTIN_MAP: Record<string, string> = {
 interface DataManagementWorkflowProps {
   departments: Department[];
   departmentMappings: DepartmentMapping[];
+  locationMappings: LocationMapping[];
   onBulkAddDepts: (depts: Omit<Department, 'id'>[]) => void;
   onBulkActivateStaff: (entries: { name: string; email: string; department?: string; designation?: string; role?: string }[]) => void;
   onAddDepartmentMapping: (mapping: Omit<DepartmentMapping, 'id'>) => Promise<void>;
   onDeleteDepartmentMapping: (id: string) => Promise<void>;
+  onAddLocationMapping: (mapping: Omit<LocationMapping, 'id'>) => Promise<void>;
+  onDeleteLocationMapping: (id: string) => Promise<void>;
   onSyncLocationMappings: () => Promise<void>;
   onUpsertLocations: (locs: Omit<Location, 'id'>[]) => Promise<void>;
   onSetDeptTotalsFromMapping: (totals: Record<string, number>) => Promise<void>;
@@ -46,16 +48,21 @@ interface DataManagementWorkflowProps {
 export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
   departments,
   departmentMappings,
+  locationMappings,
   locations,
   onBulkAddDepts,
   onBulkActivateStaff,
   onAddDepartmentMapping,
   onDeleteDepartmentMapping,
+  onAddLocationMapping,
+  onDeleteLocationMapping,
   onSyncLocationMappings,
   onUpsertLocations,
   onSetDeptTotalsFromMapping,
   onUpdateUninspectedAssets,
 }) => {
+
+
   const staffFileInputRef = useRef<HTMLInputElement>(null);
   const deptFileInputRef = useRef<HTMLInputElement>(null);
   const assetSyncRef = useRef<HTMLInputElement>(null);
@@ -282,11 +289,14 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           } else {
             locMerged.set(mergeKey, {
               name: lokasiName,
-              abbr: lokasiName.split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 10),
-              departmentId: deptId, building: '', description: '', supervisorId: null, contact: '',
+              abbr: lokasiName.split(/\s+/).map(w => (w[0] || '')).join('').toUpperCase().slice(0, 10),
+              departmentId: deptId,
+              building: '', 
+              description: `Original: ${lokasiName}`, 
+              supervisorId: null, 
+              contact: '',
               totalAssets: count,
-            });
-          }
+            });          }
         }
         locMerged.forEach(loc => locationObjects.push(loc));
 
@@ -394,24 +404,17 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
           const bahagianHint = sepIdx !== -1 ? key.slice(sepIdx + 3) : '';
           const lokasiLow = lokasiName.toLowerCase();
 
-          // 1. Try name + resolved dept (most specific)
-          const deptId = bahagianHint ? resolveDept(bahagianHint) : undefined;
-          let found = deptId
-            ? safeLocations.find(l => l.name.toLowerCase() === lokasiLow && l.departmentId === deptId)
-            : undefined;
+          // 1. Try direct location match
+          const found = locations.find(l => l.name.toLowerCase() === lokasiLow);
+          
+          // 2. Try location mapping rule
+          const locMap = locationMappings.find(m => m.sourceName.toLowerCase() === lokasiLow);
+          const resolvedLoc = locMap ? locations.find(l => l.id === locMap.targetLocationId) : found;
+          
+          const deptId = resolveDept(bahagianHint);
 
-          // 2. Fall back to name-only match
-          if (!found) {
-            const nameMatches = safeLocations.filter(l => l.name.toLowerCase() === lokasiLow);
-            if (nameMatches.length === 1) {
-              found = nameMatches[0];
-            } else if (nameMatches.length > 1 && deptId) {
-              found = nameMatches.find(l => l.departmentId === deptId) || nameMatches[0];
-            }
-          }
-
-          if (found) {
-            locationAccum[found.id] = (locationAccum[found.id] || 0) + count;
+          if (resolvedLoc) {
+            locationAccum[resolvedLoc.id] = (locationAccum[resolvedLoc.id] || 0) + count;
           } else if (deptId) {
             // 3. Lokasi unmatched but Bahagian resolves to a department — count at dept level
             deptExtras[deptId] = (deptExtras[deptId] || 0) + count;
@@ -648,16 +651,22 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
               </div>
             </div>
 
-            <div className="border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
-              <MappingRules
-                departments={departments}
-                departmentMappings={departmentMappings}
-                onAddDepartmentMapping={onAddDepartmentMapping}
-                onDeleteDepartmentMapping={onDeleteDepartmentMapping}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <MappingRules 
+                departments={departments} 
+                departmentMappings={departmentMappings} 
+                onAddDepartmentMapping={onAddDepartmentMapping} 
+                onDeleteDepartmentMapping={onDeleteDepartmentMapping} 
                 onSyncLocationMappings={onSyncLocationMappings}
               />
-            </div>
-          </div>
+              <LocationMappingRules 
+                locations={locations} 
+                locationMappings={locationMappings} 
+                onAddLocationMapping={onAddLocationMapping} 
+                onDeleteLocationMapping={onDeleteLocationMapping} 
+                onSyncLocationMappings={onSyncLocationMappings}
+              />
+            </div>          </div>
         )}
 
         {activeTab === 'sync' && (

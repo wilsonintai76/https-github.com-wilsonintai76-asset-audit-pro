@@ -94,6 +94,7 @@ const App: React.FC = () => {
     handleSetDeptTotalsFromMapping, handleUpdateUninspectedAssetCounts,
     handleBulkDeleteAuditGroups, handleAutoConsolidate, handleCommitGroups, handleCancelGroupSimulation, handleRunStrategicPairing, handleSaveFeasibilityReport, handleResetPairingData, handleResetOnlyPermissions,
     handleUpdateAssignmentMode, handleUpdateOpenAuditThreshold,
+    handleAddLocationMapping, handleDeleteLocationMapping,
     showToast, closeToast, showError, customConfirm, customAlert
   } = appActions;
 
@@ -211,6 +212,7 @@ const App: React.FC = () => {
           kpiTierTargets={kpiTierTargets}
           openAuditThreshold={openAuditThreshold}
           users={users}
+          onRebalance={handleRebalanceSchedule}
         />
       )}
       {activeView === 'auditor-dashboard' && (
@@ -396,6 +398,10 @@ const App: React.FC = () => {
           onSetDeptTotalsFromMapping={handleSetDeptTotalsFromMapping}
           onUpdateUninspectedAssets={handleUpdateUninspectedAssetCounts}
           locations={locations}
+          buildings={buildings}
+          locationMappings={appData.locationMappings}
+          onAddLocationMapping={handleAddLocationMapping}
+          onDeleteLocationMapping={handleDeleteLocationMapping}
           onAddAuditGroup={handleAddAuditGroup}
           onUpdateAuditGroup={handleUpdateAuditGroup}
           onDeleteAuditGroup={handleDeleteAuditGroup}

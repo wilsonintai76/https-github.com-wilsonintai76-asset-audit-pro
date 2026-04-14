@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget, Location } from '@shared/types';
-import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle, Mars, Venus, HelpCircle } from 'lucide-react';
+import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle, HelpCircle, Zap } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printKPIPhasePlan } from '../lib/printUtils';
 
@@ -15,6 +15,8 @@ interface TierDistributionTableProps {
   users?: any[];
   buildings?: any[];
   openAuditThreshold?: number;
+  onRebalance?: () => void;
+  isAdmin?: boolean;
 }
 
 export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({ 
@@ -26,7 +28,9 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
   locations = [],
   users = [],
   buildings = [],
-  openAuditThreshold = 500
+  openAuditThreshold = 500,
+  onRebalance,
+  isAdmin = false
 }) => {
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate)), [phases]);
   const sortedTiers = useMemo(() => [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets), [kpiTiers]);
@@ -130,6 +134,16 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
           <p className="text-xs text-slate-500 mt-1">Required inspection phases per department based on their KPI tier. Click <strong>Rebalance</strong> to auto-assign (Locked audits will be skipped).</p>
         </div>
         <div className="flex items-center gap-4">
+          {isAdmin && onRebalance && (
+            <button
+              onClick={onRebalance}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:scale-105 active:scale-95 transition-all outline-hidden group"
+              title="Auto-assign audits based on KPI tiers"
+            >
+              <Zap className="w-4 h-4 text-emerald-400 group-hover:animate-pulse" />
+              Rebalance
+            </button>
+          )}
           <PrintButton
             onClick={() => printKPIPhasePlan(tableData, sortedPhases, openAuditThreshold)}
             label="Print"
@@ -175,8 +189,8 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                   <div className="flex flex-col items-center">
                     <span className="text-xs font-bold text-slate-700">{(row as any).genderStats.total}</span>
                     <div className="flex gap-1.5 mt-0.5 items-center">
-                       {(row as any).genderStats.male > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600"><Mars className="w-3 h-3"/> {(row as any).genderStats.male}</span>}
-                       {(row as any).genderStats.female > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-rose-500"><Venus className="w-3 h-3"/> {(row as any).genderStats.female}</span>}
+                       {(row as any).genderStats.male > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600">M {(row as any).genderStats.male}</span>}
+                       {(row as any).genderStats.female > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-rose-500">F {(row as any).genderStats.female}</span>}
                        {(row as any).genderStats.unknown > 0 && <span title="Gender Not Specified" className="flex items-center gap-0.5 text-[10px] font-bold text-slate-400"><HelpCircle className="w-3 h-3"/> {(row as any).genderStats.unknown}</span>}
                        {(row as any).genderStats.total === 0 && <span className="text-[9px] text-slate-300">No Data</span>}
                     </div>
@@ -192,10 +206,10 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                            return raw % 2 === 0 ? raw : raw + 1;
                         })()}
                       </span>
-                      <div className="flex gap-0.5 text-xs">
+                      <div className="flex gap-1 text-xs">
                          {(row as any).genderRequirement.map((r: string) => (
-                           <span key={r} title={r} className={r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}>
-                             {r === 'Male Only' ? <Mars className="w-3.5 h-3.5" /> : <Venus className="w-3.5 h-3.5" />}
+                           <span key={r} title={r} className={`text-[10px] font-black ${r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}`}>
+                             {r === 'Male Only' ? 'M' : 'F'}
                            </span>
                          ))}
                       </div>

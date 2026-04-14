@@ -729,6 +729,7 @@ db.post('/departments/clear', rbacGuard('admin:hub'), async (c) => {
       { id: 'groups',    sql: 'DELETE FROM audit_groups' },
       { id: 'perms',     sql: 'DELETE FROM cross_audit_permissions' },
       { id: 'mappings',  sql: 'DELETE FROM department_mappings' },
+      { id: 'loc_mappings', sql: 'DELETE FROM location_mappings' },
       { id: 'locations', sql: 'DELETE FROM locations' },
       { id: 'buildings', sql: 'DELETE FROM buildings' },
       { id: 'activities',sql: 'DELETE FROM system_activities' },
@@ -1079,6 +1080,44 @@ db.delete('/department-mappings/:id', rbacGuard('manage:departments'), async (c)
   const id = c.req.param('id');
   try {
     await c.env.DB.prepare('DELETE FROM department_mappings WHERE id = ?').bind(id).run();
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// Location Mappings
+db.get('/location-mappings', async (c) => {
+  try {
+    const { results } = await c.env.DB.prepare('SELECT * FROM location_mappings').all();
+    return c.json((results || []).map((m: any) => ({
+      ...m,
+      sourceName: m.source_name,
+      targetLocationId: m.target_location_id,
+      createdAt: m.created_at
+    })));
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.post('/location-mappings', rbacGuard('manage:locations'), async (c) => {
+  const mapping = await c.req.json();
+  const id = mapping.id || crypto.randomUUID();
+  try {
+    await c.env.DB.prepare(
+      'INSERT INTO location_mappings (id, source_name, target_location_id) VALUES (?, ?, ?) ON CONFLICT(source_name) DO UPDATE SET target_location_id=EXCLUDED.target_location_id'
+    ).bind(id, mapping.sourceName, mapping.targetLocationId).run();
+    return c.json({ id, ...mapping });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.delete('/location-mappings/:id', rbacGuard('manage:locations'), async (c) => {
+  const id = c.req.param('id');
+  try {
+    await c.env.DB.prepare('DELETE FROM location_mappings WHERE id = ?').bind(id).run();
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);

@@ -17,7 +17,8 @@ import {
   SystemActivity,
   AppNotification,
   CrossAuditPermission,
-  AssignmentMode
+  AssignmentMode,
+  LocationMapping
 } from '@shared/types';
 import { gateway } from '../services/dataGateway';
 import { authService } from '../services/auth';
@@ -55,6 +56,7 @@ interface AppActionsProps {
   setConfirmState: React.Dispatch<React.SetStateAction<any>>;
   setFeasibilityReport: React.Dispatch<React.SetStateAction<any>>;
   setCrossAuditPermissions: React.Dispatch<React.SetStateAction<CrossAuditPermission[]>>;
+  setLocationMappings: React.Dispatch<React.SetStateAction<LocationMapping[]>>;
   isGroupSimulatorActive: boolean;
   setIsGroupSimulatorActive: React.Dispatch<React.SetStateAction<boolean>>;
   simulatedGroups: any[];
@@ -72,8 +74,7 @@ interface AppActionsProps {
   kpiTiers: KPITier[];
   kpiTierTargets: KPITierTarget[];
   institutionKPIs: InstitutionKPITarget[];
-  departmentMappings: DepartmentMapping[];
-  auditGroups: AuditGroup[];
+
   rbacMatrix: any;
   maxAssetsPerDay: number;
   maxLocationsPerDay: number;
@@ -89,6 +90,8 @@ interface AppActionsProps {
   setGroupingAuditorMargin: React.Dispatch<React.SetStateAction<number>>;
   setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
   setOpenAuditThreshold: React.Dispatch<React.SetStateAction<number>>;
+  locationMappings: LocationMapping[];
+  buildings: Building[];
 }
 
 export const useAppActions = (props: AppActionsProps) => {
@@ -99,11 +102,13 @@ export const useAppActions = (props: AppActionsProps) => {
     setKpiTierTargets, setInstitutionKPIs, setDepartmentMappings, 
     setAuditGroups, setBuildings, setActivities, setNotifications, setToasts,
     setPairingLocked, setPairingLockInfo, setIsSidebarOpen, setConfirmState, setFeasibilityReport, setCrossAuditPermissions,
+    setLocationMappings,
     setIsGroupSimulatorActive, setSimulatedGroups,
     isProcessing, setIsProcessing,
     certRenewalModalUser, setCertRenewalModalUser, setShowForcePasswordModal, setShowProfileCompleteModal,
     loadAllData, setConnectionErrorMessage, rbacMatrix, departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets, maxAssetsPerDay,
-    setAssignmentMode, setOpenAuditThreshold
+    setAssignmentMode, setOpenAuditThreshold,
+    locationMappings, buildings
   } = props;
 
   const showToast = useCallback((message: string, type: ToastType = 'success', duration?: number) => {
@@ -223,31 +228,12 @@ export const useAppActions = (props: AppActionsProps) => {
     } catch (e) { showError(e); }
   };
 
-  const handleBulkAddAudits = async (newAudits: Omit<AuditSchedule, 'id'>[]) => {
-    try {
-      const result = await bulkManagement.addAudits(newAudits, users, departments, locations, departmentsWithAssets);
-      if (!result.success) { showToast(result.message || 'Bulk Import Failed', 'error'); return; }
-      if (result.newUsersCreated?.length) setUsers(prev => [...prev, ...result.newUsersCreated!]);
-      if (result.newDeptIds?.length) setDepartments(await gateway.getDepartments());
-      setLocations(await gateway.getLocations());
-      setSchedules(prev => [...prev, ...(result.added || [])]);
-      showToast('Audits imported');
-    } catch (e) { showError(e); }
-  };
-
   const handleAddLoc = async (loc: Omit<Location, 'id'>) => {
     try { const nl = await gateway.addLocation(loc); setLocations(await gateway.getLocations()); showToast('Added'); await refreshDepartmentTotals(); }
     catch (e) { showError(e); }
   };
 
-  const handleBulkAddLocs = async (newLocs: Omit<Location, 'id'>[]) => {
-    try {
-      const result = await bulkManagement.addLocations(newLocs, departments, users, locations);
-      if (result.newUsersCreated?.length) setUsers(prev => [...prev, ...result.newUsersCreated!]);
-      setLocations(await gateway.getLocations()); await refreshDepartmentTotals(); setDepartments(await gateway.getDepartments());
-      showToast('Locations imported');
-    } catch (e) { showError(e); }
-  };
+
 
   const handleUpdateLoc = async (id: string, updates: Partial<Location>) => {
     try { await gateway.updateLocation(id, updates); setLocations(await gateway.getLocations()); await refreshDepartmentTotals(); }
@@ -597,6 +583,39 @@ export const useAppActions = (props: AppActionsProps) => {
     catch (e) { showError(e); }
   };
 
+  const handleAddLocationMapping = async (mapping: Omit<LocationMapping, 'id'>) => {
+    try { await gateway.addLocationMapping(mapping); setLocationMappings(await gateway.getLocationMappings()); }
+    catch (e) { showError(e); }
+  };
+
+  const handleDeleteLocationMapping = async (id: string) => {
+    try { await gateway.deleteLocationMapping(id); setLocationMappings(await gateway.getLocationMappings()); }
+    catch (e) { showError(e); }
+  };
+
+  const handleBulkAddAudits = async (newAudits: Omit<AuditSchedule, 'id'>[]) => {
+    try {
+      const result = await bulkManagement.addAudits(newAudits, users, departments, locations, departmentsWithAssets);
+      if (!result.success) { showToast(result.message || 'Bulk Import Failed', 'error'); return; }
+      if (result.newUsersCreated?.length) setUsers(prev => [...prev, ...result.newUsersCreated!]);
+      if (result.newDeptIds?.length) setDepartments(await gateway.getDepartments());
+      setLocations(await gateway.getLocations());
+      setSchedules(prev => [...prev, ...(result.added || [])]);
+      showToast('Audits imported');
+    } catch (e) { showError(e); }
+  };
+
+  const handleBulkAddLocs = async (newLocs: Omit<Location, 'id'>[]) => {
+    try {
+      setIsProcessing(true);
+      const result = await bulkManagement.addLocations(newLocs, departments, users, locations, locationMappings, buildings);
+      if (result.newUsersCreated?.length) setUsers(prev => [...prev, ...result.newUsersCreated!]);
+      setLocations(await gateway.getLocations()); await refreshDepartmentTotals(); setDepartments(await gateway.getDepartments());
+      showToast('Locations imported');
+    } catch (e) { showError(e); }
+    finally { setIsProcessing(false); }
+  };
+
   const handleBulkDeleteAuditGroups = async (ids: string[]) => {
     try { await Promise.all(ids.map(id => gateway.deleteAuditGroup(id))); setAuditGroups(await gateway.getAuditGroups()); }
     catch (e) { showError(e); }
@@ -753,6 +772,7 @@ export const useAppActions = (props: AppActionsProps) => {
     handleRequestRenewal, handleApproveCert, handleIssueCertForRenewal, handleUpdateDashboardConfig,
     handleUpdateUserStatus, handleUpdateUserRoles, handleResetUserPassword, handleBulkActivateStaff,
     handleDeleteMember, handleAddBuilding, handleResetOnlyPermissions,
-    handleUpdateAssignmentMode, handleUpdateOpenAuditThreshold
+    handleUpdateAssignmentMode, handleUpdateOpenAuditThreshold,
+    handleAddLocationMapping, handleDeleteLocationMapping
   };
 };

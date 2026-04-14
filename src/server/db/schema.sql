@@ -101,6 +101,15 @@ CREATE TABLE IF NOT EXISTS department_mappings (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Location Mappings Table
+CREATE TABLE IF NOT EXISTS location_mappings (
+  id TEXT PRIMARY KEY,
+  source_name TEXT UNIQUE NOT NULL,
+  target_location_id TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (target_location_id) REFERENCES locations(id)
+);
+
 -- Institution KPI Targets Table
 CREATE TABLE IF NOT EXISTS institution_kpi_targets (
   phase_id TEXT PRIMARY KEY,

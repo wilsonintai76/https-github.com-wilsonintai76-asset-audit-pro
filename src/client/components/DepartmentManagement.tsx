@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Department, Location, User, AuditGroup, UserRole } from '@shared/types';
-import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, ShieldCheck, UserPlus, Printer, Mars, Venus, HelpCircle } from 'lucide-react';
+import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, ShieldCheck, UserPlus, Printer, HelpCircle } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
@@ -134,7 +134,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       const locCount = (locations || []).filter(l => l.departmentId === dept.id).length;
       const stats = deptGenderStats[dept.id] || { male: 0, female: 0, unknown: 0, total: 0 };
       const reqs = deptGenderRequirements[dept.id] || [];
-      const reqSymbols = reqs.map(r => r === 'Male Only' ? '<span style="color:#2563eb">♂</span>' : '<span style="color:#db2777">♀</span>').join('');
+      const reqSymbols = reqs.map(r => r === 'Male Only' ? '<span style="color:#2563eb; font-weight:bold;">M</span>' : '<span style="color:#db2777; font-weight:bold;">F</span>').join(' ');
       
       return `
         <tr>
@@ -143,7 +143,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
           <td class="center">
             <div style="font-weight:bold; font-size:11px;">${stats.total}</div>
             <div style="font-size:9px; color:#64748b;">
-              <span style="color:#2563eb">♂${stats.male}</span> <span style="color:#db2777">♀${stats.female}</span>
+              <span style="color:#2563eb">M${stats.male}</span> <span style="color:#db2777">F${stats.female}</span>
             </div>
           </td>
           <td class="center">
@@ -349,12 +349,12 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                                  <>
                                    {stats.male > 0 && (
                                      <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600" title="Male Officers">
-                                       <Mars className="w-3 h-3" /> {stats.male}
+                                       M {stats.male}
                                      </span>
                                    )}
                                    {stats.female > 0 && (
                                      <span className="flex items-center gap-0.5 text-[10px] font-bold text-rose-500" title="Female Officers">
-                                       <Venus className="w-3 h-3" /> {stats.female}
+                                       F {stats.female}
                                      </span>
                                    )}
                                    {stats.unknown > 0 && (
@@ -390,8 +390,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                           </span>
                           <div className="flex gap-1 text-[10px]">
                              {(deptGenderRequirements[dept.id] || []).map(r => (
-                               <span key={r} title={r} className={r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}>
-                                 {r === 'Male Only' ? <Mars className="w-3.5 h-3.5" /> : <Venus className="w-3.5 h-3.5" />}
+                               <span key={r} title={r} className={`text-[10px] font-black ${r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}`}>
+                                 {r === 'Male Only' ? 'M' : 'F'}
                                </span>
                              ))}
                           </div>
