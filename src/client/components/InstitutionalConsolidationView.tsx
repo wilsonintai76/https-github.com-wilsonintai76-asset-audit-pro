@@ -24,10 +24,11 @@ export const InstitutionalConsolidationView: React.FC<InstitutionalConsolidation
 }) => {
   // Group departments by their audit group
   const { groupedData, overallTotal, overallBBI } = React.useMemo(() => {
-    const unassignedDepts = departments.filter(d => !d.auditGroupId && !d.auditGroup);
+    const activeDepts = departments.filter(d => !d.isExempted && !d.isSystemExempted);
+    const unassignedDepts = activeDepts.filter(d => !d.auditGroupId && !d.auditGroup);
     
     const groups = auditGroups.map(group => {
-      const groupDepts = departments.filter(d => d.auditGroupId === group.id || d.auditGroup === group.name);
+      const groupDepts = activeDepts.filter(d => d.auditGroupId === group.id || d.auditGroup === group.name);
       const subTotalAssets = groupDepts.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
       const subTotalLocs = groupDepts.reduce((sum, d: any) => sum + (d.locationCount || 0), 0);
       const subTotalAuditors = groupDepts.reduce((sum, d: any) => sum + (d.auditorCount || 0), 0);

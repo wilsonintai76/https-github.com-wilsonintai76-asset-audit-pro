@@ -16,7 +16,8 @@ import {
   DashboardConfig,
   SystemActivity,
   AppNotification,
-  CrossAuditPermission
+  CrossAuditPermission,
+  AssignmentMode
 } from '@shared/types';
 import { gateway } from '../services/dataGateway';
 import { authService } from '../services/auth';
@@ -86,6 +87,8 @@ interface AppActionsProps {
   setGroupingMargin: React.Dispatch<React.SetStateAction<number>>;
   groupingAuditorMargin: number;
   setGroupingAuditorMargin: React.Dispatch<React.SetStateAction<number>>;
+  setAssignmentMode: React.Dispatch<React.SetStateAction<AssignmentMode>>;
+  setOpenAuditThreshold: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export const useAppActions = (props: AppActionsProps) => {
@@ -99,7 +102,8 @@ export const useAppActions = (props: AppActionsProps) => {
     setIsGroupSimulatorActive, setSimulatedGroups,
     isProcessing, setIsProcessing,
     certRenewalModalUser, setCertRenewalModalUser, setShowForcePasswordModal, setShowProfileCompleteModal,
-    loadAllData, setConnectionErrorMessage, rbacMatrix, departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets, maxAssetsPerDay
+    loadAllData, setConnectionErrorMessage, rbacMatrix, departmentsWithAssets, auditPhases, kpiTiers, kpiTierTargets, maxAssetsPerDay,
+    setAssignmentMode, setOpenAuditThreshold
   } = props;
 
   const showToast = useCallback((message: string, type: ToastType = 'success', duration?: number) => {
@@ -599,12 +603,12 @@ export const useAppActions = (props: AppActionsProps) => {
   };
 
   const handleAddBuilding = async (building: Omit<Building, 'id'>) => {
-    try { await gateway.addBuilding(building); setBuildings(await gateway.getBuildings()); }
+    try { await gateway.addBuilding(building); setBuildings(await gateway.getBuildings()); showToast('Building registered', 'success'); }
     catch (e) { showError(e); }
   };
 
   const handleUpdateBuilding = async (id: string, updates: Partial<Building>) => {
-    try { await gateway.updateBuilding(id, updates); setBuildings(await gateway.getBuildings()); }
+    try { await gateway.updateBuilding(id, updates); setBuildings(await gateway.getBuildings()); showToast('Building updated', 'success'); }
     catch (e) { showError(e); }
   };
 
@@ -715,6 +719,22 @@ export const useAppActions = (props: AppActionsProps) => {
     catch (e) { showError(e); }
   };
 
+  const handleUpdateAssignmentMode = async (mode: AssignmentMode) => {
+    try {
+      await gateway.updateSystemSetting('audit_strategy', { assignmentMode: mode, openAuditThreshold: (props as any).openAuditThreshold || 500 });
+      setAssignmentMode(mode);
+      showToast(`Strategy updated to ${mode === 'cross-audit' ? 'Cross Audit' : 'Open Audit'}`);
+    } catch (e) { showError(e); }
+  };
+
+  const handleUpdateOpenAuditThreshold = async (threshold: number) => {
+    try {
+      await gateway.updateSystemSetting('audit_strategy', { assignmentMode: (props as any).assignmentMode || 'cross-audit', openAuditThreshold: threshold });
+      setOpenAuditThreshold(threshold);
+      showToast(`Threshold updated to ${threshold} assets`);
+    } catch (e) { showError(e); }
+  };
+
   return {
     showToast, closeToast, showError, customConfirm, customAlert, logActivity, handleLogout, handleLoginSuccess,
     refreshDepartmentTotals, handleToggleLock, handleAssign, handleUnassign, handleDeleteAudit, handleUpdateAudit,
@@ -732,6 +752,7 @@ export const useAppActions = (props: AppActionsProps) => {
     handleUpsertLocations, handleSyncLocationMappings, handleAddMember, handleBulkAddMembers, handleUpdateMember,
     handleRequestRenewal, handleApproveCert, handleIssueCertForRenewal, handleUpdateDashboardConfig,
     handleUpdateUserStatus, handleUpdateUserRoles, handleResetUserPassword, handleBulkActivateStaff,
-    handleDeleteMember, handleAddBuilding, handleResetOnlyPermissions
+    handleDeleteMember, handleAddBuilding, handleResetOnlyPermissions,
+    handleUpdateAssignmentMode, handleUpdateOpenAuditThreshold
   };
 };

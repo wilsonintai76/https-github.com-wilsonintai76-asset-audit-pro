@@ -23,6 +23,8 @@ interface ActiveEntitiesListProps {
   threshold: number;
   strictAuditorRule: boolean;
   maxLocationsPerDay?: number;
+  openAuditThreshold?: number;
+  locations?: any[];
 }
 
 export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
@@ -35,6 +37,8 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
   threshold,
   strictAuditorRule,
   maxLocationsPerDay = 5,
+  openAuditThreshold = 500,
+  locations = []
 }) => {
   return (
     <Card className="rounded-[32px] border-slate-200 shadow-sm overflow-hidden mt-12">
@@ -100,9 +104,9 @@ export const ActiveEntitiesList: React.FC<ActiveEntitiesListProps> = ({
                       <span className="text-xs">{entity.assets.toLocaleString()}</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[9px] uppercase opacity-70">Auditors</span>
-                      <span className={`text-xs ${entity.auditors < minAuditors && !isSelected ? 'text-red-500' : ''}`}>
-                        {entity.auditors}
+                      <span className="text-[9px] uppercase font-black opacity-60">Officers (Act / Req)</span>
+                      <span className={`text-xs ${entity.auditors < (entity as any).recommended && !isSelected ? 'text-rose-500 font-black' : ''}`}>
+                        {entity.auditors} / {(entity as any).recommended}
                       </span>
                     </div>
                   </div>

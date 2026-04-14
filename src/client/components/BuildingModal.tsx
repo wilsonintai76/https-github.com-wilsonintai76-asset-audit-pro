@@ -20,6 +20,8 @@ export const BuildingModal: React.FC<BuildingModalProps> = ({
     name: '',
     abbr: '',
     description: '',
+    type: 'Administrative' as 'Administrative' | 'Academic' | 'Residential' | 'Other',
+    genderRestriction: 'None' as 'None' | 'Male Only' | 'Female Only',
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -30,12 +32,16 @@ export const BuildingModal: React.FC<BuildingModalProps> = ({
         name: initialData.name || '',
         abbr: initialData.abbr || '',
         description: initialData.description || '',
+        type: initialData.type || 'Administrative',
+        genderRestriction: initialData.genderRestriction || 'None',
       });
     } else {
       setFormData({
         name: '',
         abbr: '',
         description: '',
+        type: 'Administrative',
+        genderRestriction: 'None',
       });
     }
   }, [initialData, isOpen]);
@@ -99,7 +105,38 @@ export const BuildingModal: React.FC<BuildingModalProps> = ({
                 value={formData.abbr}
                 onChange={e => setFormData({ ...formData, abbr: e.target.value.toUpperCase() })}
               />
-              <p className="text-[10px] text-slate-400 font-medium ml-1 italic">Used for compact UI displays.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Building Category</label>
+                <select 
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                  value={formData.type}
+                  onChange={e => setFormData({ ...formData, type: e.target.value as any })}
+                >
+                  <option value="Administrative">Administrative</option>
+                  <option value="Academic">Academic</option>
+                  <option value="Residential">Residential (Hostel)</option>
+                  <option value="Workshop/Laboratory">Workshop / Laboratory</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Gender Protocol</label>
+                <select 
+                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all ${
+                    formData.genderRestriction !== 'None' ? 'border-amber-200 bg-amber-50 text-amber-700' : ''
+                  }`}
+                  value={formData.genderRestriction}
+                  onChange={e => setFormData({ ...formData, genderRestriction: e.target.value as any })}
+                >
+                  <option value="None">No Restriction (General)</option>
+                  <option value="Male Only">Men Only Facility</option>
+                  <option value="Female Only">Women Only Facility</option>
+                </select>
+              </div>
             </div>
 
             <div className="space-y-1.5">

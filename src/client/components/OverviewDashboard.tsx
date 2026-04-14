@@ -28,8 +28,8 @@ interface OverviewDashboardProps {
   maxLocationsPerDay?: number;
   institutionKPIs?: InstitutionKPITarget[];
   buildings?: Building[];
-  kpiTierTargets?: KPITierTarget[];
-  strictAuditorRule?: boolean;
+  openAuditThreshold?: number;
+  users?: User[];
 }
 
 function BarFill({ pct, className }: { pct: number; className: string }) {
@@ -64,6 +64,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
   buildings = [],
   kpiTierTargets = [],
   strictAuditorRule = false,
+  openAuditThreshold = 500,
+  users = []
 }) => {
   const { t } = useLanguage();
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
@@ -175,6 +177,18 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
       const isActuallyUnassigned = groupId.startsWith('unassigned_');
       const totalAssets = depts.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
       const totalAuditors = depts.reduce((sum, d) => sum + (d.auditorCount || 0), 0);
+
+      // Staffing Recommendation Logic
+      const recommended = depts.reduce((sum, d) => {
+        if (d.auditorsRequiredOverride !== undefined && d.auditorsRequiredOverride !== null) {
+          return sum + d.auditorsRequiredOverride;
+        }
+        const assets = d.totalAssets || 0;
+        if (assets === 0) return sum + 0;
+        const raw = Math.max(Math.ceil(assets / openAuditThreshold), 2);
+        const pairRounded = raw % 2 === 0 ? raw : raw + 1;
+        return sum + pairRounded;
+      }, 0);
       
       // Name Resolution: Group Record Name > First Dept Name
       const groupRecord = auditGroups.find(g => g.id === groupId);
@@ -184,6 +198,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         name,
         assets: totalAssets,
         auditors: totalAuditors,
+        recommended,
         memberCount: depts.length,
         isJoint: !isActuallyUnassigned && depts.length > 1,
         isConsolidated: !isActuallyUnassigned,
@@ -191,7 +206,7 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
         members: depts
       };
     }).sort((a, b) => b.assets - a.assets);
-  }, [departments, auditGroups]);
+  }, [departments, auditGroups, locations, openAuditThreshold]);
 
   const overallTotalAssets = useMemo(() => {
      return departments.reduce((sum, d) => sum + (typeof d.totalAssets === 'string' ? parseInt(d.totalAssets) : (d.totalAssets || 0)), 0);
@@ -438,6 +453,9 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               phases={phases}
               schedules={schedules}
               locations={locations}
+              openAuditThreshold={openAuditThreshold}
+              users={users}
+              buildings={buildings}
             />
           )}
 
@@ -501,6 +519,8 @@ export const OverviewDashboard: React.FC<OverviewDashboardProps> = ({
               overallTotal={overallTotalAssets}
               threshold={maxAssetsPerDay}
               strictAuditorRule={strictAuditorRule}
+              openAuditThreshold={openAuditThreshold}
+              locations={locations}
             />
           
           {config.showUpcoming && (

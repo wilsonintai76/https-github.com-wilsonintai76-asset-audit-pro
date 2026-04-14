@@ -1,7 +1,7 @@
 
 import React, { useMemo } from 'react';
 import { Department, KPITier, AuditPhase, AuditSchedule, KPITierTarget, Location } from '@shared/types';
-import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle } from 'lucide-react';
+import { Boxes, Layers, CheckCircle2, AlertCircle, MinusCircle, Mars, Venus, HelpCircle } from 'lucide-react';
 import { PrintButton } from './PrintButton';
 import { printKPIPhasePlan } from '../lib/printUtils';
 
@@ -12,8 +12,9 @@ interface TierDistributionTableProps {
   phases: AuditPhase[];
   schedules: AuditSchedule[];
   locations?: Location[];
-  maxAssetsPerDay?: number;
-  maxLocationsPerDay?: number;
+  users?: any[];
+  buildings?: any[];
+  openAuditThreshold?: number;
 }
 
 export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({ 
@@ -23,8 +24,9 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
   phases,
   schedules,
   locations = [],
-  maxAssetsPerDay = 1000,
-  maxLocationsPerDay = 5
+  users = [],
+  buildings = [],
+  openAuditThreshold = 500
 }) => {
   const sortedPhases = useMemo(() => [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate)), [phases]);
   const sortedTiers = useMemo(() => [...kpiTiers].sort((a, b) => a.minAssets - b.minAssets), [kpiTiers]);
@@ -32,22 +34,37 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
   const tableData = useMemo(() => {
     const institutionTotalAssets = departments.reduce((sum, d) => sum + (d.totalAssets || 0), 0);
 
-    return departments.map(dept => {
-      const deptPercentage = institutionTotalAssets > 0 ? ((dept.totalAssets || 0) / institutionTotalAssets) * 100 : 0;
-      const tier = sortedTiers
-        .filter(t => deptPercentage >= t.minAssets)
-        .sort((a,b) => b.minAssets - a.minAssets)[0];
-      const deptAudits = schedules.filter(s => s.departmentId === dept.id);
+    // Optimization: Pre-group users by department for O(1) lookup
+    const usersByDept: Record<string, any[]> = {};
+    users.forEach(u => {
+      if (!u.departmentId) return;
+      if (!usersByDept[u.departmentId]) usersByDept[u.departmentId] = [];
+      usersByDept[u.departmentId].push(u);
+    });
+
+    // Optimization: Pre-calculate building restrictions
+    const buildingMap: Record<string, string> = {};
+    (buildings || []).forEach(b => {
+      if (b.genderRestriction && b.genderRestriction !== 'None') {
+        buildingMap[b.id] = b.genderRestriction;
+        buildingMap[b.name] = b.genderRestriction;
+      }
+    });
+
+    return departments
+      .filter(dept => (dept.totalAssets || 0) > 0)
+      .map(dept => {
+        const deptPercentage = institutionTotalAssets > 0 ? ((dept.totalAssets || 0) / institutionTotalAssets) * 100 : 0;
+        const tier = sortedTiers
+          .filter(t => deptPercentage >= t.minAssets)
+          .sort((a,b) => b.minAssets - a.minAssets)[0];
+        const deptAudits = schedules.filter(s => s.departmentId === dept.id);
 
       // Pre-compute location coverage so phaseStatus can use it
       const deptLocIds = new Set(locations.filter(l => l.departmentId === dept.id).map(l => l.id));
       const scheduledLocIds = new Set(deptAudits.map(a => a.locationId));
       const allLocsScheduled = deptLocIds.size > 0 && [...deptLocIds].every(lid => scheduledLocIds.has(lid));
 
-      // Use reduce so we can track whether a previous phase already hit 100%.
-      // Once a tier reaches 100% in phase N, all later phases are NOT required.
-      // When all locations are already scheduled (allLocsScheduled), treat every
-      // required phase as "hasAudit=true" — the work is covered across phases.
       const phaseStatus = sortedPhases.reduce<{
         phaseId: string; hasAudit: boolean; isRequired: boolean;
         isCompleted: boolean; targetPct: number; targetAssets: number;
@@ -58,10 +75,8 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
              ?? tier.targets?.[phase.id]
              ?? 0)
           : 0;
-        // If any earlier phase already hit 100%, this phase is not required
         const prevReached100 = acc.some(p => p.targetPct >= 100);
         const isRequired = (dept.totalAssets || 0) > 0 && targetPct > 0 && !prevReached100;
-        // Show as scheduled (blue) if directly scheduled OR if all locations covered
         const hasAudit = hasAuditDirect || (isRequired && allLocsScheduled);
         const isCompleted = deptAudits.some(a => a.phaseId === phase.id && a.status === 'Completed');
         const targetAssets = Math.ceil((dept.totalAssets || 0) * targetPct / 100);
@@ -71,22 +86,41 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
       }, []);
 
       const hasNoAssets = (dept.totalAssets || 0) === 0;
-      // Ready = all locations have a schedule assigned (phase-agnostic)
       const isFullyScheduled = !hasNoAssets && (
         deptLocIds.size > 0
           ? allLocsScheduled
           : phaseStatus.every(p => !p.isRequired || p.hasAudit)
       );
       
+      // Get pre-grouped users for this dept
+      const dUsers = usersByDept[dept.id] || [];
+      const relevantUsers = dUsers.filter(u => u.roles.includes('Auditor') || u.roles.includes('Supervisor') || u.roles.includes('Coordinator'));
+      const male = relevantUsers.filter(u => ['Male', 'M'].includes(u.gender || '')).length;
+      const female = relevantUsers.filter(u => ['Female', 'F'].includes(u.gender || '')).length;
+      
+      const rSet = new Set<string>();
+      locations.filter(l => l.departmentId === dept.id).forEach(l => {
+        const res = buildingMap[l.buildingId] || buildingMap[l.building];
+        if (res) rSet.add(res);
+      });
+
       return {
         ...dept,
         tierName: tier?.name || 'Unassigned',
         phaseStatus,
         isFullyScheduled,
-        hasNoAssets
+        hasNoAssets,
+        locationCount: deptLocIds.size,
+        genderStats: {
+          male,
+          female,
+          unknown: relevantUsers.length - (male + female),
+          total: relevantUsers.length
+        },
+        genderRequirement: Array.from(rSet)
       };
     }).sort((a, b) => (b.totalAssets || 0) - (a.totalAssets || 0));
-  }, [departments, sortedTiers, sortedPhases, schedules]);
+  }, [departments, sortedTiers, sortedPhases, schedules, users, buildings, locations]);
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
@@ -97,7 +131,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
         </div>
         <div className="flex items-center gap-4">
           <PrintButton
-            onClick={() => printKPIPhasePlan(tableData, sortedPhases, maxAssetsPerDay, maxLocationsPerDay)}
+            onClick={() => printKPIPhasePlan(tableData, sortedPhases, openAuditThreshold)}
             label="Print"
             title="Print KPI Phase Inspection Plan"
           />
@@ -119,8 +153,8 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
           <thead className="bg-slate-50/95 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
             <tr>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
-              <th id="header-auditors-tier" className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Inspecting Officers</th>
-              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Recommended</th>
+              <th id="header-auditors-tier" className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Certified Officers</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Required Staffing</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Assets / Tier</th>
               {sortedPhases.map(phase => (
                 <th key={phase.id} className="px-4 py-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">
@@ -138,17 +172,33 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                   <div className="text-[10px] text-slate-400 font-medium">{row.abbr}</div>
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <span className="text-xs font-bold text-slate-700">{row.auditorCount || 0}</span>
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs font-bold text-slate-700">{(row as any).genderStats.total}</span>
+                    <div className="flex gap-1.5 mt-0.5 items-center">
+                       {(row as any).genderStats.male > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600"><Mars className="w-3 h-3"/> {(row as any).genderStats.male}</span>}
+                       {(row as any).genderStats.female > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-rose-500"><Venus className="w-3 h-3"/> {(row as any).genderStats.female}</span>}
+                       {(row as any).genderStats.unknown > 0 && <span title="Gender Not Specified" className="flex items-center gap-0.5 text-[10px] font-bold text-slate-400"><HelpCircle className="w-3 h-3"/> {(row as any).genderStats.unknown}</span>}
+                       {(row as any).genderStats.total === 0 && <span className="text-[9px] text-slate-300">No Data</span>}
+                    </div>
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-center">
                    <div className="flex flex-col items-center">
                       <span className="text-xs font-black text-indigo-600">
-                        {(() => {
+                        {row.auditorsRequiredOverride ?? (() => {
                            const assets = row.totalAssets || 0;
-                           const locs = 1; // Basic assumption if no loc count per dept
-                           return Math.max(2, Math.ceil(assets / maxAssetsPerDay), Math.ceil(locs / maxLocationsPerDay));
+                           if (assets === 0) return 0;
+                           const raw = Math.max(Math.ceil(assets / openAuditThreshold), 2);
+                           return raw % 2 === 0 ? raw : raw + 1;
                         })()}
                       </span>
+                      <div className="flex gap-0.5 text-xs">
+                         {(row as any).genderRequirement.map((r: string) => (
+                           <span key={r} title={r} className={r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}>
+                             {r === 'Male Only' ? <Mars className="w-3.5 h-3.5" /> : <Venus className="w-3.5 h-3.5" />}
+                           </span>
+                         ))}
+                      </div>
                    </div>
                 </td>
                 <td className="px-6 py-4">

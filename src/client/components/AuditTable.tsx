@@ -28,6 +28,7 @@ import { PageHeader } from './PageHeader';
 import { AuditorAssignmentSlot } from './AuditorAssignmentSlot';
 import { PrintButton } from './PrintButton';
 import { printInspectionSchedule, exportInspectionSchedule } from '../lib/printUtils';
+import { ConfirmationModal } from './ConfirmationModal';
 
 interface AuditTableProps {
   schedules: AuditSchedule[];
@@ -53,6 +54,7 @@ interface AuditTableProps {
   auditPhases: AuditPhase[];
   maxAssetsPerDay: number;
   buildings?: BuildingType[];
+  assignmentMode?: 'cross-audit' | 'open-audit';
 }
 
 export const AuditTable: React.FC<AuditTableProps> = ({ 
@@ -60,12 +62,19 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   selectedPhaseId, onPhaseChange, onAssign, onUnassign, onUpdateDate, onUpdateAudit, onToggleStatus, onToggleLock,
   allDepartments, allLocations, crossAuditPermissions, auditPhases,
   maxAssetsPerDay,
-  buildings = []
+  buildings = [],
+  assignmentMode = 'cross-audit'
 }) => {
   const { hasPermission, rbacMatrix } = useRBAC();
   const [reportAudit, setReportAudit] = useState<AuditSchedule | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('All');
   const [selectedLevel, setSelectedLevel] = useState('All');
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    auditId: string;
+    slot: 1 | 2;
+    userId: string;
+    restriction: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Role Checks
@@ -167,14 +176,18 @@ export const AuditTable: React.FC<AuditTableProps> = ({
     // 1. Prevent self-audit at the entity level (Department or Group)
     if (myEntityId === targetEntityId && !isAdmin) return false;
 
-    // 2. Check if a pairing exists in crossAuditPermissions
-    const hasPermission = crossAuditPermissions.some(p => 
-      p.auditorDeptId === myEntityId && 
-      p.targetDeptId === targetEntityId && 
-      p.isActive
-    );
-    
-    return isAdmin || hasPermission;
+    // 2. Check if a pairing exists in crossAuditPermissions (only if in cross-audit mode)
+    if (assignmentMode === 'cross-audit') {
+      const hasPermission = crossAuditPermissions.some(p => 
+        p.auditorDeptId === myEntityId && 
+        p.targetDeptId === targetEntityId && 
+        p.isActive
+      );
+      return isAdmin || hasPermission;
+    }
+
+    // 3. In Open Audit mode, any certified officer can audit any department (except COI)
+    return true;
   };
 
   const getUserContact = (userId: string) => {
@@ -243,6 +256,26 @@ export const AuditTable: React.FC<AuditTableProps> = ({
       return;
     }
 
+    // Gender Restriction Logic
+    const loc = allLocations.find(l => l.id === audit.locationId);
+    const building = buildings.find(b => b.id === loc?.buildingId);
+    
+    if (building?.genderRestriction && building.genderRestriction !== 'None') {
+      // Logic for popup: If user gender is known and matches, maybe we skip? 
+      // But user requested "popup will ask to confirm", so let's show it anyway for safety.
+      
+      // If we already confirmed this specific assignment, proceed
+      if (pendingAssignment?.auditId !== auditId || pendingAssignment?.slot !== slot || pendingAssignment?.userId !== assignUserId) {
+        setPendingAssignment({
+          auditId,
+          slot,
+          userId: assignUserId,
+          restriction: building.genderRestriction
+        });
+        return;
+      }
+    }
+
     // Explicit Pairing Check (Defense in Depth)
     const officerDeptId = assignUser?.departmentId || '';
     const myEntityId = getEntityName(officerDeptId);
@@ -259,15 +292,17 @@ export const AuditTable: React.FC<AuditTableProps> = ({
       return;
     }
 
-    const hasCrossPerm = isAdmin || crossAuditPermissions.some(p => 
-      p.auditorDeptId === myEntityId && 
-      p.targetDeptId === targetEntityId && 
-      p.isActive
-    );
+    if (assignmentMode === 'cross-audit') {
+      const hasCrossPerm = isAdmin || crossAuditPermissions.some(p => 
+        p.auditorDeptId === myEntityId && 
+        p.targetDeptId === targetEntityId && 
+        p.isActive
+      );
 
-    if (!hasCrossPerm) {
-      alert(`PAIRING RESTRICTION: This asset location is outside the assigned inspection matrix for ${isSelf ? 'you' : 'the selected officer'}.`);
-      return;
+      if (!hasCrossPerm) {
+        alert(`PAIRING RESTRICTION: This asset location is outside the assigned inspection matrix for ${isSelf ? 'you' : 'the selected officer'}.`);
+        return;
+      }
     }
 
     if (!date) {
@@ -322,12 +357,14 @@ export const AuditTable: React.FC<AuditTableProps> = ({
           const targetEntityId = getEntityName(targetDeptId);
           if (myEntityId === targetEntityId) return false;
 
-          const hasCrossPerm = isAdmin || crossAuditPermissions.some(p => 
-            p.auditorDeptId === myEntityId && 
-            p.targetDeptId === targetEntityId && 
-            p.isActive
-          );
-          if (!hasCrossPerm) return false;
+          if (assignmentMode === 'cross-audit') {
+            const hasCrossPerm = isAdmin || crossAuditPermissions.some(p => 
+              p.auditorDeptId === myEntityId && 
+              p.targetDeptId === targetEntityId && 
+              p.isActive
+            );
+            if (!hasCrossPerm) return false;
+          }
 
           // 3. ABSOLUTE LOCK: Supervisor cannot be the Auditor for the same location
           if (officer.id === audit.supervisorId) return false;
@@ -424,13 +461,12 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         activePhase={activePhase}
         description="Plan and manage institutional inspection windows and inspecting officer assignments."
       >
-        <PrintButton
-          onClick={() => printInspectionSchedule(displaySchedules, allDepartments, allLocations, users, auditPhases, selectedDept)}
-          label="Print"
+        <PrintButton 
+          onPrint={() => printInspectionSchedule(displaySchedules, allDepartments, allLocations, users, auditPhases, selectedDept, buildings)}
           title="Print Inspection Schedule"
         />
         <button
-          onClick={() => exportInspectionSchedule(displaySchedules, allDepartments, allLocations, users, auditPhases, selectedDept)}
+          onClick={() => exportInspectionSchedule(displaySchedules, allDepartments, allLocations, users, auditPhases, selectedDept, buildings)}
           className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
           title="Export to Excel (one sheet per department)"
         >
@@ -691,12 +727,16 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                     <td className="px-8 py-6 align-top sticky left-48 bg-white z-10 border-r border-slate-100">
                       <div className="flex flex-col gap-1.5">
                         <div className="font-bold text-slate-900 text-base">{loc?.name || audit.locationId}</div>
-                        {loc?.building && (
-                          <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
-                            <Building className="w-3 h-3 opacity-40" />
-                            {loc.building}
-                          </div>
-                        )}
+                        {(() => {
+                           const bDisplay = getBuildingAbbr(loc?.buildingId, loc?.building);
+                           if (!bDisplay) return null;
+                           return (
+                             <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 uppercase tracking-tight">
+                               <Building className="w-3 h-3 opacity-40 text-blue-500" />
+                               {bDisplay}
+                             </div>
+                           );
+                        })()}
                         {locationLevel && (
                           <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5">
                             <Layers className="w-3 h-3 opacity-40" />
@@ -795,6 +835,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
                             getUserContact={getUserContact}
                             getEntityName={getEntityName}
                             maxAssetsPerDay={maxAssetsPerDay}
+                            assignmentMode={assignmentMode}
                           />
                         ))}
                       </div>
@@ -849,6 +890,26 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         <AuditReportModal 
             audit={reportAudit}
             onClose={() => setReportAudit(null)}
+        />
+      )}
+
+      {pendingAssignment && (
+        <ConfirmationModal
+          isOpen={!!pendingAssignment}
+          title="Gender Protocol Confirmation"
+          message={`This building (${allLocations.find(l => l.id === schedules.find(s => s.id === pendingAssignment.auditId)?.locationId)?.name}) is designated as a ${pendingAssignment.restriction}. Please confirm that the assigned officer is suitable for this environment before proceeding.`}
+          confirmLabel="Confirm Suitability"
+          cancelLabel="Cancel Assignment"
+          variant="warning"
+          onConfirm={() => {
+            const { auditId, slot, userId } = pendingAssignment;
+            const audit = schedules.find(s => s.id === auditId);
+            if (audit) {
+              handleSelfAssign(auditId, slot, audit.date || '', audit.phaseId, userId);
+              setPendingAssignment(null);
+            }
+          }}
+          onCancel={() => setPendingAssignment(null)}
         />
       )}
     </div>

@@ -39,7 +39,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
     description: '',
     totalAssets: 0,
     auditGroupId: '',
-    isExempted: false
+    isExempted: false,
+    auditorsRequiredOverride: undefined as number | undefined
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,7 +55,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
         description: initialData.description || '',
         totalAssets: initialData.totalAssets || 0,
         auditGroupId: initialData.auditGroupId || '',
-        isExempted: initialData.isExempted || false
+        isExempted: initialData.isExempted || false,
+        auditorsRequiredOverride: initialData.auditorsRequiredOverride
       });
     } else {
       setFormData({
@@ -64,7 +66,8 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
         description: '',
         totalAssets: 0,
         auditGroupId: '',
-        isExempted: false
+        isExempted: false,
+        auditorsRequiredOverride: undefined
       });
     }
     setSearchQuery('');
@@ -234,19 +237,35 @@ export const DepartmentModal: React.FC<DepartmentModalProps> = ({
                     value={formData.totalAssets}
                   />
                 </div>
-                <p className="text-[10px] text-slate-400 ml-1">Auto-calculated from location totals. Update via Location Management or asset registry sync.</p>
+                <p className="text-[10px] text-slate-400 ml-1">Auto-calculated from location totals.</p>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Notes / Mission</Label>
+                <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Manual Auditor Target</Label>
                 <div className="relative">
-                  <FileText className="absolute left-4 top-3.5 text-slate-300 w-4 h-4" />
-                  <Textarea 
-                    placeholder="Brief description of the department..."
-                    className="pl-11 min-h-[48px] bg-slate-50 border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
-                    value={formData.description}
-                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 w-4 h-4" />
+                  <Input 
+                    type="number"
+                    min="0"
+                    placeholder="Auto (Formula)"
+                    className="pl-11 h-12 bg-slate-50 border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    value={formData.auditorsRequiredOverride ?? ''}
+                    onChange={e => setFormData({ ...formData, auditorsRequiredOverride: e.target.value === '' ? undefined : parseInt(e.target.value) })}
                   />
                 </div>
+                <p className="text-[10px] text-slate-400 ml-1">Overrides the asset-based target coverage.</p>
+              </div>
+            </div>
+            
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Notes / Mission</Label>
+              <div className="relative">
+                <FileText className="absolute left-4 top-3.5 text-slate-300 w-4 h-4" />
+                <Textarea 
+                  placeholder="Brief description of the department..."
+                  className="pl-11 min-h-[48px] bg-slate-50 border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
+                  value={formData.description}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                />
               </div>
             </div>
 

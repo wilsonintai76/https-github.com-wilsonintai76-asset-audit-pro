@@ -248,10 +248,9 @@ interface TableRow {
 }
 
 export function printKPIPhasePlan(
-  tableData: TableRow[],
+  tableData: any[],
   sortedPhases: Phase[],
-  maxAssetsPerDay: number = 1000,
-  maxLocationsPerDay: number = 5
+  openAuditThreshold: number = 500
 ): void {
   const phaseHeaders = sortedPhases.map(p =>
     `<th class="center">${p.name}<br><span style="font-weight:400;font-size:7pt;color:#64748b;text-transform:none;">${p.startDate}</span></th>`
@@ -280,7 +279,12 @@ export function printKPIPhasePlan(
       </td>`;
     }).join('');
 
-    const recommended = Math.max(2, Math.ceil((row.totalAssets || 0) / maxAssetsPerDay), Math.ceil(1 / maxLocationsPerDay));
+    const assets = row.totalAssets || 0;
+    const recommended = row.auditorsRequiredOverride ?? (() => {
+      if (assets === 0) return 0;
+      const raw = Math.max(Math.ceil(assets / openAuditThreshold), 2);
+      return raw % 2 === 0 ? raw : raw + 1;
+    })();
 
     const status = row.hasNoAssets
       ? `<div class="status-none">○ Not Required</div>`
@@ -335,8 +339,8 @@ export function printKPIPhasePlan(
   <thead>
     <tr>
       <th>Department</th>
-      <th class="center" style="width:60pt;">Inspecting Officers</th>
-      <th class="center" style="width:60pt;">Recommended</th>
+      <th class="center" style="width:70pt;">Certified Officers</th>
+      <th class="center" style="width:70pt;">Required Staffing</th>
       <th style="width:80pt;">Assets / Tier</th>
       ${phaseHeaders}
       <th class="right" style="width:80pt;">Status</th>
@@ -439,7 +443,7 @@ export function printUnitConsolidation(
     <div class="stat-value">${fmt(overallTotal)}</div>
   </div>
   <div class="stat-box">
-    <div class="stat-label">Total Auditors (Certified)</div>
+    <div class="stat-label">Total Certified Officers</div>
     <div class="stat-value">${overallAuditors}</div>
   </div>
 </div>
@@ -450,7 +454,7 @@ export function printUnitConsolidation(
       <th>Group / Department</th>
       <th>Abbr.</th>
       <th class="right">Assets</th>
-      <th class="right">Auditors</th>
+      <th class="right">Certified Officers</th>
     </tr>
   </thead>
   <tbody>
@@ -622,6 +626,7 @@ interface PrintSchedule {
 interface PrintLocation {
   id: string;
   name: string;
+  buildingId?: string | null;
   building?: string;
   level?: string;
   totalAssets?: number;
@@ -652,6 +657,7 @@ export function printInspectionSchedule(
   users: PrintUser[],
   phases: PrintPhase[],
   selectedDept: string,
+  buildings: any[] = []
 ): void {
   if (schedules.length === 0) {
     alert('No schedules to print for the current selection.');
@@ -680,6 +686,14 @@ export function printInspectionSchedule(
     return `<span class="badge badge-slate">${s}</span>`;
   };
 
+  const getBuildingDisplay = (buildingId?: string | null, buildingName?: string) => {
+    if (buildingId) {
+      const b = buildings.find(b => b.id === buildingId);
+      if (b) return b.abbr;
+    }
+    return buildingName || '—';
+  };
+
   const deptSections: string[] = [];
   let firstSection = true;
 
@@ -697,7 +711,7 @@ export function printInspectionSchedule(
       return `<tr>
         <td>${s.date || '<span style="color:#f59e0b;">Unset</span>'}</td>
         <td>${loc?.name || s.locationId}</td>
-        <td>${loc?.building || '—'}</td>
+        <td>${getBuildingDisplay(loc?.buildingId, loc?.building)}</td>
         <td>${loc?.level || '—'}</td>
         <td class="right">${fmt(loc?.totalAssets || 0)}</td>
         <td>${getPhaseName(s.phaseId)}</td>
@@ -731,7 +745,7 @@ export function printInspectionSchedule(
             <th class="right" style="width:55pt;">Assets</th>
             <th style="width:65pt;">Phase</th>
             <th style="width:70pt;">Supervisor</th>
-            <th>Inspecting Officers</th>
+            <th>Certified Officers</th>
             <th class="center" style="width:70pt;">Status</th>
           </tr>
         </thead>
@@ -766,6 +780,7 @@ export function exportInspectionSchedule(
   users: PrintUser[],
   phases: PrintPhase[],
   selectedDept: string,
+  buildings: any[] = []
 ): void {
   if (schedules.length === 0) {
     alert('No schedules to export for the current selection.');
@@ -802,11 +817,19 @@ export function exportInspectionSchedule(
       const a1 = getUser(s.auditor1Id);
       const a2 = getUser(s.auditor2Id);
       const officers = [a1?.name, a2?.name].filter(Boolean).join(', ') || '';
+      
+      const getBuildingDisplay = (buildingId?: string | null, buildingName?: string) => {
+        if (buildingId) {
+          const b = buildings.find(b => b.id === buildingId);
+          if (b) return b.abbr;
+        }
+        return buildingName || '';
+      };
 
       return [
         s.date || '',
         loc?.name || s.locationId,
-        loc?.building || '',
+        getBuildingDisplay(loc?.buildingId, loc?.building),
         loc?.level || '',
         loc?.totalAssets || 0,
         getPhaseName(s.phaseId),

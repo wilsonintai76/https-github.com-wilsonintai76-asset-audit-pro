@@ -20,7 +20,8 @@ import { gateway } from '../services/dataGateway';
 import { awaitSessionRegistered } from '../services/honoClient';
 import { ToastMessage } from '../components/Toast';
 import { authService } from '../services/auth';
-import { CrossAuditPermission } from '@shared/types';
+import { CrossAuditPermission, AssignmentMode } from '@shared/types';
+import { SOFTWARE_DEV_DEPT_NAME } from '../constants';
 
 export const useAppData = () => {
   const [viewState, setViewState] = useState<'landing' | 'app' | 'docs'>('landing');
@@ -40,6 +41,8 @@ export const useAppData = () => {
   const [standaloneThresholdAssets, setStandaloneThresholdAssets] = useState<number>(1000);
   const [groupingMargin, setGroupingMargin] = useState<number>(0.15);
   const [groupingAuditorMargin, setGroupingAuditorMargin] = useState<number>(3);
+  const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>('cross-audit');
+  const [openAuditThreshold, setOpenAuditThreshold] = useState<number>(500);
   const [pairingLocked, setPairingLocked] = useState<boolean>(() => {
     try { return localStorage.getItem('pairing_lock_active') === 'true'; } catch { return false; }
   });
@@ -122,6 +125,13 @@ export const useAppData = () => {
           if (constraints.groupingMargin) setGroupingMargin(constraints.groupingMargin);
           if (constraints.groupingAuditorMargin) setGroupingAuditorMargin(constraints.groupingAuditorMargin);
         }
+
+        const strategy = settings.find(s => s.id === 'audit_strategy')?.value;
+        if (strategy) {
+          if (strategy.assignmentMode) setAssignmentMode(strategy.assignmentMode);
+          if (strategy.openAuditThreshold) setOpenAuditThreshold(strategy.openAuditThreshold);
+        }
+
         const pairingLock = settings.find(s => s.id === 'pairing_lock')?.value;
         if (pairingLock?.locked) { setPairingLocked(true); setPairingLockInfo(pairingLock); }
         else { setPairingLocked(false); setPairingLockInfo(null); }
@@ -172,19 +182,21 @@ export const useAppData = () => {
       }
     });
 
-    return departments.map(d => {
-      const totalAssets = deptTotals[d.id] || 0;
-      const auditorCount = deptAuditors[d.id] || 0;
-      const locationCount = deptLocations[d.id] || 0;
-      return { 
-        ...d, 
-        totalAssets,
-        auditorCount,
-        locationCount,
-        // Natural Exemption: 0 assets AND 0 certified auditors
-        isSystemExempted: totalAssets === 0 && auditorCount === 0
-      };
-    });
+    return departments
+      .filter(d => d.name !== SOFTWARE_DEV_DEPT_NAME)
+      .map(d => {
+        const totalAssets = deptTotals[d.id] || 0;
+        const auditorCount = deptAuditors[d.id] || 0;
+        const locationCount = deptLocations[d.id] || 0;
+        return { 
+          ...d, 
+          totalAssets,
+          auditorCount,
+          locationCount,
+          // Natural Exemption: 0 assets AND 0 certified auditors
+          isSystemExempted: totalAssets === 0 && auditorCount === 0
+        };
+      });
   }, [departments, locations, users]);
 
   const filteredSchedules = useMemo(() => {
@@ -231,6 +243,7 @@ export const useAppData = () => {
     departmentNames, departmentsWithAssets, filteredSchedules, topDepartments,
     simulatedGroups, setSimulatedGroups, isGroupSimulatorActive, setIsGroupSimulatorActive,
     isProcessing, setIsProcessing,
-    groupingAuditorMargin, setGroupingAuditorMargin
+    groupingAuditorMargin, setGroupingAuditorMargin,
+    assignmentMode, setAssignmentMode, openAuditThreshold, setOpenAuditThreshold
   };
 };

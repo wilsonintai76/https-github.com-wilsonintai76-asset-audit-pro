@@ -12,7 +12,7 @@ interface BuildingManagementProps {
   locations: Location[];
   onAdd: (building: Omit<Building, 'id'>) => Promise<Building | void>;
   onBulkAdd?: (buildings: Omit<Building, 'id'>[]) => Promise<void>;
-  onUpdate: (building: Partial<Building>) => Promise<Building | void>;
+  onUpdate: (id: string, building: Partial<Building>) => Promise<Building | void>;
   onDelete: (id: string) => Promise<void>;
 }
 
@@ -32,7 +32,7 @@ export const BuildingManagement: React.FC<BuildingManagementProps> = ({
 
   const handleSave = async (data: Omit<Building, 'id'> | Partial<Building>) => {
     if (editingBuilding) {
-      await onUpdate({ ...data, id: editingBuilding.id });
+      await onUpdate(editingBuilding.id, data as Partial<Building>);
     } else {
       await onAdd(data as Omit<Building, 'id'>);
     }
@@ -56,7 +56,9 @@ export const BuildingManagement: React.FC<BuildingManagementProps> = ({
               return {
                 abbr,
                 name,
-                description: name
+                description: name,
+                type: (row['Category'] || row['type'] || 'Administrative') as any,
+                genderRestriction: (row['Gender Protocol'] || row['genderRestriction'] || 'None') as any
               };
             })
             .filter((b): b is Omit<Building, 'id'> => b !== null);
@@ -154,9 +156,10 @@ export const BuildingManagement: React.FC<BuildingManagementProps> = ({
             <thead className="bg-slate-50/50 border-b border-slate-100">
               <tr>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Building / Block</th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Description</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Category</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Gender Protocol</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-40 text-center">Linked Locations</th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-32 text-right">Actions</th>
+                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-24 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -177,11 +180,21 @@ export const BuildingManagement: React.FC<BuildingManagementProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-start gap-2 text-[12px] text-slate-600 font-medium max-w-md">
-                        <FileText className="w-3.5 h-3.5 mt-0.5 opacity-40 shrink-0" />
-                        <span className="line-clamp-2">{building.description || 'No additional details provided'}</span>
-                      </div>
+                    <td className="px-6 py-4 text-center">
+                      <span className="px-3 py-1 bg-slate-100 text-[10px] font-black text-slate-500 uppercase rounded-lg border border-slate-200">
+                        {building.type || 'Administrative'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg border transition-all ${
+                        building.genderRestriction === 'Male Only' 
+                          ? 'bg-blue-50 text-blue-600 border-blue-100' 
+                          : building.genderRestriction === 'Female Only'
+                            ? 'bg-rose-50 text-rose-600 border-rose-100'
+                            : 'bg-slate-50 text-slate-400 border-slate-200'
+                      }`}>
+                        {building.genderRestriction || 'None'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[11px] font-bold">

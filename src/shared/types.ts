@@ -12,6 +12,8 @@ export interface AuditSchedule {
   isLocked?: boolean;
 }
 
+export type AssignmentMode = 'cross-audit' | 'open-audit';
+
 export type Designation = 'Head Of Department' | 'Coordinator' | 'Supervisor' | 'Staff' | 'Developer';
 
 export type UserRole = 'Admin' | 'Coordinator' | 'Supervisor' | 'Auditor' | 'Staff';
@@ -36,6 +38,7 @@ export interface User {
   isVerified?: boolean;
   mustChangePIN?: boolean;
   password?: string;
+  gender?: 'Male' | 'Female';
   dashboardConfig?: DashboardConfig;
 }
 
@@ -54,6 +57,7 @@ export interface Department {
   isSystemExempted?: boolean;
   tier?: 'Small' | 'Medium' | 'Large';
   isTaskForce?: boolean;
+  auditorsRequiredOverride?: number;
 }
 
 export interface AuditGroup {
@@ -69,6 +73,8 @@ export interface Building {
   name: string;
   abbr: string;
   description?: string;
+  type?: 'Administrative' | 'Academic' | 'Residential' | 'Workshop/Laboratory' | 'Other';
+  genderRestriction?: 'None' | 'Male Only' | 'Female Only';
   createdAt?: string;
 }
 

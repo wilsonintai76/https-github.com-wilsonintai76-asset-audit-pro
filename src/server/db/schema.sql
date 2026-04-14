@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
   must_change_pin INTEGER DEFAULT 0, -- Boolean
   certification_issued TEXT, -- ISO Date
   certification_expiry TEXT, -- ISO Date
+  renewal_requested TEXT, -- ISO Date
+  gender TEXT, -- Male, Female
   last_active TEXT, -- ISO Date
   dashboard_config TEXT, -- JSON string
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -34,6 +36,7 @@ CREATE TABLE IF NOT EXISTS departments (
   uninspected_asset_count INTEGER DEFAULT 0,
   tier TEXT,
   is_task_force INTEGER DEFAULT 0,
+  auditors_required_override INTEGER,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -45,6 +48,8 @@ CREATE TABLE IF NOT EXISTS buildings (
   name TEXT NOT NULL,
   abbr TEXT NOT NULL,
   description TEXT,
+  type TEXT, -- Administrative, Academic, Residential, Other
+  gender_restriction TEXT, -- None, Male Only, Female Only
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

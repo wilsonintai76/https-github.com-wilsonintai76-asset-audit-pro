@@ -63,7 +63,8 @@ const App: React.FC = () => {
     confirmState, setConfirmState, toasts,
     certRenewalModalUser, setCertRenewalModalUser, showForcePasswordModal,
     setShowForcePasswordModal, showProfileCompleteModal, setShowProfileCompleteModal,
-    users, departmentNames, setNotifications
+    users, departmentNames, setNotifications,
+    assignmentMode, openAuditThreshold
   } = appData;
 
   const {
@@ -92,6 +93,7 @@ const App: React.FC = () => {
     handleSyncLocationMappings, handleUpsertLocations,
     handleSetDeptTotalsFromMapping, handleUpdateUninspectedAssetCounts,
     handleBulkDeleteAuditGroups, handleAutoConsolidate, handleCommitGroups, handleCancelGroupSimulation, handleRunStrategicPairing, handleSaveFeasibilityReport, handleResetPairingData, handleResetOnlyPermissions,
+    handleUpdateAssignmentMode, handleUpdateOpenAuditThreshold,
     showToast, closeToast, showError, customConfirm, customAlert
   } = appActions;
 
@@ -207,6 +209,8 @@ const App: React.FC = () => {
           buildings={buildings}
           rbacMatrix={rbacMatrix}
           kpiTierTargets={kpiTierTargets}
+          openAuditThreshold={openAuditThreshold}
+          users={users}
         />
       )}
       {activeView === 'auditor-dashboard' && (
@@ -246,6 +250,7 @@ const App: React.FC = () => {
           auditPhases={auditPhases}
           maxAssetsPerDay={maxAssetsPerDay}
           buildings={buildings}
+          assignmentMode={assignmentMode}
         />
       )}
       {activeView === 'team' && (
@@ -286,6 +291,8 @@ const App: React.FC = () => {
           onDeleteGroup={handleDeleteAuditGroup}
           onAddAuditor={(deptId) => { setSelectedDept(deptId); setActiveView('team'); }}
           currentUserRoles={currentUser.roles}
+          openAuditThreshold={openAuditThreshold}
+          buildings={buildings}
         />
       )}
       {activeView === 'locations' && (
@@ -405,6 +412,10 @@ const App: React.FC = () => {
           onCancelGroupSimulation={handleCancelGroupSimulation}
           onUpdateSimulatedGroups={appData.setSimulatedGroups}
           onResetOnlyPermissions={handleResetOnlyPermissions}
+          assignmentMode={assignmentMode}
+          onUpdateAssignmentMode={handleUpdateAssignmentMode}
+          openAuditThreshold={openAuditThreshold}
+          onUpdateOpenAuditThreshold={handleUpdateOpenAuditThreshold}
         />
       )}
       {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
