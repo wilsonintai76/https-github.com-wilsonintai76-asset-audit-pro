@@ -272,35 +272,60 @@ export const DataManagementWorkflow: React.FC<DataManagementWorkflowProps> = ({
         }
         if (Object.keys(deptTotals).length === 0) throw new Error('No departments could be matched. Check your mapping rules.');
 
-        const locationObjects: Omit<Location, 'id'>[] = [];
-        // Merge locations by resolved (name + SPPA deptId) — multiple CO sub-units can map to the
-        // same SPPA dept and share the same physical location; their asset counts must be summed.
-        const locMerged = new Map<string, Omit<Location, 'id'>>();
+        const locationObjects: (Omit<Location, 'id'> & { id?: string })[] = [];
+        // Merge locations by resolved (name + SPPA deptId) or target ID
+        const locMerged = new Map<string, (Omit<Location, 'id'> & { id?: string })>();
         for (const [locKey, count] of Object.entries(locationCounts)) {
-          // Use lastIndexOf so location names containing '|||' (edge case) still work
           const sepIdx = locKey.lastIndexOf('|||');
           const lokasiName = sepIdx !== -1 ? locKey.slice(0, sepIdx) : locKey;
           const bahagian   = sepIdx !== -1 ? locKey.slice(sepIdx + 3) : '';
           const deptId = resolveBahagian(bahagian);
           if (!deptId) continue;
-          const mergeKey = `${lokasiName.toUpperCase()}|${deptId}`;
+
+          // Resolve using location mapping if it exists
+          const locMap = locationMappings.find(m => m.sourceName.toLowerCase() === lokasiName.toLowerCase());
+          const targetLoc = locMap ? safeLocations.find(l => l.id === locMap.targetLocationId) : null;
+
+          const mergeKey = targetLoc ? targetLoc.id : `${lokasiName.toUpperCase()}|${deptId}`;
+
           if (locMerged.has(mergeKey)) {
-            locMerged.get(mergeKey)!.totalAssets! += count;
+            const existing = locMerged.get(mergeKey)!;
+            existing.totalAssets! += count;
+            
+            // If this is a new source name for an existing merge, append it to description
+            if (targetLoc && lokasiName.toLowerCase() !== targetLoc.name.toLowerCase()) {
+              const aliasTag = `Original Alias: ${lokasiName}`;
+              if (!existing.description?.includes(aliasTag)) {
+                existing.description = (existing.description || '') + (existing.description ? '\n' : '') + aliasTag;
+              }
+            }
           } else {
+            let desc = targetLoc?.description || '';
+            if (targetLoc && lokasiName.toLowerCase() !== targetLoc.name.toLowerCase()) {
+              const aliasTag = `Original Alias: ${lokasiName}`;
+              if (!desc.includes(aliasTag)) {
+                desc = desc + (desc ? '\n' : '') + aliasTag;
+              }
+            } else if (!targetLoc) {
+              desc = `Original: ${lokasiName}`;
+            }
+
             locMerged.set(mergeKey, {
-              name: lokasiName,
-              abbr: lokasiName.split(/\s+/).map(w => (w[0] || '')).join('').toUpperCase().slice(0, 10),
-              departmentId: deptId,
+              id: targetLoc?.id,
+              name: targetLoc?.name || lokasiName,
+              abbr: targetLoc?.abbr || lokasiName.split(/\s+/).map(w => (w[0] || '')).join('').toUpperCase().slice(0, 10),
+              departmentId: targetLoc?.departmentId || deptId,
               building: '', 
-              description: `Original: ${lokasiName}`, 
-              supervisorId: null, 
-              contact: '',
+              description: desc, 
+              supervisorId: targetLoc?.supervisorId || null, 
+              contact: targetLoc?.contact || '',
               totalAssets: count,
-            });          }
+            });
+          }
         }
         locMerged.forEach(loc => locationObjects.push(loc));
 
-        if (locationObjects.length > 0) await onUpsertLocations(locationObjects);
+        if (locationObjects.length > 0) await onUpsertLocations(locationObjects as Omit<Location, 'id'>[]);
 
         const unmatchedList = Array.from(unmatchedDepts);
         setAssetSyncStatus({

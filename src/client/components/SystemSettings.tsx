@@ -8,7 +8,7 @@ import { TierDistributionTable } from './TierDistributionTable';
 import { suggestThresholds } from '../services/aiService';
 import { DataManagementWorkflow } from './DataManagementWorkflow';
 import { RBACMatrix } from './RBACMatrix';
-import { Zap, Sliders, AlertCircle, Eye, Calendar, UserCheck, Users, UserPlus, Edit, ShieldAlert, ShieldCheck, Network, Lock, Unlock, RotateCcw, Building2, Trash2 } from 'lucide-react';
+import { Zap, Sliders, AlertCircle, Eye, Calendar, UserCheck, Users, UserPlus, Edit, ShieldAlert, ShieldCheck, Network, Lock, Unlock, RotateCcw, Building2, Trash2, Database, RefreshCcw } from 'lucide-react';
 import { BackupButton } from './BackupButton';
 import { PageHeader } from './PageHeader';
 import { GroupBuilderTab } from './GroupBuilderTab';
@@ -74,6 +74,7 @@ interface SystemSettingsProps {
   locationMappings: LocationMapping[];
   onAddLocationMapping: (mapping: Omit<LocationMapping, 'id'>) => Promise<void>;
   onDeleteLocationMapping: (id: string) => Promise<void>;
+  onSyncLocationNotes: () => Promise<void>;
   auditGroups: AuditGroup[];
   onAddAuditGroup: (group: Omit<AuditGroup, 'id'>) => Promise<void>;
   onUpdateAuditGroup: (id: string, updates: Partial<AuditGroup>) => Promise<void>;
@@ -102,6 +103,8 @@ interface SystemSettingsProps {
   onUpdateAssignmentMode: (mode: AssignmentMode) => void;
   openAuditThreshold: number;
   onUpdateOpenAuditThreshold: (val: number) => void;
+  onUpsertLocations?: (locs: Location[]) => Promise<void>;
+  onMergeLocations?: (sourceIds: string[], targetId: string) => Promise<void>;
 }
 
 export const SystemSettings: React.FC<SystemSettingsProps> = ({
@@ -181,6 +184,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
   locationMappings,
   onAddLocationMapping,
   onDeleteLocationMapping,
+  onSyncLocationNotes,
+  onMergeLocations,
   onUnlockPairing,
   currentUser,
   isGroupSimulatorActive,
@@ -571,6 +576,111 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({
             onUpdatePairingMargins={(assets, auditors) => handleUpdateDraftConstraints({ pairingAssetMargin: assets, pairingAuditorMargin: auditors })}
           />
         </>
+      )}
+
+      {isAdmin && (
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden mb-8">
+          <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+                <Database className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Data Maintenance</h3>
+                <p className="text-slate-500 text-xs font-semibold">Utilities to keep existing location data in sync with Smart Sync standards</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="group rounded-2xl border border-slate-200 p-6 hover:border-indigo-600/30 hover:bg-slate-50/50 transition-all">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <RefreshCcw className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">Sync Names to Site Notes</h4>
+                    <p className="text-[10px] text-slate-500">Copies existing room names to "Original Name" field in notes</p>
+                  </div>
+                </div>
+                <button
+                  onClick={onSyncLocationNotes}
+                  className="w-full py-2.5 bg-white border-2 border-slate-200 text-slate-900 rounded-xl text-xs font-black uppercase tracking-widest hover:border-indigo-600 hover:text-indigo-600 transition-all shadow-sm"
+                >
+                  Sync All Existing Names
+                </button>
+              </div>
+
+              <div className="group rounded-2xl border border-slate-200 p-6 hover:border-emerald-600/30 hover:bg-slate-50/50 transition-all">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                    <Network className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">Merge Duplicate Locations</h4>
+                    <p className="text-[10px] text-slate-500">Combine separate locations into one with summed asset totals</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Source(s) (ToDelete)</label>
+                    <select 
+                      multiple
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-[11px] font-medium h-24 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      id="merge-sources"
+                    >
+                      {locations.sort((a,b) => a.name.localeCompare(b.name)).map(l => (
+                        <option key={l.id} value={l.id}>{l.name} ({l.totalAssets} assets)</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Target (ToKeep)</label>
+                    <select 
+                      className="w-full p-2 bg-white border border-slate-200 rounded-lg text-[11px] font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      id="merge-target"
+                    >
+                      <option value="">Select Target...</option>
+                      {locations.sort((a,b) => a.name.localeCompare(b.name)).map(l => (
+                        <option key={l.id} value={l.id}>{l.name} ({l.totalAssets} assets)</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      const sourceSelect = document.getElementById('merge-sources') as any;
+                      const targetSelect = document.getElementById('merge-target') as any;
+                      const sourceIds = Array.from(sourceSelect.selectedOptions || []).map((o: any) => o.value);
+                      const targetId = targetSelect.value;
+                      
+                      if (sourceIds.length === 0 || !targetId) {
+                        alert('Please select at least one source and a target');
+                        return;
+                      }
+                      if (sourceIds.includes(targetId)) {
+                        alert('Target cannot be one of the sources');
+                        return;
+                      }
+
+                      if (window.confirm(`Merge ${sourceIds.length} location(s) into target? Original source(s) will be deleted, and all assets/schedules will move to the target.`)) {
+                        await onMergeLocations?.(sourceIds, targetId);
+                        sourceSelect.selectedIndex = -1;
+                        targetSelect.value = "";
+                      }
+                    }}
+                    className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20"
+                  >
+                    Merge & Cleanup Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {isAdmin && <RBACMatrix showToast={showToast} />}

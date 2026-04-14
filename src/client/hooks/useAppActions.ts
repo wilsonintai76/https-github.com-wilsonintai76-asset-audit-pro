@@ -235,6 +235,23 @@ export const useAppActions = (props: AppActionsProps) => {
 
 
 
+  const handleSyncLocationNotes = async () => {
+    try {
+      await gateway.syncLocationNotes();
+      setLocations(await gateway.getLocations());
+      showToast('Existing names synced to Site Notes');
+    } catch (e) { showError(e); }
+  };
+
+  const handleMergeLocations = async (sourceIds: string[], targetId: string) => {
+    try {
+      await gateway.mergeLocations(sourceIds, targetId);
+      setLocations(await gateway.getLocations());
+      showToast('Locations merged successfully');
+      await refreshDepartmentTotals();
+    } catch (e) { showError(e); }
+  };
+
   const handleUpdateLoc = async (id: string, updates: Partial<Location>) => {
     try { await gateway.updateLocation(id, updates); setLocations(await gateway.getLocations()); await refreshDepartmentTotals(); }
     catch (e) { showError(e); }
@@ -773,6 +790,8 @@ export const useAppActions = (props: AppActionsProps) => {
     handleUpdateUserStatus, handleUpdateUserRoles, handleResetUserPassword, handleBulkActivateStaff,
     handleDeleteMember, handleAddBuilding, handleResetOnlyPermissions,
     handleUpdateAssignmentMode, handleUpdateOpenAuditThreshold,
+    handleSyncLocationNotes,
+    handleMergeLocations,
     handleAddLocationMapping, handleDeleteLocationMapping
   };
 };

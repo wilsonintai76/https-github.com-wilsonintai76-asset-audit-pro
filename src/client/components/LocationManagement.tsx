@@ -280,7 +280,19 @@ export const LocationManagement: React.FC<LocationManagementProps> = ({
                               </span>
                             )}
                           </div>
-                          <div className="mt-1.5 text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
+                          
+                          {/* Original / Merged Names Display */}
+                          {loc.description && (
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {loc.description.split('\n').filter(line => line.startsWith('Original') || line.startsWith('Merged')).map((line, idx) => (
+                                <span key={idx} className="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100/50">
+                                  {line.replace('Original Alias: ', '').replace('Original: ', '').replace('Merged from: ', 'Merged: ')}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="mt-1 text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
                             <Landmark className="w-3.5 h-3.5" />
                             {dept?.name || loc.departmentId}
                           </div>

@@ -855,6 +855,75 @@ db.delete('/locations/:id', rbacGuard('manage:locations'), async (c) => {
   }
 });
 
+db.post('/locations/merge', rbacGuard('manage:locations'), async (c) => {
+  const { sourceIds, targetId } = await c.req.json() as { sourceIds: string[], targetId: string };
+  if (!sourceIds || sourceIds.length === 0 || !targetId) {
+    return c.json({ error: 'Source IDs and Target ID required' }, 400);
+  }
+
+  try {
+    // 1. Get totals and names from sources and target
+    const allIds = [...sourceIds, targetId];
+    const placeholders = allIds.map(() => '?').join(',');
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, name, description, total_assets, uninspected_asset_count FROM locations WHERE id IN (${placeholders})`
+    ).bind(...allIds).all();
+
+    const locs = results as { id: string, name: string, description: string | null, total_assets: number, uninspected_asset_count: number }[];
+    const target = locs.find(l => l.id === targetId);
+    const sources = locs.filter(l => sourceIds.includes(l.id));
+
+    if (!target) return c.json({ error: 'Target location not found' }, 404);
+
+    const newTotalAssets = target.total_assets + sources.reduce((sum, s) => sum + (s.total_assets || 0), 0);
+    const newUninspected = target.uninspected_asset_count + sources.reduce((sum, s) => sum + (s.uninspected_asset_count || 0), 0);
+
+    // Build Merged Note
+    const sourceNames = sources.map(s => s.name).join(', ');
+    const timestamp = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+    const mergeNote = `Merged from: ${sourceNames} (${timestamp})`;
+    let newDescription = target.description || '';
+    if (newDescription && !newDescription.endsWith('\n')) newDescription += '\n';
+    newDescription += mergeNote;
+
+    const statements: any[] = [];
+
+    // 2. Update Target
+    statements.push(c.env.DB.prepare(
+      'UPDATE locations SET total_assets = ?, uninspected_asset_count = ?, description = ? WHERE id = ?'
+    ).bind(newTotalAssets, newUninspected, newDescription, targetId));
+
+    // 3. Re-link Schedules
+    const sourcePlaceholders = sourceIds.map(() => '?').join(',');
+    statements.push(c.env.DB.prepare(
+      `UPDATE audit_schedules SET location_id = ? WHERE location_id IN (${sourcePlaceholders})`
+    ).bind(targetId, ...sourceIds));
+
+    // 4. Update Mappings (so old sources now map to target)
+    statements.push(c.env.DB.prepare(
+      `UPDATE location_mappings SET target_location_id = ? WHERE target_location_id IN (${sourcePlaceholders})`
+    ).bind(targetId, ...sourceIds));
+
+    // 5. Delete Sources
+    statements.push(c.env.DB.prepare(
+      `DELETE FROM locations WHERE id IN (${sourcePlaceholders})`
+    ).bind(...sourceIds));
+
+    await c.env.DB.batch(statements);
+
+    return c.json({ 
+      success: true, 
+      targetId, 
+      mergedCount: sources.length,
+      newTotalAssets,
+      newUninspected,
+      newDescription
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 db.delete('/locations/:id/force', rbacGuard('admin:hub'), async (c) => {
   const id = c.req.param('id');
   try {
@@ -943,6 +1012,25 @@ db.post('/locations/bulk', rbacGuard('manage:locations'), async (c) => {
 
     await c.env.DB.batch(statements);
     return c.json({ success: true, count: processedLocs.length, skipped });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+db.post('/locations/sync-notes', rbacGuard('manage:locations'), async (c) => {
+  try {
+    // Prepend "Original: [name]" to description if not already starting with "Original:"
+    // CHAR(10) is newline in SQLite
+    const result = await c.env.DB.prepare(`
+      UPDATE locations 
+      SET description = CASE 
+        WHEN description IS NULL OR description = '' THEN 'Original: ' || name
+        ELSE 'Original: ' || name || CHAR(10) || description
+      END
+      WHERE description IS NULL OR description NOT LIKE 'Original: %'
+    `).run();
+    
+    return c.json({ success: true, meta: result.meta });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }

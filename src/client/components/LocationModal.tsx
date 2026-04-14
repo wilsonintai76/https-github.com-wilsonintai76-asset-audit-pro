@@ -338,15 +338,19 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Site Notes</label>
+                <div className="flex items-center justify-between ml-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Site Notes (System Managed)</label>
+                  <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                    Read-only Traceability
+                  </span>
+                </div>
                 <div className="relative">
                   <FileText className="absolute left-4 top-3.5 text-slate-300 w-4 h-4" />
                   <textarea
-                    disabled={isSupervisor}
-                    placeholder="Brief description of the area..."
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm min-h-[48px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none disabled:opacity-60 disabled:cursor-not-allowed"
+                    readOnly
+                    placeholder="Auto-populated by Smart Sync & Merge..."
+                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-[11px] font-medium min-h-[64px] focus:ring-0 outline-none transition-all resize-none cursor-not-allowed text-slate-500"
                     value={formData.description}
-                    onChange={e => setFormData({ ...formData, description: e.target.value })}
                   />
                 </div>
               </div>

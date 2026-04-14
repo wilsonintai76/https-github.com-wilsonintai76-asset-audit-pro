@@ -401,6 +401,13 @@ class DataGateway {
   async syncLocationMappings() {
     await this.rpc<unknown>(h => (api as any).db.locations.sync.$post({}, { headers: h }));
   }
+  async syncLocationNotes() {
+    await this.rpc<unknown>(h => (api as any).db.locations['sync-notes'].$post({}, { headers: h }));
+  }
+
+  async mergeLocations(sourceIds: string[], targetId: string) {
+    await this.rpc<unknown>(h => (api as any).db.locations.merge.$post({ json: { sourceIds, targetId } }, { headers: h }));
+  }
 }
 
 export const gateway = new DataGateway();

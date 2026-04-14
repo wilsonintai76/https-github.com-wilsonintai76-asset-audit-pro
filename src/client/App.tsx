@@ -94,6 +94,8 @@ const App: React.FC = () => {
     handleSetDeptTotalsFromMapping, handleUpdateUninspectedAssetCounts,
     handleBulkDeleteAuditGroups, handleAutoConsolidate, handleCommitGroups, handleCancelGroupSimulation, handleRunStrategicPairing, handleSaveFeasibilityReport, handleResetPairingData, handleResetOnlyPermissions,
     handleUpdateAssignmentMode, handleUpdateOpenAuditThreshold,
+    handleSyncLocationNotes,
+    handleMergeLocations,
     handleAddLocationMapping, handleDeleteLocationMapping,
     showToast, closeToast, showError, customConfirm, customAlert
   } = appActions;
@@ -402,6 +404,7 @@ const App: React.FC = () => {
           locationMappings={appData.locationMappings}
           onAddLocationMapping={handleAddLocationMapping}
           onDeleteLocationMapping={handleDeleteLocationMapping}
+          onSyncLocationNotes={handleSyncLocationNotes}
           onAddAuditGroup={handleAddAuditGroup}
           onUpdateAuditGroup={handleUpdateAuditGroup}
           onDeleteAuditGroup={handleDeleteAuditGroup}
@@ -422,6 +425,7 @@ const App: React.FC = () => {
           onUpdateAssignmentMode={handleUpdateAssignmentMode}
           openAuditThreshold={openAuditThreshold}
           onUpdateOpenAuditThreshold={handleUpdateOpenAuditThreshold}
+          onMergeLocations={handleMergeLocations}
         />
       )}
       {activeView === 'profile' && <UserProfile user={currentUser} departments={departmentsWithAssets} onUpdate={handleUpdateMember} />}
