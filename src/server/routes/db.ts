@@ -182,7 +182,7 @@ const userSchema = z.object({
   mustChangePIN: z.boolean().optional(),
   certificationIssued: z.string().nullable().optional(),
   certificationExpiry: z.string().nullable().optional(),
-  gender: z.enum(['Male', 'Female']).nullable().optional(),
+  gender: z.number().nullable().optional(),
 });
 
 const patchUserSchema = z.object({
@@ -198,7 +198,7 @@ const patchUserSchema = z.object({
   certificationIssued: z.string().nullable().optional(),
   certificationExpiry: z.string().nullable().optional(),
   renewalRequested: z.string().nullable().optional(),
-  gender: z.enum(['Male', 'Female']).nullable().optional(),
+  gender: z.number().nullable().optional(),
   password: z.string().min(8).optional(),
 });
 

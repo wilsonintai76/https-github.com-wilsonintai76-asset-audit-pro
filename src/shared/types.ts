@@ -38,7 +38,7 @@ export interface User {
   isVerified?: boolean;
   mustChangePIN?: boolean;
   password?: string;
-  gender?: 'Male' | 'Female';
+  gender?: number;
   dashboardConfig?: DashboardConfig;
 }
 

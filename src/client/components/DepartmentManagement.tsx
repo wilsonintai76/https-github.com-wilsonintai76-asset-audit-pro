@@ -67,8 +67,8 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       
       const s = stats[u.departmentId];
       s.total++;
-      if (['Male', 'M'].includes(u.gender || '')) s.male++;
-      else if (['Female', 'F'].includes(u.gender || '')) s.female++;
+      if (u.gender === 1) s.male++;
+      else if (u.gender === 0) s.female++;
       else s.unknown++;
     });
     

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   certification_issued TEXT, -- ISO Date
   certification_expiry TEXT, -- ISO Date
   renewal_requested TEXT, -- ISO Date
-  gender TEXT, -- Male, Female
+  gender INTEGER, -- 1=Male, 0=Female
   last_active TEXT, -- ISO Date
   dashboard_config TEXT, -- JSON string
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
