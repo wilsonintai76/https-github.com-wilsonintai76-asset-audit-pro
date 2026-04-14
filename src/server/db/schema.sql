@@ -179,6 +179,23 @@ CREATE TABLE IF NOT EXISTS kpi_tier_targets (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_kpi_tier_targets_unique ON kpi_tier_targets(tier_id, phase_id);
 
+-- Strategic Memos Table
+CREATE TABLE IF NOT EXISTS strategic_memos (
+  id TEXT PRIMARY KEY,
+  year INTEGER NOT NULL,
+  institution_name TEXT NOT NULL,
+  projected_kpi REAL NOT NULL,
+  feasibility_score INTEGER NOT NULL,
+  total_assets INTEGER NOT NULL,
+  total_auditors INTEGER NOT NULL,
+  risk_level TEXT NOT NULL,
+  content_json TEXT NOT NULL, -- Full snapshot of entities and pairings
+  r2_html_key TEXT,
+  approved_by TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (approved_by) REFERENCES users(id)
+);
+
 -- Indices for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
@@ -193,6 +210,7 @@ CREATE INDEX IF NOT EXISTS idx_activities_user ON system_activities(user_id);
 CREATE INDEX IF NOT EXISTS idx_deptmapping_source ON department_mappings(source_name);
 CREATE INDEX IF NOT EXISTS idx_cross_audit_auditor ON cross_audit_permissions(auditor_dept_id);
 CREATE INDEX IF NOT EXISTS idx_cross_audit_target ON cross_audit_permissions(target_dept_id);
+CREATE INDEX IF NOT EXISTS idx_memos_year ON strategic_memos(year);
 
 -- ─── Migration: remove denormalized `building` column from locations ──────────
 -- Run once against existing databases with:
