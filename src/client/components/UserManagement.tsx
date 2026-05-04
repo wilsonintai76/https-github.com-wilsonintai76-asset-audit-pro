@@ -55,7 +55,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     roles: ['Staff'] as UserRole[],
     designation: '' as string,
     contactNumber: '',
-    gender: 1 as number
   });
 
   const isAdmin = currentUserRoles.includes('Admin');
@@ -154,11 +153,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
               name, email,
               departmentId: row['Department'] || row['department'] || '',
               roles: (row['Role'] || row['role'] || 'Staff').split(',').map((r: string) => r.trim() as UserRole).filter(r => ['Admin', 'Coordinator', 'Supervisor', 'Staff'].includes(r)),
-              gender: (() => {
-                const g = (row['Gender'] || row['gender'] || '').trim().toUpperCase();
-                if (['FEMALE', 'F', 'P', '♀', '0'].includes(g)) return 0;
-                return 1; // Default to Male if unknown or empty
-              })(),
+
               status: 'Active',
               lastActive: new Date().toISOString(),
               isVerified: true 
@@ -204,7 +199,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         designation: formData.designation as any,
         roles: assignedRoles,
         contactNumber: formData.contactNumber,
-        gender: formData.gender,
         status: 'Active', 
         lastActive: new Date().toISOString(),
         isVerified: true
@@ -216,7 +210,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   const resetForm = () => {
     const isAdmin = currentUserRoles.includes('Admin');
     const deptId = (!isAdmin && currentUserData?.departmentId) ? currentUserData.departmentId : '';
-    setFormData({ name: '', email: '', departmentId: deptId, roles: ['Staff'], designation: '', contactNumber: '', gender: 1 });
+    setFormData({ name: '', email: '', departmentId: deptId, roles: ['Staff'], designation: '', contactNumber: '' });
     setIsFormOpen(false);
     setEditingId(null);
   };
@@ -246,7 +240,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       roles: user.roles || ['Staff'],
       designation: user.designation || '',
       contactNumber: user.contactNumber || '',
-      gender: user.gender ?? 1
     });
     setIsFormOpen(true);
   };
@@ -470,26 +463,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                     <label className="text-[10px] font-black uppercase text-slate-400">Contact</label>
                     <input title="Contact Number" placeholder="Enter contact number" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" value={formData.contactNumber} onChange={e => setFormData({ ...formData, contactNumber: e.target.value })} />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400">Gender</label>
-                    <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-200">
-                      {([1, 0] as const).map(g => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, gender: g })}
-                          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-                            formData.gender === g 
-                              ? 'bg-white text-blue-600 shadow-sm border border-slate-100' 
-                              : 'text-slate-400 hover:text-slate-600'
-                          }`}
-                        >
-                          <span className="text-base">{g === 1 ? '♂' : '♀'}</span>
-                          {g === 1 ? 'Male' : 'Female'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+
                 </div>
               </form>
             </div>
@@ -520,7 +494,6 @@ export const UserManagement: React.FC<UserManagementProps> = ({
             <thead className="bg-slate-50/50 border-b border-slate-100">
               <tr>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Team Member</th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Gender</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Certification</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Actions</th>
               </tr>
@@ -550,20 +523,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => onUpdateMember(user.id, { gender: Number(user.gender) === 0 ? 1 : 0 })}
-                        title="Toggle Gender"
-                        className={`px-3 py-1.5 text-xs font-black rounded-lg border transition-all active:scale-95 shadow-sm inline-flex items-center justify-center min-w-10 ${
-                          Number(user.gender) === 0 && user.gender !== null && user.gender !== undefined
-                            ? 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100'
-                            : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'
-                        }`}
-                      >
-                        <span className="text-base leading-none">{(Number(user.gender) === 0 && user.gender !== null && user.gender !== undefined) ? '♀' : '♂'}</span>
-                      </button>
-                    </td>
+
                     <td className="px-6 py-4">
                        <div className={`inline-flex flex-col gap-1`}>
                           <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase border w-fit ${cert.color}`}>

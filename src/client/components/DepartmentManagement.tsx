@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Department, Location, User, AuditGroup, UserRole } from '@shared/types';
-import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, ShieldCheck, UserPlus, Printer, HelpCircle } from 'lucide-react';
+import { Plus, Layers, UserRound, Boxes, Pencil, Trash2, Building2, ShieldOff, ShieldCheck, UserPlus, Printer } from 'lucide-react';
 import { PageHeader } from './PageHeader';
 import { AuditPhase } from '@shared/types';
 import { useRBAC } from '../contexts/RBACContext';
@@ -54,51 +54,6 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     return counts;
   }, [locations]);
 
-  const deptGenderStats = React.useMemo(() => {
-    const stats: Record<string, { male: number; female: number; unknown: number; total: number }> = {};
-    
-    // Filter relevant users once
-    const today = new Date().toISOString().split('T')[0];
-    const relevantUsers = users.filter(u => u.status === 'Active' && u.certificationExpiry && u.certificationExpiry >= today);
-    
-    // Group and count in one pass
-    relevantUsers.forEach(u => {
-      if (!u.departmentId) return;
-      if (!stats[u.departmentId]) stats[u.departmentId] = { male: 0, female: 0, unknown: 0, total: 0 };
-      
-      const s = stats[u.departmentId];
-      s.total++;
-      if (u.gender === 0) s.female++;
-      else s.male++; // Default NULL/Blank/1 to Male
-    });
-    
-    return stats;
-  }, [users]);
-
-  const deptGenderRequirements = React.useMemo(() => {
-    const reqs: Record<string, string[]> = {};
-    
-    // Map of building ID to restriction
-    const buildingMap: Record<string, string> = {};
-    (buildings || []).forEach(b => {
-      if (b.genderRestriction && b.genderRestriction !== 'None') {
-        buildingMap[b.id] = b.genderRestriction;
-        buildingMap[b.name] = b.genderRestriction; // Some locations use names
-      }
-    });
-
-    (locations || []).forEach(l => {
-      if (!l.departmentId) return;
-      const res = buildingMap[l.buildingId] || buildingMap[l.building];
-      if (res) {
-        if (!reqs[l.departmentId]) reqs[l.departmentId] = [];
-        if (!reqs[l.departmentId].includes(res)) reqs[l.departmentId].push(res);
-      }
-    });
-    
-    return reqs;
-  }, [locations, buildings]);
-
   const canManage = (() => {
     if (!rbacMatrix) return isAdmin;
     const allowedRoles = rbacMatrix['manage:departments'] || [];
@@ -132,23 +87,13 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       const headUser = users.find(u => u.id === dept.headOfDeptId);
       const groupName = auditGroups.find(g => g.id === dept.auditGroupId)?.name || '—';
       const locCount = (locations || []).filter(l => l.departmentId === dept.id).length;
-      const stats = deptGenderStats[dept.id] || { male: 0, female: 0, unknown: 0, total: 0 };
-      const reqs = deptGenderRequirements[dept.id] || [];
-      const reqSymbols = reqs.map(r => r === 'Male Only' ? '<span style="color:#2563eb; font-weight:900; font-size:14px;">♂</span>' : '<span style="color:#db2777; font-weight:900; font-size:14px;">♀</span>').join(' ');
       
       return `
         <tr>
           <td><strong>${dept.abbr}</strong><br/><span class="sub">${dept.name}</span></td>
           <td>${headUser ? headUser.name : '<span class="na">Not Assigned</span>'}</td>
           <td class="center">
-            <div style="font-weight:bold; font-size:11px;">${stats.total}</div>
-            <div style="font-size:9px; color:#64748b;">
-              <span style="color:#2563eb; font-weight:bold;">♂${stats.male}</span> <span style="color:#db2777; font-weight:bold;">♀${stats.female}</span>
-            </div>
-          </td>
-          <td class="center">
             <span style="font-weight:900; color:#4f46e5;">${dept.auditorsRequiredOverride ?? (dept.totalAssets > 0 ? ((_r => _r % 2 === 0 ? _r : _r + 1)(Math.max(2, Math.ceil((dept.totalAssets || 0) / openAuditThreshold)))) : 0)}</span>
-            ${reqSymbols ? `<div style="font-size:10px; margin-top:2px;">${reqSymbols}</div>` : ''}
           </td>
           <td class="center">${(dept.totalAssets || 0).toLocaleString()}</td>
           <td class="center">${locCount || '—'}</td>
@@ -213,7 +158,6 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
       <tr>
         <th>Department</th>
         <th>Head of Department</th>
-        <th class="center">Certified Officers</th>
         <th class="center">Required Staffing</th>
         <th class="center">Total Assets</th>
         <th class="center">Locations</th>
@@ -224,7 +168,7 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
     <tbody>${rows}</tbody>
   </table>
   <div class="footer">Inspect-able — Institutional Asset Audit Platform &nbsp;|&nbsp; Confidential — Internal Use Only</div>
-  <script>window.onload = () => { window.print(); };<\/script>
+  <script>window.onload = () => { window.print(); };</script>
 </body>
 </html>`;
 
@@ -296,7 +240,6 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
               <tr>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Department</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Head of Department</th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Certified Officers</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Required Staffing</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Asset</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Locations</th>
@@ -338,36 +281,6 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <div className="flex items-center justify-center gap-3">
-                        <div className="flex flex-col items-center">
-                          <span className="font-bold text-slate-900 text-sm">
-                            {(deptGenderStats[dept.id] || { total: 0 }).total}
-                          </span>
-                          <div className="flex gap-2 mt-1">
-                            {(() => {
-                               const stats = deptGenderStats[dept.id] || { total: 0, male: 0, female: 0, unknown: 0 };
-                               return (
-                                 <>
-                                   {stats.male > 0 && (
-                                     <span className="flex items-center gap-0.5 text-[11px] font-bold text-blue-600" title="Male Officers">
-                                       ♂ {stats.male}
-                                     </span>
-                                   )}
-                                   {stats.female > 0 && (
-                                     <span className="flex items-center gap-0.5 text-[11px] font-bold text-rose-500" title="Female Officers">
-                                       ♀ {stats.female}
-                                     </span>
-                                   )}
-                                   {stats.unknown > 0 && (
-                                     <span className="flex items-center gap-0.5 text-[10px] font-bold text-slate-400" title="Gender Not Specified">
-                                       <HelpCircle className="w-3 h-3" /> {stats.unknown}
-                                     </span>
-                                   )}
-                                   {stats.total === 0 && <span className="text-[9px] text-slate-300">No Data</span>}
-                                 </>
-                               );
-                            })()}
-                          </div>
-                        </div>
                         <button 
                           onClick={() => onAddAuditor(dept.id)}
                           className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center"
@@ -388,13 +301,6 @@ export const DepartmentManagement: React.FC<DepartmentManagementProps> = ({
                                return raw % 2 === 0 ? raw : raw + 1;
                             })()}
                           </span>
-                          <div className="flex gap-1 text-[10px]">
-                              {(deptGenderRequirements[dept.id] || []).map(r => (
-                                <span key={r} title={r} className={`text-[12px] font-black leading-none ${r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}`}>
-                                  {r === 'Male Only' ? '♂' : '♀'}
-                                </span>
-                              ))}
-                          </div>
                         </div>
                       </div>
                     </td>

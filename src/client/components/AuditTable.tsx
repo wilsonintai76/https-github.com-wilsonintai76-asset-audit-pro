@@ -69,12 +69,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
   const [reportAudit, setReportAudit] = useState<AuditSchedule | null>(null);
   const [selectedBlock, setSelectedBlock] = useState('All');
   const [selectedLevel, setSelectedLevel] = useState('All');
-  const [pendingAssignment, setPendingAssignment] = useState<{
-    auditId: string;
-    slot: 1 | 2;
-    userId: string;
-    restriction: string;
-  } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Role Checks
@@ -256,25 +251,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
       return;
     }
 
-    // Gender Restriction Logic
-    const loc = allLocations.find(l => l.id === audit.locationId);
-    const building = buildings.find(b => b.id === loc?.buildingId);
-    
-    if (building?.genderRestriction && building.genderRestriction !== 'None') {
-      // Logic for popup: If user gender is known and matches, maybe we skip? 
-      // But user requested "popup will ask to confirm", so let's show it anyway for safety.
-      
-      // If we already confirmed this specific assignment, proceed
-      if (pendingAssignment?.auditId !== auditId || pendingAssignment?.slot !== slot || pendingAssignment?.userId !== assignUserId) {
-        setPendingAssignment({
-          auditId,
-          slot,
-          userId: assignUserId,
-          restriction: building.genderRestriction
-        });
-        return;
-      }
-    }
+
 
     // Explicit Pairing Check (Defense in Depth)
     const officerDeptId = assignUser?.departmentId || '';
@@ -893,25 +870,7 @@ export const AuditTable: React.FC<AuditTableProps> = ({
         />
       )}
 
-      {pendingAssignment && (
-        <ConfirmationModal
-          isOpen={!!pendingAssignment}
-          title="Gender Protocol Confirmation"
-          message={`This building (${allLocations.find(l => l.id === schedules.find(s => s.id === pendingAssignment.auditId)?.locationId)?.name}) is designated as a ${pendingAssignment.restriction}. Please confirm that the assigned officer is suitable for this environment before proceeding.`}
-          confirmLabel="Confirm Suitability"
-          cancelLabel="Cancel Assignment"
-          variant="warning"
-          onConfirm={() => {
-            const { auditId, slot, userId } = pendingAssignment;
-            const audit = schedules.find(s => s.id === auditId);
-            if (audit) {
-              handleSelfAssign(auditId, slot, audit.date || '', audit.phaseId, userId);
-              setPendingAssignment(null);
-            }
-          }}
-          onCancel={() => setPendingAssignment(null)}
-        />
-      )}
+
     </div>
   );
 };

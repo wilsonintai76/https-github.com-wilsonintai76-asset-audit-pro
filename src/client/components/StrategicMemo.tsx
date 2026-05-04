@@ -722,7 +722,7 @@ export const StrategicMemo: React.FC<StrategicMemoProps> = ({
             <ul className="space-y-1.5 text-xs font-medium text-orange-700">
               <li><strong>Self-Audit Prevention:</strong> System locks prevent any department from auditing itself.</li>
               <li><strong>Conflict of Interest:</strong> Site Supervisors are strictly prohibited from inspecting their own sites.</li>
-              <li><strong>Social Sensitivity:</strong> AI recommendations account for gender sensitivity at specialized facilities.</li>
+
             </ul>
           </div>
 

@@ -182,7 +182,6 @@ const userSchema = z.object({
   mustChangePIN: z.boolean().optional(),
   certificationIssued: z.string().nullable().optional(),
   certificationExpiry: z.string().nullable().optional(),
-  gender: z.number().nullable().optional(),
 });
 
 const patchUserSchema = z.object({
@@ -198,7 +197,6 @@ const patchUserSchema = z.object({
   certificationIssued: z.string().nullable().optional(),
   certificationExpiry: z.string().nullable().optional(),
   renewalRequested: z.string().nullable().optional(),
-  gender: z.number().nullable().optional(),
   password: z.string().min(8).optional(),
 });
 
@@ -346,7 +344,7 @@ db.get('/users', async (c) => {
     const isSuperAdmin = caller?.email?.toLowerCase() === 'admin@poliku.edu.my';
     const isAdmin = caller?.roles?.includes('Admin');
 
-    let sql = 'SELECT id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, renewal_requested, gender, last_active FROM users';
+    let sql = 'SELECT id, name, email, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, renewal_requested, last_active FROM users';
     const binds: any[] = [];
     
     // Filtering logic
@@ -383,7 +381,6 @@ db.get('/users', async (c) => {
       certificationIssued: u.certification_issued,
       certificationExpiry: u.certification_expiry,
       renewalRequested: u.renewal_requested ?? null,
-      gender: u.gender !== null && u.gender !== undefined ? Number(u.gender) : 1,
       lastActive: u.last_active,
     })));
   } catch (err: any) {
@@ -425,8 +422,8 @@ db.post('/users', rbacGuard('edit:team'), zValidator('json', userSchema), async 
   try {
     await c.env.DB.prepare(
       `INSERT INTO users 
-       (id, name, email, password_hash, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry, gender) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, name, email, password_hash, roles, designation, picture, department_id, contact_number, status, is_verified, must_change_pin, certification_issued, certification_expiry) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id,
       newUser.name,
@@ -441,8 +438,7 @@ db.post('/users', rbacGuard('edit:team'), zValidator('json', userSchema), async 
       newUser.isVerified ? 1 : 0,
       mustChangePIN ? 1 : 0,
       newUser.certificationIssued ?? null,
-      newUser.certificationExpiry ?? null,
-      newUser.gender ?? null
+      newUser.certificationExpiry ?? null
     ).run();
 
     return c.json({ id, ...newUser, roles, mustChangePIN });
@@ -512,7 +508,6 @@ db.patch('/users/:id', zValidator('json', patchUserSchema), async (c) => {
   if (updates.certificationIssued !== undefined) { fields.push('certification_issued = ?'); values.push(updates.certificationIssued); }
   if (updates.certificationExpiry !== undefined) { fields.push('certification_expiry = ?'); values.push(updates.certificationExpiry); }
   if (updates.renewalRequested !== undefined) { fields.push('renewal_requested = ?'); values.push(updates.renewalRequested); }
-  if (updates.gender !== undefined) { fields.push('gender = ?'); values.push(updates.gender); }
 
   if (fields.length === 0) return c.json({ success: true });
 
@@ -1564,12 +1559,11 @@ async function buildingsFromKVorD1(c: any) {
   } catch { /* KV unavailable */ }
 
   const { results } = await c.env.DB.prepare(
-    'SELECT id, name, abbr, description, type, gender_restriction, created_at FROM buildings ORDER BY name',
+    'SELECT id, name, abbr, description, type, created_at FROM buildings ORDER BY name',
   ).all();
   const mapped = (results || []).map((b: any) => ({ 
     ...b, 
     type: b.type,
-    genderRestriction: b.gender_restriction,
     createdAt: b.created_at 
   }));
 
@@ -1597,14 +1591,13 @@ db.post('/buildings', rbacGuard('edit:team'), zValidator('json', z.object({
   abbr:        z.string().min(1),
   description: z.string().nullable().optional(),
   type:        z.string().nullable().optional(),
-  genderRestriction: z.string().nullable().optional(),
 })), async (c) => {
   const building = c.req.valid('json');
   const id = building.id || crypto.randomUUID();
   try {
     await c.env.DB.prepare(
-      'INSERT INTO buildings (id, name, abbr, description, type, gender_restriction) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, abbr=EXCLUDED.abbr, description=EXCLUDED.description, type=EXCLUDED.type, gender_restriction=EXCLUDED.gender_restriction',
-    ).bind(id, building.name, building.abbr, building.description ?? null, building.type ?? null, building.genderRestriction ?? null).run();
+      'INSERT INTO buildings (id, name, abbr, description, type) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, abbr=EXCLUDED.abbr, description=EXCLUDED.description, type=EXCLUDED.type',
+    ).bind(id, building.name, building.abbr, building.description ?? null, building.type ?? null).run();
 
     // Invalidate KV cache so next read fetches from D1
     await c.env.SETTINGS.delete(KV_BUILDINGS).catch(() => {});
@@ -1621,7 +1614,6 @@ db.patch('/buildings/:id', rbacGuard('edit:team'), zValidator('json', z.object({
   abbr:        z.string().min(1).optional(),
   description: z.string().nullable().optional(),
   type:        z.string().nullable().optional(),
-  genderRestriction: z.string().nullable().optional(),
 })), async (c) => {
   const id      = c.req.param('id');
   const updates = c.req.valid('json');
@@ -1631,7 +1623,6 @@ db.patch('/buildings/:id', rbacGuard('edit:team'), zValidator('json', z.object({
   if (updates.abbr        !== undefined) { fields.push('abbr = ?');        values.push(updates.abbr); }
   if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
   if (updates.type        !== undefined) { fields.push('type = ?');        values.push(updates.type); }
-  if (updates.genderRestriction !== undefined) { fields.push('gender_restriction = ?'); values.push(updates.genderRestriction); }
   if (fields.length === 0) return c.json({ success: true });
   try {
     await c.env.DB.prepare(`UPDATE buildings SET ${fields.join(', ')} WHERE id = ?`)
@@ -1641,7 +1632,6 @@ db.patch('/buildings/:id', rbacGuard('edit:team'), zValidator('json', z.object({
     return c.json({ 
       ...updated, 
       type: updated?.type,
-      genderRestriction: updated?.gender_restriction,
       createdAt: updated?.created_at 
     });
   } catch (err: any) {

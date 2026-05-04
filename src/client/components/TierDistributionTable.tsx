@@ -46,14 +46,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
       usersByDept[u.departmentId].push(u);
     });
 
-    // Optimization: Pre-calculate building restrictions
-    const buildingMap: Record<string, string> = {};
-    (buildings || []).forEach(b => {
-      if (b.genderRestriction && b.genderRestriction !== 'None') {
-        buildingMap[b.id] = b.genderRestriction;
-        buildingMap[b.name] = b.genderRestriction;
-      }
-    });
+
 
     return departments
       .filter(dept => (dept.totalAssets || 0) > 0)
@@ -96,17 +89,8 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
           : phaseStatus.every(p => !p.isRequired || p.hasAudit)
       );
       
-      // Get pre-grouped users for this dept
       const dUsers = usersByDept[dept.id] || [];
       const relevantUsers = dUsers.filter(u => u.roles.includes('Auditor') || u.roles.includes('Supervisor') || u.roles.includes('Coordinator'));
-      const male = relevantUsers.filter(u => ['Male', 'M'].includes(u.gender || '')).length;
-      const female = relevantUsers.filter(u => ['Female', 'F'].includes(u.gender || '')).length;
-      
-      const rSet = new Set<string>();
-      locations.filter(l => l.departmentId === dept.id).forEach(l => {
-        const res = buildingMap[l.buildingId] || buildingMap[l.building];
-        if (res) rSet.add(res);
-      });
 
       return {
         ...dept,
@@ -115,13 +99,7 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
         isFullyScheduled,
         hasNoAssets,
         locationCount: deptLocIds.size,
-        genderStats: {
-          male,
-          female,
-          unknown: relevantUsers.length - (male + female),
-          total: relevantUsers.length
-        },
-        genderRequirement: Array.from(rSet)
+        auditorCount: relevantUsers.length,
       };
     }).sort((a, b) => (b.totalAssets || 0) - (a.totalAssets || 0));
   }, [departments, sortedTiers, sortedPhases, schedules, users, buildings, locations]);
@@ -186,34 +164,19 @@ export const TierDistributionTable: React.FC<TierDistributionTableProps> = ({
                   <div className="text-[10px] text-slate-400 font-medium">{row.abbr}</div>
                 </td>
                 <td className="px-6 py-4 text-center">
-                  <div className="flex flex-col items-center">
-                    <span className="text-xs font-bold text-slate-700">{(row as any).genderStats.total}</span>
-                    <div className="flex gap-1.5 mt-0.5 items-center">
-                       {(row as any).genderStats.male > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600">M {(row as any).genderStats.male}</span>}
-                       {(row as any).genderStats.female > 0 && <span className="flex items-center gap-0.5 text-[10px] font-bold text-rose-500">F {(row as any).genderStats.female}</span>}
-                       {(row as any).genderStats.unknown > 0 && <span title="Gender Not Specified" className="flex items-center gap-0.5 text-[10px] font-bold text-slate-400"><HelpCircle className="w-3 h-3"/> {(row as any).genderStats.unknown}</span>}
-                       {(row as any).genderStats.total === 0 && <span className="text-[9px] text-slate-300">No Data</span>}
-                    </div>
-                  </div>
+                  <span className="text-xs font-bold text-slate-700">{(row as any).auditorCount}</span>
                 </td>
                 <td className="px-6 py-4 text-center">
-                   <div className="flex flex-col items-center">
-                      <span className="text-xs font-black text-indigo-600">
-                        {row.auditorsRequiredOverride ?? (() => {
-                           const assets = row.totalAssets || 0;
-                           if (assets === 0) return 0;
-                           const raw = Math.max(Math.ceil(assets / openAuditThreshold), 2);
-                           return raw % 2 === 0 ? raw : raw + 1;
-                        })()}
-                      </span>
-                      <div className="flex gap-1 text-xs">
-                         {(row as any).genderRequirement.map((r: string) => (
-                           <span key={r} title={r} className={`text-[10px] font-black ${r === 'Male Only' ? 'text-blue-600' : 'text-rose-500'}`}>
-                             {r === 'Male Only' ? 'M' : 'F'}
-                           </span>
-                         ))}
-                      </div>
-                   </div>
+                    <div className="flex flex-col items-center">
+                       <span className="text-xs font-black text-indigo-600">
+                         {row.auditorsRequiredOverride ?? (() => {
+                            const assets = row.totalAssets || 0;
+                            if (assets === 0) return 0;
+                            const raw = Math.max(Math.ceil(assets / openAuditThreshold), 2);
+                            return raw % 2 === 0 ? raw : raw + 1;
+                         })()}
+                       </span>
+                    </div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2 mb-1">

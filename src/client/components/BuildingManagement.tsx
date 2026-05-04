@@ -58,7 +58,6 @@ export const BuildingManagement: React.FC<BuildingManagementProps> = ({
                 name,
                 description: name,
                 type: (row['Category'] || row['type'] || 'Administrative') as any,
-                genderRestriction: (row['Gender Protocol'] || row['genderRestriction'] || 'None') as any
               };
             })
             .filter((b): b is Omit<Building, 'id'> => b !== null);
@@ -157,7 +156,7 @@ export const BuildingManagement: React.FC<BuildingManagementProps> = ({
               <tr>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-64">Building / Block</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Category</th>
-                <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Gender Protocol</th>
+
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-40 text-center">Linked Locations</th>
                 <th className="px-6 py-5 text-[10px] font-black uppercase text-slate-400 tracking-widest w-24 text-right">Actions</th>
               </tr>
@@ -185,17 +184,7 @@ export const BuildingManagement: React.FC<BuildingManagementProps> = ({
                         {building.type || 'Administrative'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-lg border transition-all ${
-                        building.genderRestriction === 'Male Only' 
-                          ? 'bg-blue-50 text-blue-600 border-blue-100' 
-                          : building.genderRestriction === 'Female Only'
-                            ? 'bg-rose-50 text-rose-600 border-rose-100'
-                            : 'bg-slate-50 text-slate-400 border-slate-200'
-                      }`}>
-                        {building.genderRestriction || 'None'}
-                      </span>
-                    </td>
+
                     <td className="px-6 py-4 text-center whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[11px] font-bold">
                         <MapPin className="w-3 h-3 text-slate-400" />

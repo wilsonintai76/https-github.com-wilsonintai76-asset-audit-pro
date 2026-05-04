@@ -903,7 +903,7 @@ Rules:
 1. Auditor Capacity: Priority #1 is matching the Inspector's total certified staff count to the Target's asset volume.
 2. Even Workload: Aim for a ratio of ~200 assets per auditor. If a Target has high asset volume (e.g. 2000+), pair them with an Inspector group that has 10+ auditors.
 3. Asymmetric Delegation: If a group has very few auditors (baseline 8), pair them with low-asset targets.
-4. Social Sensitivity: If a department involves Hostels/Kediaman, prioritize gender-appropriate officer assignments.
+
 
 Available Depts:
 ${entities.map((e, idx) => `${idx}. ${e.name}: ${e.assets} units, ${e.auditors} auditors`).join('\n')}

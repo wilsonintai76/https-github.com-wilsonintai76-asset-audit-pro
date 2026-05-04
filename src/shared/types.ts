@@ -38,7 +38,6 @@ export interface User {
   isVerified?: boolean;
   mustChangePIN?: boolean;
   password?: string;
-  gender?: number;
   dashboardConfig?: DashboardConfig;
 }
 
@@ -74,7 +73,6 @@ export interface Building {
   abbr: string;
   description?: string;
   type?: 'Administrative' | 'Academic' | 'Residential' | 'Workshop/Laboratory' | 'Other';
-  genderRestriction?: 'None' | 'Male Only' | 'Female Only';
   createdAt?: string;
 }
 

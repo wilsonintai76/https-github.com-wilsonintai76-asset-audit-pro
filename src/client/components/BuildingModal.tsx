@@ -21,7 +21,6 @@ export const BuildingModal: React.FC<BuildingModalProps> = ({
     abbr: '',
     description: '',
     type: 'Administrative' as 'Administrative' | 'Academic' | 'Residential' | 'Other',
-    genderRestriction: 'None' as 'None' | 'Male Only' | 'Female Only',
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -33,7 +32,6 @@ export const BuildingModal: React.FC<BuildingModalProps> = ({
         abbr: initialData.abbr || '',
         description: initialData.description || '',
         type: initialData.type || 'Administrative',
-        genderRestriction: initialData.genderRestriction || 'None',
       });
     } else {
       setFormData({
@@ -41,7 +39,6 @@ export const BuildingModal: React.FC<BuildingModalProps> = ({
         abbr: '',
         description: '',
         type: 'Administrative',
-        genderRestriction: 'None',
       });
     }
   }, [initialData, isOpen]);
@@ -123,20 +120,6 @@ export const BuildingModal: React.FC<BuildingModalProps> = ({
                 </select>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Gender Protocol</label>
-                <select 
-                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all ${
-                    formData.genderRestriction !== 'None' ? 'border-amber-200 bg-amber-50 text-amber-700' : ''
-                  }`}
-                  value={formData.genderRestriction}
-                  onChange={e => setFormData({ ...formData, genderRestriction: e.target.value as any })}
-                >
-                  <option value="None">No Restriction (General)</option>
-                  <option value="Male Only">Men Only Facility</option>
-                  <option value="Female Only">Women Only Facility</option>
-                </select>
-              </div>
             </div>
 
             <div className="space-y-1.5">
